@@ -1,0 +1,206 @@
+{% extends 'base.html' %}
+
+{% block title %}สรุปรายงานสต็อกรายช่วงเวลา - ระบบจัดการสต็อก{% endblock %}
+
+{% block content %}
+    <h1 class="page-header">สรุปรายงานสต็อกรายช่วงเวลา</h1>
+
+    <div class="date-selector-form form-section">
+        <form action="{{ url_for('summary_stock_report') }}" method="GET" class="form-row">
+            <div class="form-group half-width">
+                <label for="start_date">จากวันที่:</label>
+                <input type="date" id="start_date" name="start_date" value="{{ start_date_param }}">
+            </div>
+            <div class="form-group half-width">
+                <label for="end_date">ถึงวันที่:</label>
+                <input type="date" id="end_date" name="end_date" value="{{ end_date_param }}">
+            </div>
+            {# Button group is outside specific form-group with flex-grow: 0 #}
+            <div class="form-group" style="flex-grow: 0; min-width: unset;">
+                <button type="submit" class="btn btn-primary"><i class="fas fa-filter"></i> ดูรายงาน</button>
+            </div>
+        </form>
+    </div>
+
+    <div class="summary-header">
+        <h2>รายงานสต็อกยางและล้อแม็ก</h2>
+        <h3>ช่วงวันที่: {{ display_range_str }}</h3>
+    </div>
+
+    <hr>
+
+    <h3>รายงานการเคลื่อนไหวสต็อกยางตามยี่ห้อและขนาด</h3>
+    {# MODIFIED: ใช้ tires_by_brand_for_summary_report #}
+    {% if tires_by_brand_for_summary_report %}
+        {% for brand, items in tires_by_brand_for_summary_report.items()|sort %}
+            <div class="brand-frame form-section"> {# Using form-section for brand frame styling #}
+                <h4>ยี่ห้อ: {{ brand | title }}</h4>
+                <div class="table-responsive">
+                    <table class="summary-table">
+                        <thead>
+                            <tr>
+                                <th>รุ่นยาง</th>
+                                <th>เบอร์ยาง</th>
+                                <th>ยอดเริ่มต้น</th>
+                                <th>รับเข้า</th>
+                                <th>จ่ายออก</th>
+                                <th>ยอดคงเหลือ</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for item in items %}
+                                <tr>
+                                    <td>{{ item.model | title }}</td>
+                                    <td>{{ item.size }}</td>
+                                    <td>{{ item.initial_quantity }}</td>
+                                    <td class="text-success">+{{ item.IN }}</td>
+                                    <td class="text-danger">-{{ item.OUT }}</td>
+                                    <td>{{ item.final_quantity }}</td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        {% endfor %}
+    {% else %}
+        <p class="no-data">ไม่พบข้อมูลการเคลื่อนไหวสต็อกยางในช่วงที่เลือก</p>
+    {% endif %}
+
+    <hr>
+
+    <h3>รายงานการเคลื่อนไหวสต็อกล้อแม็กตามยี่ห้อและขนาด</h3>
+    {# MODIFIED: ใช้ wheels_by_brand_for_summary_report #}
+    {% if wheels_by_brand_for_summary_report %}
+        {% for brand, items in wheels_by_brand_for_summary_report.items()|sort %}
+            <div class="brand-frame form-section"> {# Using form-section for brand frame styling #}
+                <h4>ยี่ห้อ: {{ brand | title }}</h4>
+                <div class="table-responsive">
+                    <table class="summary-table">
+                        <thead>
+                            <tr>
+                                <th>ลาย</th>
+                                <th>ขอบ</th>
+                                <th>PCD</th>
+                                <th>กว้าง</th>
+                                <th>ยอดเริ่มต้น</th>
+                                <th>รับเข้า</th>
+                                <th>จ่ายออก</th>
+                                <th>ยอดคงเหลือ</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for item in items %}
+                                <tr>
+                                    <td>{{ item.model | title }}</td>
+                                    <td>{{ item.diameter }}</td>
+                                    <td>{{ item.pcd }}</td>
+                                    <td>{{ item.width }}</td>
+                                    <td>{{ item.initial_quantity }}</td>
+                                    <td class="text-success">+{{ item.IN }}</td>
+                                    <td class="text-danger">-{{ item.OUT }}</td>
+                                    <td>{{ item.final_quantity }}</td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        {% endfor %}
+    {% else %}
+        <p class="no-data">ไม่พบข้อมูลการเคลื่อนไหวสต็อกล้อแม็กในช่วงที่เลือก</p>
+    {% endif %}
+
+    <div class="total-summary-section form-section">
+        <h3>สรุปยอดรวมทั้งหมด</h3>
+        {# Overall Totals #}
+        <div class="form-row">
+            <div class="form-group quarter-width">
+                ยางรวม<br>
+                ยอดเริ่มต้น: <strong>{{ overall_tire_initial }}</strong>
+            </div>
+            <div class="form-group quarter-width">
+                ยางรวม<br>
+                รับเข้า: <strong class="text-success">{{ overall_tire_in }}</strong>
+            </div>
+            <div class="form-group quarter-width">
+                ยางรวม<br>
+                จ่ายออก: <strong class="text-danger">{{ overall_tire_out }}</strong>
+            </div>
+            <div class="form-group quarter-width">
+                ยางรวม<br>
+                ยอดคงเหลือ: <strong>{{ overall_tire_final }}</strong>
+            </div>
+        </div>
+        <div class="form-row">
+            <div class="form-group quarter-width">
+                แม็กรวม<br>
+                ยอดเริ่มต้น: <strong>{{ overall_wheel_initial }}</strong>
+            </div>
+            <div class="form-group quarter-width">
+                แม็กรวม<br>
+                รับเข้า: <strong class="text-success">{{ overall_wheel_in }}</strong>
+            </div>
+            <div class="form-group quarter-width">
+                แม็กรวม<br>
+                จ่ายออก: <strong class="text-danger">{{ overall_wheel_out }}</strong>
+            </div>
+            <div class="form-group quarter-width">
+                แม็กรวม<br>
+                ยอดคงเหลือ: <strong>{{ overall_wheel_final }}</strong>
+            </div>
+        </div>
+
+        <hr style="border-top: 1px dashed var(--border-color); margin: var(--spacing-xl) 0;">
+
+        <h3>สรุปยอดรวมแยกตามยี่ห้อยาง</h3>
+        <div class="form-row">
+            {% if tire_brand_totals_for_summary_report %}
+                {% for brand, summary in tire_brand_totals_for_summary_report.items() %} {# Changed to .items() to ensure iteration works #}
+                    <div class="form-group quarter-width brand-summary-card">
+                        {{ brand | title }}<br>
+                        รับเข้า: <strong class="text-success">{{ summary.IN }}</strong><br>
+                        จ่ายออก: <strong class="text-danger">{{ summary.OUT }}</strong><br>
+                        คงเหลือ: <strong>{{ summary.final_quantity_sum }}</strong>
+                    </div>
+                {% endfor %}
+            {% else %}
+                <div class="form-group full-width no-data-summary">
+                    <p class="no-data" style="margin:0; padding:10px;">ไม่มีข้อมูลสรุปยางแยกตามยี่ห้อในช่วงที่เลือก</p>
+                </div>
+            {% endif %}
+        </div>
+
+        <h3>สรุปยอดรวมแยกตามยี่ห้อแม็ก</h3>
+        <div class="form-row">
+            {% if wheel_brand_totals_for_summary_report %}
+                {% for brand, summary in wheel_brand_totals_for_summary_report.items() %} {# Changed to .items() to ensure iteration works #}
+                    <div class="form-group quarter-width brand-summary-card">
+                        {{ brand | title }}<br>
+                        รับเข้า: <strong class="text-success">{{ summary.IN }}</strong><br>
+                        จ่ายออก: <strong class="text-danger">{{ summary.OUT }}</strong><br>
+                        คงเหลือ: <strong>{{ summary.final_quantity_sum }}</strong>
+                    </div>
+                {% endfor %}
+            {% else %}
+                <div class="form-group full-width no-data-summary">
+                    <p class="no-data" style="margin:0; padding:10px;">ไม่มีข้อมูลสรุปแม็กแยกตามยี่ห้อในช่วงที่เลือก</p>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+    <script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/th.js"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+    <script>
+        flatpickr("#start_date", {
+            dateFormat: "Y-m-d",
+            locale: "th" // Use Thai locale
+        });
+        flatpickr("#end_date", {
+            dateFormat: "Y-m-d",
+            locale: "th"
+        });
+    </script>
+{% endblock %}
