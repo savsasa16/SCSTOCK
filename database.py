@@ -294,6 +294,51 @@ def init_db(conn):
                 role TEXT NOT NULL DEFAULT 'viewer'
             );
         """)
+    if is_postgres:
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS tire_barcodes (
+                barcode_string VARCHAR(255) NOT NULL UNIQUE,
+                tire_id INTEGER NOT NULL,
+                is_primary_barcode BOOLEAN DEFAULT FALSE,
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (barcode_string),
+                FOREIGN KEY (tire_id) REFERENCES tires(id) ON DELETE CASCADE
+            );
+        """)
+    else: # SQLite
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS tire_barcodes (
+                barcode_string TEXT NOT NULL UNIQUE,
+                tire_id INTEGER NOT NULL,
+                is_primary_barcode BOOLEAN DEFAULT 0,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (barcode_string),
+                FOREIGN KEY (tire_id) REFERENCES tires(id) ON DELETE CASCADE
+            );
+        """)
+    if is_postgres:
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS wheel_barcodes (
+                barcode_string VARCHAR(255) NOT NULL UNIQUE,
+                wheel_id INTEGER NOT NULL,
+                is_primary_barcode BOOLEAN DEFAULT FALSE,
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (barcode_string),
+                FOREIGN KEY (wheel_id) REFERENCES wheels(id) ON DELETE CASCADE
+            );
+        """)
+    else: # SQLite
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS wheel_barcodes (
+                barcode_string TEXT NOT NULL UNIQUE,
+                wheel_id INTEGER NOT NULL,
+                is_primary_barcode BOOLEAN DEFAULT 0,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (barcode_string),
+                FOREIGN KEY (wheel_id) REFERENCES wheels(id) ON DELETE CASCADE
+            );
+        """)
+        
     conn.commit()
 
 # --- User Model ---

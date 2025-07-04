@@ -2,7 +2,7 @@
 import sqlite3
 from datetime import datetime, timedelta
 import pytz
-from collections import defaultdict
+from collections import OrderedDict, defaultdict
 import re
 from flask import Flask, render_template, request, redirect, url_for, flash, g, send_file, current_app, jsonify
 import pandas as pd
@@ -131,25 +131,20 @@ def logout():
     return redirect(url_for('login'))
 
 # --- Helper function for processing report tables in app.py (for index and daily_stock_report) ---
-def process_tire_report_data(all_tires):
-    processed_report = []
-    brand_summaries = defaultdict(lambda: {'quantity_sum': 0})
-    
+def process_tire_report_data(all_tires, include_summary_in_output=True):
+    grouped_data = OrderedDict()
+    brand_quantities = defaultdict(int)
+
     sorted_tires = sorted(all_tires, key=lambda x: (x['brand'], x['model'], x['size']))
-    
-    last_brand = None
+
     for tire in sorted_tires:
-        current_brand = tire['brand']
+        brand = tire['brand']
+        # ถ้ายังไม่มีแบรนด์นี้ใน grouped_data ให้สร้าง entry ใหม่
+        if brand not in grouped_data:
+            grouped_data[brand] = {'items_list': [], 'summary': {}} # เปลี่ยนชื่อเป็น items_list
         
-        if last_brand is not None and current_brand != last_brand:
-            summary_data = brand_summaries[last_brand]
-            processed_report.append({
-                'is_summary': True,
-                'brand': last_brand,
-                'quantity': summary_data['quantity_sum']
-            })
-        
-        processed_report.append({
+        # เพิ่มรายการยางลงใน 'items_list'
+        grouped_data[brand]['items_list'].append({
             'is_summary': False,
             'brand': tire['brand'],
             'model': tire['model'],
@@ -165,40 +160,32 @@ def process_tire_report_data(all_tires):
             'year_of_manufacture': tire['year_of_manufacture'],
             'id': tire['id']
         })
-        
-        brand_summaries[current_brand]['quantity_sum'] += tire['quantity']
-        
-        last_brand = current_brand
-        
-    if last_brand is not None:
-        summary_data = brand_summaries[last_brand]
-        processed_report.append({
-            'is_summary': True,
-            'brand': last_brand,
-            'quantity': summary_data['quantity_sum']
-        })
-        
-    return processed_report
+        brand_quantities[brand] += tire['quantity']
 
-def process_wheel_report_data(all_wheels):
-    processed_report = []
-    brand_summaries = defaultdict(lambda: {'quantity_sum': 0})
+    for brand, data in grouped_data.items():
+        data['summary'] = {
+            'is_summary': True,
+            'is_summary_to_show': include_summary_in_output,
+            'brand': brand,
+            'quantity': brand_quantities[brand],
+            'formatted_quantity': f'<span class="summary-quantity-value">{brand_quantities[brand]}</span>' # type: ignore
+            }
+    return grouped_data
+        
+
+# MODIFIED: ปรับโครงสร้าง return data ใน process_wheel_report_data
+def process_wheel_report_data(all_wheels, include_summary_in_output=True):
+    grouped_data = OrderedDict()
+    brand_quantities = defaultdict(int)
 
     sorted_wheels = sorted(all_wheels, key=lambda x: (x['brand'], x['model'], x['diameter'], x['width'], x['pcd']))
 
-    last_brand = None
     for wheel in sorted_wheels:
-        current_brand = wheel['brand']
-
-        if last_brand is not None and current_brand != last_brand:
-            summary_data = brand_summaries[last_brand]
-            processed_report.append({
-                'is_summary': True,
-                'brand': last_brand,
-                'quantity': summary_data['quantity_sum']
-            })
-
-        processed_report.append({
+        brand = wheel['brand']
+        if brand not in grouped_data:
+            grouped_data[brand] = {'items_list': [], 'summary': {}} # เปลี่ยนชื่อเป็น items_list
+            
+        grouped_data[brand]['items_list'].append({
             'is_summary': False,
             'brand': wheel['brand'],
             'model': wheel['model'],
@@ -213,20 +200,17 @@ def process_wheel_report_data(all_wheels):
             'image_filename': wheel['image_filename'],
             'id': wheel['id']
         })
+        brand_quantities[brand] += wheel['quantity']
 
-        brand_summaries[current_brand]['quantity_sum'] += wheel['quantity']
-
-        last_brand = current_brand
-
-    if last_brand is not None:
-        summary_data = brand_summaries[last_brand]
-        processed_report.append({
+    for brand, data in grouped_data.items():
+        data['summary'] = {
             'is_summary': True,
-            'brand': last_brand,
-            'quantity': summary_data['quantity_sum']
-        })
-    
-    return processed_report
+            'is_summary_to_show': include_summary_in_output,
+            'brand': brand,
+            'quantity': brand_quantities[brand],
+            'formatted_quantity': f'<span class="summary-quantity-value">{brand_quantities[brand]}</span>' # type: ignore
+        }
+    return grouped_data
 
 
 @app.route('/')
@@ -236,35 +220,31 @@ def index():
 
     tire_query = request.args.get('tire_query', '').strip()
     tire_selected_brand = request.args.get('tire_brand_filter', 'all').strip()
+    is_tire_search_active = bool(tire_query or (tire_selected_brand and tire_selected_brand != 'all'))
 
     all_tires = database.get_all_tires(conn, query=tire_query, brand_filter=tire_selected_brand, include_deleted=False)
-    
     available_tire_brands = database.get_all_tire_brands(conn)
-
-    processed_tires_for_display = process_tire_report_data(all_tires)
+    tires_by_brand_for_display = process_tire_report_data(all_tires, include_summary_in_output=is_tire_search_active)
     
     wheel_query = request.args.get('wheel_query', '').strip()
     wheel_selected_brand = request.args.get('wheel_brand_filter', 'all').strip()
+    is_wheel_search_active = bool(wheel_query or (wheel_selected_brand and wheel_selected_brand != 'all'))
 
     all_wheels = database.get_all_wheels(conn, query=wheel_query, brand_filter=wheel_selected_brand, include_deleted=False)
-
     available_wheel_brands = database.get_all_wheel_brands(conn) 
-
-    processed_wheels_for_display = process_wheel_report_data(all_wheels)
+    wheels_by_brand_for_display = process_wheel_report_data(all_wheels, include_summary_in_output=is_wheel_search_active)
     
     active_tab = request.args.get('tab', 'tires')
 
     return render_template('index.html',
-                           tires_for_display=processed_tires_for_display,
-                           wheels_for_display=processed_wheels_for_display,
-                           
+                           tires_by_brand_for_display=tires_by_brand_for_display,
+                           wheels_by_brand_for_display=wheels_by_brand_for_display,
                            tire_query=tire_query,
                            available_tire_brands=available_tire_brands,
                            tire_selected_brand=tire_selected_brand,
                            wheel_query=wheel_query,
                            available_wheel_brands=available_wheel_brands,
                            wheel_selected_brand=wheel_selected_brand,
-
                            active_tab=active_tab)
 
 # --- Promotions Routes ---
@@ -478,8 +458,7 @@ def add_item():
                     # --- เพิ่มตรงนี้: บันทึก Barcode ID สำหรับยาง (เฉพาะถ้ามีการกรอก) ---
                     if scanned_barcode_for_add:
                         database.add_tire_barcode(conn, new_tire_id, scanned_barcode_for_add, is_primary=True)
-                    # -------------------------------------------------------------------
-                    database.add_tire_movement(conn, new_tire_id, 'IN', quantity, quantity, "Initial Stock (Manual Add)", None, user_id=current_user.id)
+                    # -------------------------------------------------------------------                    
                     conn.commit()
                     flash(f'เพิ่มยาง {brand.title()} รุ่น {model.title()} เบอร์ {size} จำนวน {quantity} เส้น สำเร็จ!', 'success')
                 return redirect(url_for('add_item', tab='tire'))
@@ -554,16 +533,23 @@ def add_item():
                 wholesale_price1 = float(wholesale_price1) if wholesale_price1 and wholesale_price1.strip() else None
                 wholesale_price2 = float(wholesale_price2) if wholesale_price2 and wholesale_price2.strip() else None
                 
-                # ... (โค้ด cursor.execute สำหรับตรวจสอบ existing_wheel) ...
+                cursor = conn.cursor()
+                if "psycopg2" in str(type(conn)):
+                    cursor.execute("SELECT id FROM wheels WHERE brand = %s AND model = %s AND diameter = %s AND width = %s AND pcd = %s AND et = %s", 
+                                   (brand, model, diameter, width, pcd, et))
+                else:
+                    cursor.execute("SELECT id FROM wheels WHERE brand = ? AND model = ? AND diameter = ? AND width = ? AND pcd = ? AND et = ?", 
+                                   (brand, model, diameter, width, pcd, et))
                 
+                existing_wheel = cursor.fetchone()
+
                 if existing_wheel:
                     flash(f'แม็ก {brand.title()} ลาย {model.title()} ขนาด {diameter}x{width} มีอยู่ในระบบแล้ว', 'warning')
                 else:
                     new_wheel_id = database.add_wheel(conn, brand, model, diameter, pcd, width, et, color, 
-                                                    quantity, cost, cost_online, wholesale_price1, wholesale_price2, retail_price, image_url)
+                                                    quantity, cost, cost_online, wholesale_price1, wholesale_price2, retail_price, image_url, user_id=current_user.id)
                     if scanned_barcode_for_add:
                         database.add_wheel_barcode(conn, new_wheel_id, scanned_barcode_for_add, is_primary=True)
-                    database.add_wheel_movement(conn, new_wheel_id, 'IN', quantity, quantity, "Initial Stock (Manual Add)", None, user_id=current_user.id)
                     conn.commit()
                     flash(f'เพิ่มแม็ก {brand.title()} ลาย {model.title()} จำนวน {quantity} วง สำเร็จ!', 'success')
                 return redirect(url_for('index', tab='wheels'))
@@ -634,7 +620,7 @@ def add_item():
                     flash(f'แม็ก {brand.title()} ลาย {model.title()} ขนาด {diameter}x{width} มีอยู่ในระบบแล้ว', 'warning')
                 else:
                     new_wheel_id = database.add_wheel(conn, brand, model, diameter, pcd, width, et, color, 
-                                                    quantity, cost, cost_online, wholesale_price1, wholesale_price2, retail_price, uploaded_image_url)
+                                                    quantity, cost, cost_online, wholesale_price1, wholesale_price2, retail_price, image_url)
                     # --- เพิ่มตรงนี้: บันทึก Barcode ID สำหรับแม็ก (เฉพาะถ้ามีการกรอก) ---
                     if scanned_barcode_for_add:
                         database.add_wheel_barcode(conn, new_wheel_id, scanned_barcode_for_add, is_primary=True)
@@ -940,7 +926,7 @@ def api_manage_wheel_barcodes(wheel_id):
             # ลบ Barcode ID
             database.delete_wheel_barcode(conn, barcode_string)
             conn.commit()
-            return jsonify({"success": True, "message": "ลบ Barcode ID สำเร็จ!"}), 200
+            return jsonify({"success": True, "message": "ลบ Barcode ID สำsembling!"}), 200
             
     except Exception as e:
         conn.rollback()
@@ -1047,7 +1033,7 @@ def stock_movement():
 
     processed_tire_movements_history = []
     for movement in tire_movements_history_raw:
-        movement_data = movement
+        movement_data = dict(movement)
         movement_data['timestamp'] = convert_to_bkk_time(movement_data['timestamp'])
         processed_tire_movements_history.append(movement_data)
     tire_movements_history = processed_tire_movements_history
@@ -1070,7 +1056,7 @@ def stock_movement():
 
     processed_wheel_movements_history = []
     for movement in wheel_movements_history_raw:
-        movement_data = movement
+        movement_data = dict(movement)
         movement_data['timestamp'] = convert_to_bkk_time(movement_data['timestamp'])
         processed_wheel_movements_history.append(movement_data)
     wheel_movements_history = processed_wheel_movements_history
@@ -1324,6 +1310,8 @@ def daily_stock_report():
     sql_date_filter = report_date.strftime('%Y-%m-%d')
     sql_date_filter_end_of_day = report_datetime_obj.replace(hour=23, minute=59, second=59, microsecond=999999).isoformat()
 
+    is_psycopg2_conn = "psycopg2" in str(type(conn)) 
+
     # --- Tire Report Data ---
     tire_movements_query_today = f"""
         SELECT
@@ -1335,9 +1323,9 @@ def daily_stock_report():
         LEFT JOIN users u ON tm.user_id = u.id
         WHERE {database.get_sql_date_format_for_query('tm.timestamp')} = %s
         ORDER BY tm.timestamp DESC
-    """ # MODIFIED: ORDER BY tm.timestamp DESC
-    if "psycopg2" in str(type(conn)):
-        cursor = conn.cursor()
+    """ 
+    if is_psycopg2_conn:
+        cursor = conn.cursor() 
         cursor.execute(tire_movements_query_today, (sql_date_filter,))
         tire_movements_raw_today = cursor.fetchall()
     else:
@@ -1345,7 +1333,7 @@ def daily_stock_report():
 
     processed_tire_movements_raw_today = []
     for movement in tire_movements_raw_today:
-        movement_data = dict(movement)
+        movement_data = dict(movement) 
         movement_data['timestamp'] = convert_to_bkk_time(movement_data['timestamp'])
         processed_tire_movements_raw_today.append(movement_data)
     tire_movements_raw = processed_tire_movements_raw_today
@@ -1364,12 +1352,14 @@ def daily_stock_report():
         FROM tire_movements
         WHERE timestamp <= %s
     """
-    if "psycopg2" in str(type(conn)):
+    if is_psycopg2_conn:
         cursor.execute(distinct_tire_ids_query_all_history, (sql_date_filter_end_of_day,))
+        rows = cursor.fetchall() 
     else:
-        cursor.execute(distinct_tire_ids_query_all_history.replace('%s', '?'), (sql_date_filter_end_of_day,))
+        query_result_obj = conn.execute(distinct_tire_ids_query_all_history.replace('%s', '?'), (sql_date_filter_end_of_day,))
+        rows = query_result_obj.fetchall() 
     
-    for row in cursor.fetchall():
+    for row in rows:
         tire_ids_involved.add(row['tire_id'])
 
 
@@ -1380,13 +1370,15 @@ def daily_stock_report():
             WHERE tire_id = %s AND timestamp <= %s
             ORDER BY timestamp ASC
         """
-        if "psycopg2" in str(type(conn)):
+        if is_psycopg2_conn:
             cursor.execute(history_query_up_to_day_before, (tire_id, day_before_report_iso))
+            moves = cursor.fetchall() 
         else:
-            cursor.execute(history_query_up_to_day_before.replace('%s', '?'), (tire_id, day_before_report_iso,))
+            query_result_obj = conn.execute(history_query_up_to_day_before.replace('%s', '?'), (tire_id, day_before_report_iso,))
+            moves = query_result_obj.fetchall() 
         
         calculated_qty_before_day = 0
-        for move in cursor.fetchall():
+        for move in moves:
             if move['type'] == 'IN':
                 calculated_qty_before_day += move['quantity_change']
             elif move['type'] == 'OUT':
@@ -1479,17 +1471,17 @@ def daily_stock_report():
         LEFT JOIN users u ON wm.user_id = u.id
         WHERE {database.get_sql_date_format_for_query('wm.timestamp')} = %s
         ORDER BY wm.timestamp DESC
-    """ # MODIFIED: ORDER BY wm.timestamp DESC
-    if "psycopg2" in str(type(conn)):
-        cursor = conn.cursor()
-        cursor.execute(wheel_movements_query_today, (sql_date_filter,))
-        wheel_movements_raw_today = cursor.fetchall()
+    """ 
+    if is_psycopg2_conn:
+        cursor_wheel = conn.cursor() 
+        cursor_wheel.execute(wheel_movements_query_today, (sql_date_filter,))
+        wheel_movements_raw_today = cursor_wheel.fetchall()
     else:
         wheel_movements_raw_today = conn.execute(wheel_movements_query_today.replace('%s', '?'), (sql_date_filter,)).fetchall()
 
     processed_wheel_movements_raw_today = []
     for movement in wheel_movements_raw_today:
-        movement_data = dict(movement)
+        movement_data = dict(movement) 
         movement_data['timestamp'] = convert_to_bkk_time(movement_data['timestamp'])
         processed_wheel_movements_raw_today.append(movement_data)
     wheel_movements_raw = processed_wheel_movements_raw_today
@@ -1508,12 +1500,14 @@ def daily_stock_report():
         FROM wheel_movements
         WHERE timestamp <= %s
     """
-    if "psycopg2" in str(type(conn)):
-        cursor.execute(distinct_wheel_ids_query_all_history, (sql_date_filter_end_of_day,))
+    if is_psycopg2_conn:
+        cursor_wheel.execute(distinct_wheel_ids_query_all_history, (sql_date_filter_end_of_day,))
+        rows = cursor_wheel.fetchall() 
     else:
-        cursor.execute(distinct_wheel_ids_query_all_history.replace('%s', '?'), (sql_date_filter_end_of_day,))
+        query_result_obj = conn.execute(distinct_wheel_ids_query_all_history.replace('%s', '?'), (sql_date_filter_end_of_day,))
+        rows = query_result_obj.fetchall() 
     
-    for row in cursor.fetchall():
+    for row in rows:
         wheel_ids_involved.add(row['wheel_id'])
 
 
@@ -1524,13 +1518,15 @@ def daily_stock_report():
             WHERE wheel_id = %s AND timestamp <= %s
             ORDER BY timestamp ASC
         """
-        if "psycopg2" in str(type(conn)):
-            cursor.execute(history_query_up_to_day_before, (wheel_id, day_before_report_iso))
+        if is_psycopg2_conn:
+            cursor_wheel.execute(history_query_up_to_day_before, (wheel_id, day_before_report_iso))
+            moves = cursor_wheel.fetchall() 
         else:
-            cursor.execute(history_query_up_to_day_before.replace('%s', '?'), (wheel_id, day_before_report_iso,))
+            query_result_obj = conn.execute(history_query_up_to_day_before.replace('%s', '?'), (wheel_id, day_before_report_iso,))
+            moves = query_result_obj.fetchall() 
         
         calculated_qty_before_day = 0
-        for move in cursor.fetchall():
+        for move in moves:
             if move['type'] == 'IN':
                 calculated_qty_before_day += move['quantity_change']
             elif move['type'] == 'OUT':
@@ -1548,7 +1544,7 @@ def daily_stock_report():
         if key not in detailed_wheel_report:
             detailed_wheel_report[key]['wheel_main_id'] = wheel_id
             detailed_wheel_report[key]['brand'] = movement['brand']
-            detailed_wheel_report[key]['model'] = movement['model']
+            detailed_wheel_report[key]['model'] = movement['model'] # FIXED: Changed from detailed_tire_report to detailed_wheel_report
             detailed_wheel_report[key]['diameter'] = movement['diameter']
             detailed_wheel_report[key]['pcd'] = movement['pcd']
             detailed_wheel_report[key]['width'] = movement['width']
@@ -1627,12 +1623,12 @@ def daily_stock_report():
         FROM tire_movements
         WHERE timestamp < %s
     """
-    if "psycopg2" in str(type(conn)):
+    if is_psycopg2_conn:
         cursor.execute(query_total_before_tires, (start_of_report_day_iso,))
+        initial_total_tires = cursor.fetchone()[0] or 0 
     else:
-        cursor.execute(query_total_before_tires.replace('%s', '?'), (start_of_report_day_iso,))
-    
-    initial_total_tires = cursor.fetchone()[0] or 0
+        query_result_obj = conn.execute(query_total_before_tires.replace('%s', '?'), (start_of_report_day_iso,))
+        initial_total_tires = query_result_obj.fetchone()[0] or 0 
     
     tire_total_remaining_for_report_date = initial_total_tires + tire_total_in - tire_total_out
 
@@ -1644,15 +1640,15 @@ def daily_stock_report():
     query_total_before_wheels = f"""
         SELECT SUM(CASE WHEN type = 'IN' THEN quantity_change ELSE -quantity_change END)
         FROM wheel_movements
-        WHERE timestamp < %s
+        WHERE timestamp < %s;
     """
-    if "psycopg2" in str(type(conn)):
+    if is_psycopg2_conn:
         cursor.execute(query_total_before_wheels, (start_of_report_day_iso,))
+        initial_total_wheels = cursor.fetchone()[0] or 0 
     else:
-        cursor.execute(query_total_before_wheels.replace('%s', '?'), (start_of_report_day_iso,))
+        query_result_obj = conn.execute(query_total_before_wheels.replace('%s', '?'), (start_of_report_day_iso,))
+        initial_total_wheels = query_result_obj.fetchone()[0] or 0 
     
-    initial_total_wheels = cursor.fetchone()[0] or 0
-
     wheel_total_remaining_for_report_date = initial_total_wheels + wheel_total_in - wheel_total_out
 
 
@@ -1680,6 +1676,350 @@ def daily_stock_report():
                            wheel_movements_raw=wheel_movements_raw
                           )
 
+# --- NEW: Summary Stock Report Route ---
+@app.route('/summary_stock_report')
+@login_required
+def summary_stock_report():
+    conn = get_db()
+    
+    start_date_str = request.args.get('start_date')
+    end_date_str = request.args.get('end_date')
+
+    if not start_date_str or not end_date_str:
+        today = get_bkk_time().date()
+        first_day_of_month = today.replace(day=1)
+        start_date_obj = BKK_TZ.localize(datetime(first_day_of_month.year, first_day_of_month.month, first_day_of_month.day, 0, 0, 0))
+        end_date_obj = BKK_TZ.localize(datetime(today.year, today.month, today.day, 23, 59, 59, 999999))
+        display_range_str = f"จากวันที่ {start_date_obj.strftime('%d %b %Y')} ถึงวันที่ {end_date_obj.strftime('%d %b %Y')}"
+    else:
+        try:
+            start_date_obj = BKK_TZ.localize(datetime.strptime(start_date_str, '%Y-%m-%d')).replace(hour=0, minute=0, second=0, microsecond=0)
+            end_date_obj = BKK_TZ.localize(datetime.strptime(end_date_str, '%Y-%m-%d')).replace(hour=23, minute=59, second=59, microsecond=999999)
+            
+            if start_date_obj > end_date_obj:
+                flash("วันที่เริ่มต้นต้องไม่เกินวันที่สิ้นสุด", "danger")
+                today = get_bkk_time().date()
+                first_day_of_month = today.replace(day=1)
+                start_date_obj = BKK_TZ.localize(datetime(first_day_of_month.year, first_day_of_month.month, first_day_of_month.day, 0, 0, 0))
+                end_date_obj = BKK_TZ.localize(datetime(today.year, today.month, today.day, 23, 59, 59, 999999))
+                display_range_str = f"จากวันที่ {start_date_obj.strftime('%d %b %Y')} ถึงวันที่ {end_date_obj.strftime('%d %b %Y')}"
+            else:
+                display_range_str = f"จากวันที่ {start_date_obj.strftime('%d %b %Y')} ถึงวันที่ {end_date_obj.strftime('%d %b %Y')}"
+        except ValueError:
+            flash("รูปแบบวันที่ไม่ถูกต้อง กรุณาใช้YYYY-MM-DD", "danger")
+            today = get_bkk_time().date()
+            first_day_of_month = today.replace(day=1)
+            start_date_obj = BKK_TZ.localize(datetime(first_day_of_month.year, first_day_of_month.month, first_day_of_month.day, 0, 0, 0))
+            end_date_obj = BKK_TZ.localize(datetime(today.year, today.month, today.day, 23, 59, 59, 999999))
+            display_range_str = f"จากวันที่ {start_date_obj.strftime('%d %b %Y')} ถึงวันที่ {end_date_obj.strftime('%d %b %Y')}"
+
+    start_of_period_iso = start_date_obj.isoformat()
+    end_of_period_iso = end_date_obj.isoformat()
+    is_psycopg2_conn = "psycopg2" in str(type(conn))
+
+    if is_psycopg2_conn:
+        cursor = conn.cursor()
+    else:
+        cursor = None 
+
+    # --- Tire Movements by Brand (สำหรับสรุปยอดรวมใหญ่) ---
+    tire_movements_query_sql = f"""
+        SELECT t.brand, tm.type, SUM(tm.quantity_change) AS total_quantity
+        FROM tire_movements tm
+        JOIN tires t ON tm.tire_id = t.id
+        WHERE tm.timestamp BETWEEN %s AND %s
+        GROUP BY t.brand, tm.type
+        ORDER BY t.brand, tm.type;
+    """
+    if is_psycopg2_conn:
+        cursor.execute(tire_movements_query_sql, (start_of_period_iso, end_of_period_iso))
+        tire_movements_by_brand_raw = cursor.fetchall()
+    else: # SQLite
+        query_result_obj = conn.execute(tire_movements_query_sql.replace('%s', '?'), (start_of_period_iso, end_of_period_iso))
+        tire_movements_by_brand_raw = query_result_obj.fetchall()
+    
+    tire_movements_by_brand = defaultdict(lambda: {'IN': 0, 'OUT': 0})
+    for movement_row in tire_movements_by_brand_raw: 
+        row_data = dict(movement_row) 
+        brand = row_data['brand']
+        move_type = row_data['type']
+        total_qty = row_data['total_quantity']
+        tire_movements_by_brand[brand][move_type] = total_qty
+
+    # --- Wheel Movements by Brand (สำหรับสรุปยอดรวมใหญ่) ---
+    wheel_movements_query_sql = f"""
+        SELECT w.brand, wm.type, SUM(wm.quantity_change) AS total_quantity
+        FROM wheel_movements wm
+        JOIN wheels w ON wm.wheel_id = w.id
+        WHERE wm.timestamp BETWEEN %s AND %s
+        GROUP BY w.brand, wm.type
+        ORDER BY w.brand, wm.type;
+    """
+    if is_psycopg2_conn:
+        if 'cursor' not in locals(): 
+            cursor = conn.cursor() 
+        cursor.execute(wheel_movements_query_sql, (start_of_period_iso, end_of_period_iso))
+        wheel_movements_by_brand_raw = cursor.fetchall()
+    else: # SQLite
+        query_result_obj = conn.execute(wheel_movements_query_sql.replace('%s', '?'), (start_of_period_iso, end_of_period_iso))
+        wheel_movements_by_brand_raw = query_result_obj.fetchall()
+    
+    wheel_movements_by_brand = defaultdict(lambda: {'IN': 0, 'OUT': 0})
+    for row in wheel_movements_by_brand_raw: 
+        row_data = dict(row) 
+        brand = row_data['brand']
+        move_type = row_data['type']
+        total_qty = row_data['total_quantity']
+        wheel_movements_by_brand[brand][move_type] = total_qty
+
+    # --- Calculate overall totals for the summary section ---
+    overall_tire_in_period = sum(data['IN'] for data in tire_movements_by_brand.values())
+    overall_tire_out_period = sum(data['OUT'] for data in tire_movements_by_brand.values())
+    overall_wheel_in_period = sum(data['IN'] for data in wheel_movements_by_brand.values())
+    overall_wheel_out_period = sum(data['OUT'] for data in wheel_movements_by_brand.values())
+
+    # Total initial stock (sum of all IN - all OUT up to start_of_period_iso)
+    query_overall_initial_tires = f"""
+        SELECT COALESCE(SUM(CASE WHEN type = 'IN' THEN quantity_change ELSE -quantity_change END), 0)
+        FROM tire_movements
+        WHERE timestamp < %s;
+    """
+    if is_psycopg2_conn:
+        if 'cursor' not in locals(): 
+            cursor = conn.cursor() 
+        cursor.execute(query_overall_initial_tires, (start_of_period_iso,))
+        overall_tire_initial = cursor.fetchone()[0] or 0
+    else:
+        query_result_obj = conn.execute(query_overall_initial_tires.replace('%s', '?'), (start_of_period_iso,))
+        overall_tire_initial = query_result_obj.fetchone()[0] or 0
+
+    query_overall_initial_wheels = f"""
+        SELECT COALESCE(SUM(CASE WHEN type = 'IN' THEN quantity_change ELSE -quantity_change END), 0)
+        FROM wheel_movements
+        WHERE timestamp < %s;
+    """
+    if is_psycopg2_conn:
+        if 'cursor' not in locals(): 
+            cursor = conn.cursor() 
+        cursor.execute(query_overall_initial_wheels, (start_of_period_iso,))
+        overall_wheel_initial = cursor.fetchone()[0] or 0
+    else:
+        query_result_obj = conn.execute(query_overall_initial_wheels.replace('%s', '?'), (start_of_period_iso,))
+        overall_wheel_initial = query_result_obj.fetchone()[0] or 0
+
+    # Total final stock (initial + movements within period)
+    overall_tire_final = overall_tire_initial + overall_tire_in_period - overall_tire_out_period
+    overall_wheel_final = overall_wheel_initial + overall_wheel_in_period - overall_wheel_out_period
+
+    # --- NEW: สำหรับรายงานการเคลื่อนไหวสต็อกยางตามยี่ห้อและขนาด (tires_by_brand_for_summary_report) ---
+    # Binding parameters for tire_detailed_movements_query:
+    # 1. initial_qty_before_period: (%s) -> start_of_period_iso
+    # 2. IN_qty: (%s, %s) -> start_of_period_iso, end_of_period_iso
+    # 3. OUT_qty: (%s, %s) -> start_of_period_iso, end_of_period_iso
+    # 4. INNER JOIN: (%s, %s) -> start_of_period_iso, end_of_period_iso
+    # 5. HAVING: (%s, %s) -> start_of_period_iso, end_of_period_iso
+    # Total: 1 + 2 + 2 + 2 + 2 = 9 bindings.
+    tire_detailed_movements_query = f"""
+        SELECT
+            t.brand, t.model, t.size,
+            COALESCE(SUM(CASE WHEN tm.type = 'IN' AND tm.timestamp BETWEEN %s AND %s THEN tm.quantity_change ELSE 0 END), 0) AS IN_qty,  
+            COALESCE(SUM(CASE WHEN tm.type = 'OUT' AND tm.timestamp BETWEEN %s AND %s THEN tm.quantity_change ELSE 0 END), 0) AS OUT_qty, 
+            COALESCE(( 
+                SELECT SUM(CASE WHEN prev_tm.type = 'IN' THEN prev_tm.quantity_change ELSE -prev_tm.quantity_change END)
+                FROM tire_movements prev_tm
+                WHERE prev_tm.tire_id = t.id AND prev_tm.timestamp < %s
+            ), 0) AS initial_qty_before_period,
+            t.id AS tire_id 
+        FROM tires t 
+        INNER JOIN tire_movements tm ON tm.tire_id = t.id AND tm.timestamp BETWEEN %s AND %s 
+        WHERE t.is_deleted = FALSE 
+        GROUP BY t.id, t.brand, t.model, t.size 
+        HAVING SUM(CASE WHEN tm.timestamp BETWEEN %s AND %s THEN tm.quantity_change ELSE 0 END) > 0 
+        ORDER BY t.brand, t.model, t.size;
+    """
+    
+    # Corrected parameter list based on 9 bindings required [cite: 2025-06-23]
+    tire_params = (
+        start_of_period_iso, end_of_period_iso, # for IN_qty SUM
+        start_of_period_iso, end_of_period_iso, # for OUT_qty SUM
+        start_of_period_iso, # for initial_qty_before_period subquery
+        start_of_period_iso, end_of_period_iso, # for INNER JOIN ON clause
+        start_of_period_iso, end_of_period_iso  # for HAVING clause
+    )
+
+    if is_psycopg2_conn:
+        cursor.execute(tire_detailed_movements_query, tire_params)
+        tire_detailed_movements_raw = cursor.fetchall()
+    else:
+        query_result_obj = conn.execute(tire_detailed_movements_query.replace('%s', '?'), tire_params)
+        tire_detailed_movements_raw = query_result_obj.fetchall()
+
+    # ประมวลผลข้อมูลสำหรับ tires_by_brand_for_summary_report
+    tires_by_brand_for_summary_report = OrderedDict()
+    for row_data_raw in tire_detailed_movements_raw: 
+        row = dict(row_data_raw) 
+        brand = row['brand']
+        if brand not in tires_by_brand_for_summary_report:
+            tires_by_brand_for_summary_report[brand] = []
+        
+        initial_qty = int(row.get('initial_qty_before_period', 0)) 
+        in_qty = int(row.get('IN_qty', 0)) 
+        out_qty = int(row.get('OUT_qty', 0)) 
+        
+        final_qty = initial_qty + in_qty - out_qty 
+
+        tires_by_brand_for_summary_report[brand].append({
+            'model': row['model'],
+            'size': row['size'],
+            'initial_quantity': initial_qty,
+            'IN': in_qty,
+            'OUT': out_qty,
+            'final_quantity': final_qty,
+        })
+    
+    # --- NEW: สำหรับรายงานการเคลื่อนไหวสต็อกล้อแม็กตามยี่ห้อและขนาด (wheels_by_brand_for_summary_report) ---
+    # Binding parameters for wheel_detailed_movements_query:
+    # 1. initial_qty_before_period: (%s) -> start_of_period_iso
+    # 2. IN_qty: (%s, %s) -> start_of_period_iso, end_of_period_iso
+    # 3. OUT_qty: (%s, %s) -> start_of_period_iso, end_of_period_iso
+    # 4. INNER JOIN: (%s, %s) -> start_of_period_iso, end_of_period_iso
+    # 5. HAVING: (%s, %s) -> start_of_period_iso, end_of_period_iso
+    # Total: 1 + 2 + 2 + 2 + 2 = 9 bindings.
+    wheel_detailed_movements_query = f"""
+        SELECT
+            w.brand, w.model, w.diameter, w.pcd, w.width,
+            COALESCE(SUM(CASE WHEN wm.type = 'IN' AND wm.timestamp BETWEEN %s AND %s THEN wm.quantity_change ELSE 0 END), 0) AS IN_qty,  
+            COALESCE(SUM(CASE WHEN wm.type = 'OUT' AND wm.timestamp BETWEEN %s AND %s THEN wm.quantity_change ELSE 0 END), 0) AS OUT_qty, 
+            COALESCE(( 
+                SELECT SUM(CASE WHEN prev_wm.type = 'IN' THEN prev_wm.quantity_change ELSE -prev_wm.quantity_change END)
+                FROM wheel_movements prev_wm
+                WHERE prev_wm.wheel_id = w.id AND prev_wm.timestamp < %s
+            ), 0) AS initial_qty_before_period,
+            w.id AS wheel_id
+        FROM wheels w 
+        INNER JOIN wheel_movements wm ON wm.wheel_id = w.id AND wm.timestamp BETWEEN %s AND %s 
+        WHERE w.is_deleted = FALSE 
+        GROUP BY w.id, w.brand, w.model, w.diameter, w.pcd, w.width
+        HAVING SUM(CASE WHEN wm.timestamp BETWEEN %s AND %s THEN wm.quantity_change ELSE 0 END) > 0 
+        ORDER BY w.brand, w.model, w.diameter;
+    """
+    # Corrected parameter list based on 9 bindings required [cite: 2025-06-23]
+    wheel_params = (
+        start_of_period_iso, end_of_period_iso, # for IN_qty SUM
+        start_of_period_iso, end_of_period_iso, # for OUT_qty SUM
+        start_of_period_iso, # for initial_qty_before_period subquery
+        start_of_period_iso, end_of_period_iso, # for INNER JOIN ON clause
+        start_of_period_iso, end_of_period_iso  # for HAVING clause
+    )
+
+    if is_psycopg2_conn:
+        cursor.execute(wheel_detailed_movements_query, wheel_params)
+        wheel_detailed_movements_raw = cursor.fetchall()
+    else:
+        query_result_obj = conn.execute(wheel_detailed_movements_query.replace('%s', '?'), wheel_params)
+        wheel_detailed_movements_raw = query_result_obj.fetchall()
+
+    # ประมวลผลข้อมูลสำหรับ wheels_by_brand_for_summary_report
+    wheels_by_brand_for_summary_report = OrderedDict()
+    for row_data_raw in wheel_detailed_movements_raw: 
+        row = dict(row_data_raw) 
+        brand = row['brand']
+        if brand not in wheels_by_brand_for_summary_report:
+            wheels_by_brand_for_summary_report[brand] = []
+        
+        initial_qty = int(row.get('initial_qty_before_period', 0)) 
+        in_qty = int(row.get('IN_qty', 0)) 
+        out_qty = int(row.get('OUT_qty', 0)) 
+        
+        final_qty = initial_qty + in_qty - out_qty 
+
+        wheels_by_brand_for_summary_report[brand].append({
+            'model': row['model'],
+            'diameter': row['diameter'],
+            'pcd': row['pcd'],
+            'width': row['width'],
+            'initial_quantity': initial_qty,
+            'IN': in_qty,
+            'OUT': out_qty,
+            'final_quantity': final_qty,
+        })
+    # --- สำหรับสรุปยอดรวมแยกตามยี่ห้อยาง (tire_brand_totals_for_summary_report) ---
+    tire_brand_totals_for_summary_report = OrderedDict()
+    for brand, data in tire_movements_by_brand.items():
+        query_brand_initial_tire = f"""
+            SELECT COALESCE(SUM(CASE WHEN type = 'IN' THEN quantity_change ELSE -quantity_change END), 0)
+            FROM tire_movements tm
+            JOIN tires t ON tm.tire_id = t.id
+            WHERE t.brand = %s AND tm.timestamp < %s;
+        """
+        if is_psycopg2_conn:
+            if 'cursor' not in locals(): 
+                 cursor = conn.cursor()
+            cursor.execute(query_brand_initial_tire, (brand, start_of_period_iso))
+            brand_initial_qty = cursor.fetchone()[0] or 0
+        else:
+            query_result_obj = conn.execute(query_brand_initial_tire.replace('%s', '?'), (brand, start_of_period_iso))
+            brand_initial_qty = query_result_obj.fetchone()[0] or 0
+
+        total_in_brand = data.get('IN', 0)
+        total_out_brand = data.get('OUT', 0)
+        final_qty_brand = brand_initial_qty + total_in_brand - total_out_brand
+
+        tire_brand_totals_for_summary_report[brand] = {
+            'IN': total_in_brand,
+            'OUT': total_out_brand,
+            'final_quantity_sum': final_qty_brand,
+        }
+
+    # --- สำหรับสรุปยอดรวมแยกตามยี่ห้อแม็ก (wheel_brand_totals_for_summary_report) ---
+    wheel_brand_totals_for_summary_report = OrderedDict()
+    for brand, data in wheel_movements_by_brand.items():
+        query_brand_initial_wheel = f"""
+            SELECT COALESCE(SUM(CASE WHEN type = 'IN' THEN quantity_change ELSE -quantity_change END), 0)
+            FROM wheel_movements wm
+            JOIN wheels w ON wm.wheel_id = w.id
+            WHERE w.brand = %s AND wm.timestamp < %s;
+        """
+        if is_psycopg2_conn:
+            if 'cursor' not in locals(): 
+                cursor = conn.cursor()
+            cursor.execute(query_brand_initial_wheel, (brand, start_of_period_iso))
+            brand_initial_qty = cursor.fetchone()[0] or 0
+        else:
+            query_result_obj = conn.execute(query_brand_initial_wheel.replace('%s', '?'), (brand, start_of_period_iso))
+            brand_initial_qty = query_result_obj.fetchone()[0] or 0
+
+        total_in_brand = data.get('IN', 0)
+        total_out_brand = data.get('OUT', 0)
+        final_qty_brand = brand_initial_qty + total_in_brand - total_out_brand
+        
+        wheel_brand_totals_for_summary_report[brand] = {
+            'IN': total_in_brand,
+            'OUT': total_out_brand,
+            'final_quantity_sum': final_qty_brand,
+        }
+
+    return render_template('summary_stock_report.html',
+                           start_date_param=start_date_obj.strftime('%Y-%m-%d'),
+                           end_date_param=end_date_obj.strftime('%Y-%m-%d'),
+                           display_range_str=display_range_str,
+                           tire_movements_by_brand=tire_movements_by_brand,
+                           wheel_movements_by_brand=wheel_movements_by_brand,
+                           overall_tire_initial=overall_tire_initial,
+                           overall_tire_in=overall_tire_in_period,
+                           overall_tire_out=overall_tire_out_period,
+                           overall_tire_final=overall_tire_final,
+                           overall_wheel_initial=overall_wheel_initial,
+                           overall_wheel_in=overall_wheel_in_period,
+                           overall_wheel_out=overall_wheel_out_period,
+                           overall_wheel_final=overall_wheel_final,
+                           tires_by_brand_for_summary_report=tires_by_brand_for_summary_report,
+                           wheels_by_brand_for_summary_report=wheels_by_brand_for_summary_report,
+                           tire_brand_totals_for_summary_report=tire_brand_totals_for_summary_report,
+                           wheel_brand_totals_for_summary_report=wheel_brand_totals_for_summary_report
+                          )
+
+
 # --- Import/Export Routes ---
 @app.route('/export_import', methods=('GET', 'POST'))
 @login_required
@@ -1706,6 +2046,16 @@ def export_tires_action():
 
     data = []
     for tire in tires:
+        # ดึง Barcode ID หลักสำหรับยางเส้นนี้
+        primary_barcode = ""
+        barcodes = database.get_barcodes_for_tire(conn, tire['id'])
+        for bc in barcodes:
+            if bc['is_primary_barcode']:
+                primary_barcode = bc['barcode_string']
+                break
+        if not primary_barcode and barcodes: # ถ้าไม่มี primary แต่มี barcode อื่นๆ ให้เอาอันแรก (หรือตามตรรกะที่คุณต้องการ)
+            primary_barcode = barcodes[0]['barcode_string']
+
         data.append({
             'ID': tire['id'],
             'ยี่ห้อ': tire['brand'],
@@ -1726,7 +2076,8 @@ def export_tires_action():
             'รายละเอียดโปรโมชัน': tire['display_promo_description_text'],
             'ราคาโปรโมชันคำนวณ(เส้น)': tire['display_promo_price_per_item'],
             'ราคาโปรโมชันคำนวณ(4เส้น)': tire['display_price_for_4'],
-            'ปีผลิต': tire['year_of_manufacture']
+            'ปีผลิต': tire['year_of_manufacture'],
+            'Barcode ID': primary_barcode
         })
 
     df = pd.DataFrame(data)
@@ -1739,6 +2090,7 @@ def export_tires_action():
 
     return send_file(output, download_name='tire_stock.xlsx', as_attachment=True, mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
 
+@app.route('/import_tires_action', methods=['POST'])
 def import_tires_action():
     if not current_user.can_edit():
         flash('คุณไม่มีสิทธิ์ในการนำเข้าข้อมูลยาง', 'danger')
@@ -1755,19 +2107,17 @@ def import_tires_action():
     
     if file and allowed_excel_file(file.filename):
         try:
-            df = pd.read_excel(file)
+            # บังคับให้ Pandas อ่าน 'Barcode ID' เป็นสตริง เพื่อจัดการค่าว่างได้ถูกต้อง
+            df = pd.read_excel(file, dtype={'Barcode ID': str}) 
             conn = get_db()
             imported_count = 0
             updated_count = 0
             error_rows = []
 
-            # --- ตรวจสอบคอลัมน์ Barcode ID ใน Excel ---
+            # ตรวจสอบคอลัมน์ที่จำเป็น
             expected_tire_cols = [
-                'ยี่ห้อ', 'รุ่นยาง', 'เบอร์ยาง', 'สต็อก', 'ทุน SC', 'ทุน Dunlop', 'ทุน Online',
-                'ราคาขายส่ง 1', 'ราคาขายส่ง 2', 'ราคาต่อเส้น', 'ID โปรโมชัน', 'ปีผลิต',
-                'Barcode ID' # <-- คอลัมน์นี้ยังจำเป็นสำหรับการ Import
+                'ยี่ห้อ', 'รุ่นยาง', 'เบอร์ยาง', 'สต็อก', 'ราคาต่อเส้น', 'Barcode ID'
             ]
-            
             if not all(col in df.columns for col in expected_tire_cols):
                 missing_cols = [col for col in expected_tire_cols if col not in df.columns]
                 flash(f'ไฟล์ Excel ขาดคอลัมน์ที่จำเป็น: {", ".join(missing_cols)}. โปรดดาวน์โหลดไฟล์ตัวอย่างเพื่อดูรูปแบบที่ถูกต้อง.', 'danger')
@@ -1779,12 +2129,14 @@ def import_tires_action():
                     model = str(row.get('รุ่นยาง', '')).strip().lower()
                     size = str(row.get('เบอร์ยาง', '')).strip()
 
-                    # --- รับ Barcode ID จาก Excel (ยังคงเป็น Required) ---
+                    # ดึงค่า Barcode ID และจัดการค่าว่างให้เป็น None
                     barcode_id_from_excel = str(row.get('Barcode ID', '')).strip()
-                    if not barcode_id_from_excel:
-                        raise ValueError("คอลัมน์ 'Barcode ID' ไม่สามารถเว้นว่างได้สำหรับยางในการนำเข้า Excel")
-                    # -----------------------------------------------------
-                    
+                    if not barcode_id_from_excel or barcode_id_from_excel.lower() == 'none' or barcode_id_from_excel.lower() == 'nan':
+                        barcode_id_to_save = None # ถ้าว่างเปล่า, ให้เป็น None
+                    else:
+                        barcode_id_to_save = barcode_id_from_excel # ถ้ามีค่า, ใช้ค่านั้น
+
+                    # ตรวจสอบคอลัมน์ที่จำเป็นอื่นๆ
                     if not brand or not model or not size:
                         raise ValueError("ข้อมูล 'ยี่ห้อ', 'รุ่นยาง', หรือ 'เบอร์ยาง' ไม่สามารถเว้นว่างได้")
 
@@ -1816,68 +2168,90 @@ def import_tires_action():
                     promotion_id = int(row.get('ID โปรโมชัน')) if pd.notna(row.get('ID โปรโมชัน')) else None
                     
                     cursor = conn.cursor()
-                    
-                    # ปรับการค้นหา Tire ที่มีอยู่แล้ว ให้ใช้ Barcode ID ก่อน
-                    tire_id_from_barcode = database.get_tire_id_by_barcode(conn, barcode_id_from_excel)
+
                     existing_tire = None
-                    if tire_id_from_barcode:
-                        if "psycopg2" in str(type(conn)):
-                            cursor.execute("SELECT id, quantity FROM tires WHERE id = %s", (tire_id_from_barcode,))
-                        else:
-                            cursor.execute("SELECT id, quantity FROM tires WHERE id = ?", (tire_id_from_barcode,))
-                        existing_tire = cursor.fetchone()
-                    
-                    # ถ้าไม่เจอด้วย Barcode ID ให้ลองค้นหาด้วย Brand, Model, Size (เป็น Fallback)
+                    # ค้นหาด้วย Barcode ID ก่อน ถ้ามีค่า
+                    if barcode_id_to_save:
+                        existing_tire_id_by_barcode = database.get_tire_id_by_barcode(conn, barcode_id_to_save) 
+                        if existing_tire_id_by_barcode:
+                            if "psycopg2" in str(type(conn)):
+                                cursor.execute("SELECT id, brand, model, size, quantity FROM tires WHERE id = %s", (existing_tire_id_by_barcode,))
+                            else:
+                                cursor.execute("SELECT id, brand, model, size, quantity FROM tires WHERE id = ?", (existing_tire_id_by_barcode,))
+                            
+                            found_tire_data = cursor.fetchone()
+                            if found_tire_data:
+                                existing_tire = dict(found_tire_data) # แปลงเป็น dict เพื่อความชัวร์
+
+                        # ตรวจสอบว่า Barcode ID นี้ไม่ได้ถูกใช้กับ Wheel
+                        existing_wheel_id_by_barcode = database.get_wheel_id_by_barcode(conn, barcode_id_to_save) 
+                        if existing_wheel_id_by_barcode:
+                            raise ValueError(f"Barcode ID '{barcode_id_to_save}' ซ้ำกับล้อแม็ก ID {existing_wheel_id_by_barcode}. Barcode ID ต้องไม่ซ้ำกันข้ามประเภทสินค้า.")
+
+                    # ถ้าไม่พบด้วย Barcode ID (หรือ Barcode ID เป็น None), ให้ลองค้นหาด้วย Brand, Model, Size
                     if not existing_tire:
-                         if "psycopg2" in str(type(conn)):
-                            cursor.execute("SELECT id, quantity FROM tires WHERE brand = %s AND model = %s AND size = %s", (brand, model, size))
-                         else:
-                            cursor.execute("SELECT id, quantity FROM tires WHERE brand = ? AND model = ? AND size = ?", (brand, model, size))
-                         existing_tire = cursor.fetchone()
+                        if "psycopg2" in str(type(conn)):
+                            cursor.execute("SELECT id, brand, model, size, quantity FROM tires WHERE brand = %s AND model = %s AND size = %s", (brand, model, size))
+                        else:
+                            cursor.execute("SELECT id, brand, model, size, quantity FROM tires WHERE brand = ? AND model = ? AND size = ?", (brand, model, size))
+                        
+                        found_tire_data = cursor.fetchone()
+                        if found_tire_data:
+                            existing_tire = dict(found_tire_data) # แปลงเป็น dict เพื่อความชัวร์
 
                     if existing_tire:
-                        tire_id = existing_tire['id']
-                        database.update_tire_import(conn, tire_id, brand, model, size, quantity, cost_sc, cost_dunlop, cost_online, wholesale_price1, wholesale_price2, price_per_item, 
-                                                    promotion_id, year_of_manufacture)
-                        # อัปเดต Barcode ID ด้วย ถ้ามีการอัปเดตหลัก (หรือยืนยันว่า Barcode ID ยังอยู่)
-                        database.add_tire_barcode(conn, tire_id, barcode_id_from_excel, is_primary=True) 
-                        updated_count += 1
+                        # ถ้าพบยางที่มีอยู่แล้ว (ไม่ว่าจะจาก Barcode หรือ Brand/Model/Size)
+                        tire_id = existing_tire['id'] # ใช้ 'id' ตัวเล็กตามโครงสร้าง DB ที่ยืนยันมา
                         
+                        # ถ้ามี Barcode ID ใน Excel และมันยังไม่ถูกผูกกับยางตัวนี้ (ป้องกันการเพิ่มซ้ำ)
+                        if barcode_id_to_save and not database.get_tire_id_by_barcode(conn, barcode_id_to_save):
+                             database.add_tire_barcode(conn, tire_id, barcode_id_to_save, is_primary=False)
+                        
+                        # อัปเดตข้อมูลยางหลัก
+                        database.update_tire_import(conn, tire_id, brand, model, size, quantity, cost_sc, cost_dunlop, cost_online, wholesale_price1, wholesale_price2, price_per_item,
+                                                    promotion_id, year_of_manufacture) 
+                        
+                        # บันทึก movement ถ้า quantity เปลี่ยน
                         old_quantity = existing_tire['quantity']
                         if quantity != old_quantity:
                             movement_type = 'IN' if quantity > old_quantity else 'OUT'
                             quantity_change_diff = abs(quantity - old_quantity)
                             database.add_tire_movement(conn, tire_id, movement_type, quantity_change_diff, quantity, "Import from Excel (Qty Update)", None, user_id=current_user.id)
+                        updated_count += 1
                         
                     else:
-                        new_tire_id = database.add_tire_import(conn, brand, model, size, quantity, cost_sc, cost_dunlop, cost_online, wholesale_price1, wholesale_price2, price_per_item, 
-                                                                promotion_id, year_of_manufacture)
-                        # บันทึก Barcode ID สำหรับยางที่เพิ่มใหม่
-                        database.add_tire_barcode(conn, new_tire_id, barcode_id_from_excel, is_primary=True)
+                        # ถ้าไม่พบยางที่มีอยู่แล้ว: เพิ่มเป็นรายการใหม่
+                        new_tire_id = database.add_tire_import(conn, brand, model, size, quantity, cost_sc, cost_dunlop, cost_online, wholesale_price1, wholesale_price2, price_per_item,
+                                                                promotion_id, year_of_manufacture) 
+                        if barcode_id_to_save: # ถ้ามี Barcode ID ให้บันทึก
+                            database.add_tire_barcode(conn, new_tire_id, barcode_id_to_save, is_primary=True) 
                         database.add_tire_movement(conn, new_tire_id, 'IN', quantity, quantity, "Import from Excel (initial stock)", None, user_id=current_user.id)
                         imported_count += 1
+                
                 except Exception as row_e:
                     error_rows.append(f"แถวที่ {index + 2}: {row_e} - {row.to_dict()}")
             
             conn.commit()
-            
+
             message = f'นำเข้าข้อมูลยางสำเร็จ: เพิ่มใหม่ {imported_count} รายการ, อัปเดต {updated_count} รายการ.'
             if error_rows:
-                message += f' พบข้อผิดพลาดใน {len(error_rows)} แถว: {"; ".join(error_rows[:3])}{"..." if len(error_rows) > 3 else ""}'
+                # แสดงข้อผิดพลาดที่พบ
+                message += f' พบข้อผิดพลาดใน {len(error_rows)} แถว: {"; ".join(error_rows[:5])}{"..." if len(error_rows) > 5 else ""}'
                 flash(message, 'warning')
             else:
                 flash(message, 'success')
-            
+
             return redirect(url_for('export_import', tab='tires_excel'))
 
         except Exception as e:
-            flash(f'เกิดข้อผิดพลาดในการนำเข้าไฟล์ Excel ของยาง: {e}', 'danger')
+            flash(f'เกิดข้อผิดพลาดร้ายแรงในการนำเข้าไฟล์ Excel ของยาง: {e}', 'danger')
             if 'db' in g and g.db is not None:
                 g.db.rollback()
             return redirect(url_for('export_import', tab='tires_excel'))
     else:
         flash('ชนิดไฟล์ไม่ถูกต้อง อนุญาตเฉพาะ .xlsx และ .xls เท่านั้น', 'danger')
         return redirect(url_for('export_import', tab='tires_excel'))
+
 
 @app.route('/export_wheels_action')
 @login_required
@@ -1894,6 +2268,16 @@ def export_wheels_action():
 
     data = []
     for wheel in wheels:
+        # ดึง Barcode ID หลักสำหรับแม็กวงนี้
+        primary_barcode = ""
+        barcodes = database.get_barcodes_for_wheel(conn, wheel['id'])
+        for bc in barcodes:
+            if bc['is_primary_barcode']:
+                primary_barcode = bc['barcode_string']
+                break
+        if not primary_barcode and barcodes: # ถ้าไม่มี primary แต่มี barcode อื่นๆ ให้เอาอันแรก (หรือตามตรรกะที่คุณต้องการ)
+            primary_barcode = barcodes[0]['barcode_string']
+
         data.append({
             'ID': wheel['id'],
             'ยี่ห้อ': wheel['brand'],
@@ -1909,7 +2293,8 @@ def export_wheels_action():
             'ราคาขายส่ง 1': wheel['wholesale_price1'],
             'ราคาขายส่ง 2': wheel['wholesale_price2'],
             'ราคาขายปลีก': wheel['retail_price'],
-            'ไฟล์รูปภาพ': wheel['image_filename']
+            'ไฟล์รูปภาพ': wheel['image_filename'],
+            'Barcode ID': primary_barcode
         })
 
     df = pd.DataFrame(data)
@@ -1922,6 +2307,7 @@ def export_wheels_action():
 
     return send_file(output, download_name='wheel_stock.xlsx', as_attachment=True, mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
 
+@app.route('/import_wheels_action', methods=['POST'])
 def import_wheels_action():
     if not current_user.can_edit():
         flash('คุณไม่มีสิทธิ์ในการนำเข้าข้อมูลแม็ก', 'danger')
@@ -1938,23 +2324,21 @@ def import_wheels_action():
     
     if file and allowed_excel_file(file.filename):
         try:
-            df = pd.read_excel(file)
+            # บังคับให้ Pandas อ่าน 'Barcode ID' เป็นสตริง
+            df = pd.read_excel(file, dtype={'Barcode ID': str}) 
             conn = get_db()
             imported_count = 0
             updated_count = 0
             error_rows = []
 
-            # --- ตรวจสอบคอลัมน์ Barcode ID ใน Excel ---
+            # ตรวจสอบคอลัมน์ที่จำเป็น
             expected_wheel_cols = [
-                'ยี่ห้อ', 'ลาย', 'ขอบ', 'รู', 'กว้าง', 'ET', 'สี', 'สต็อก',
-                'ทุน', 'ทุน Online', 'ราคาขายส่ง 1', 'ราคาขายส่ง 2', 'ราคาขายปลีก', 'ไฟล์รูปภาพ',
-                'Barcode ID' # <-- คอลัมน์นี้ยังจำเป็นสำหรับการ Import
+                'ยี่ห้อ', 'ลาย', 'ขอบ', 'รู', 'กว้าง', 'สต็อก', 'ราคาขายปลีก', 'Barcode ID'
             ]
             if not all(col in df.columns for col in expected_wheel_cols):
                 missing_cols = [col for col in expected_wheel_cols if col not in df.columns]
                 flash(f'ไฟล์ Excel ขาดคอลัมน์ที่จำเป็น: {", ".join(missing_cols)}. โปรดดาวน์โหลดไฟล์ตัวอย่างเพื่อดูรูปแบบที่ถูกต้อง.', 'danger')
                 return redirect(url_for('export_import', tab='wheels_excel'))
-
 
             for index, row in df.iterrows():
                 try:
@@ -1962,12 +2346,14 @@ def import_wheels_action():
                     model = str(row.get('ลาย', '')).strip().lower()
                     pcd = str(row.get('รู', '')).strip()
 
-                    # --- รับ Barcode ID จาก Excel (ยังคงเป็น Required) ---
+                    # ดึงค่า Barcode ID และจัดการค่าว่างให้เป็น None
                     barcode_id_from_excel = str(row.get('Barcode ID', '')).strip()
-                    if not barcode_id_from_excel:
-                        raise ValueError("คอลัมน์ 'Barcode ID' ไม่สามารถเว้นว่างได้สำหรับแม็กในการนำเข้า Excel")
-                    # ---------------------------------------------------
+                    if not barcode_id_from_excel or barcode_id_from_excel.lower() == 'none' or barcode_id_from_excel.lower() == 'nan':
+                        barcode_id_to_save = None
+                    else:
+                        barcode_id_to_save = barcode_id_from_excel
 
+                    # ตรวจสอบคอลัมน์ที่จำเป็นอื่นๆ
                     if not brand or not model or not pcd:
                             raise ValueError("ข้อมูล 'ยี่ห้อ', 'ลาย', หรือ 'รู' ไม่สามารถเว้นว่างได้")
 
@@ -1990,46 +2376,61 @@ def import_wheels_action():
                     cost_online = float(cost_online_raw) if pd.notna(cost_online_raw) else None
                     wholesale_price1 = float(wholesale_price1_raw) if pd.notna(wholesale_price1_raw) else None
                     wholesale_price2 = float(wholesale_price2_raw) if pd.notna(wholesale_price2_raw) else None
-                    
+
                     cursor = conn.cursor()
 
-                    # ปรับการค้นหา Wheel ที่มีอยู่แล้ว ให้ใช้ Barcode ID ก่อน
-                    wheel_id_from_barcode = database.get_wheel_id_by_barcode(conn, barcode_id_from_excel)
                     existing_wheel = None
-                    if wheel_id_from_barcode:
-                        if "psycopg2" in str(type(conn)):
-                            cursor.execute("SELECT id, quantity FROM wheels WHERE id = %s", (wheel_id_from_barcode,))
-                        else:
-                            cursor.execute("SELECT id, quantity FROM wheels WHERE id = ?", (wheel_id_from_barcode,))
-                        existing_wheel = cursor.fetchone()
+                    # ค้นหาด้วย Barcode ID ก่อน ถ้ามีค่า
+                    if barcode_id_to_save:
+                        existing_wheel_id_by_barcode = database.get_wheel_id_by_barcode(conn, barcode_id_to_save) 
+                        if existing_wheel_id_by_barcode:
+                            if "psycopg2" in str(type(conn)):
+                                cursor.execute("SELECT id, brand, model, diameter, pcd, width, quantity FROM wheels WHERE id = %s", (existing_wheel_id_by_barcode,))
+                            else:
+                                cursor.execute("SELECT id, brand, model, diameter, pcd, width, quantity FROM wheels WHERE id = ?", (existing_wheel_id_by_barcode,))
+                            
+                            found_wheel_data = cursor.fetchone()
+                            if found_wheel_data:
+                                existing_wheel = dict(found_wheel_data)
 
-                    # ถ้าไม่เจอด้วย Barcode ID ให้ลองค้นหาด้วย Brand, Model, Diameter, PCD, Width (เป็น Fallback)
+                        # ตรวจสอบว่า Barcode ID นี้ไม่ได้ถูกใช้กับ Tire
+                        existing_tire_id_by_barcode = database.get_tire_id_by_barcode(conn, barcode_id_to_save) 
+                        if existing_tire_id_by_barcode:
+                            raise ValueError(f"Barcode ID '{barcode_id_to_save}' ซ้ำกับยาง ID {existing_tire_id_by_barcode}. Barcode ID ต้องไม่ซ้ำกันข้ามประเภทสินค้า.")
+
+                    # ถ้าไม่พบด้วย Barcode ID (หรือ Barcode ID เป็น None), ให้ลองค้นหาด้วย Brand, Model, Diameter, PCD, Width
                     if not existing_wheel:
                         if "psycopg2" in str(type(conn)):
-                            cursor.execute("SELECT id, quantity FROM wheels WHERE brand = %s AND model = %s AND diameter = %s AND pcd = %s AND width = %s", 
+                            cursor.execute("SELECT id, brand, model, diameter, pcd, width, quantity FROM wheels WHERE brand = %s AND model = %s AND diameter = %s AND pcd = %s AND width = %s", 
                                         (brand, model, diameter, pcd, width))
                         else:
-                            cursor.execute("SELECT id, quantity FROM wheels WHERE brand = ? AND model = ? AND diameter = ? AND width = ? AND pcd = ? AND et = ?", 
+                            cursor.execute("SELECT id, brand, model, diameter, pcd, width, quantity FROM wheels WHERE brand = ? AND model = ? AND diameter = ? AND pcd = ? AND width = ?", 
                                         (brand, model, diameter, pcd, width))
-                        existing_wheel = cursor.fetchone()
-                    
+                        
+                        found_wheel_data = cursor.fetchone()
+                        if found_wheel_data:
+                            existing_wheel = dict(found_wheel_data)
+
                     if existing_wheel:
-                        wheel_id = existing_wheel['id']
-                        database.update_wheel_import(conn, wheel_id, brand, model, diameter, pcd, width, et, color, quantity, cost, cost_online, wholesale_price1, wholesale_price2, retail_price, image_url)
-                        # อัปเดต Barcode ID ด้วย ถ้ามีการอัปเดตหลัก (หรือยืนยันว่า Barcode ID ยังอยู่)
-                        database.add_wheel_barcode(conn, wheel_id, barcode_id_from_excel, is_primary=True)
-                        updated_count += 1
+                        wheel_id = existing_wheel['id'] # ใช้ 'id' ตัวเล็กตามโครงสร้าง DB ที่ยืนยันมา
+                        
+                        # ถ้ามี Barcode ID ใน Excel และมันยังไม่ถูกผูกกับแม็กตัวนี้ (ป้องกันการเพิ่มซ้ำ)
+                        if barcode_id_to_save and not database.get_wheel_id_by_barcode(conn, barcode_id_to_save):
+                             database.add_wheel_barcode(conn, wheel_id, barcode_id_to_save, is_primary=False)
+                        
+                        database.update_wheel_import(conn, wheel_id, brand, model, diameter, pcd, width, et, color, quantity, cost, cost_online, wholesale_price1, wholesale_price2, retail_price, image_url) 
                         
                         old_quantity = existing_wheel['quantity']
                         if quantity != old_quantity:
                             movement_type = 'IN' if quantity > old_quantity else 'OUT'
                             quantity_change_diff = abs(quantity - old_quantity)
                             database.add_wheel_movement(conn, wheel_id, movement_type, quantity_change_diff, quantity, "Import from Excel (Qty Update)", None, user_id=current_user.id)
+                        updated_count += 1
                         
                     else:
-                        new_wheel_id = database.add_wheel_import(conn, brand, model, diameter, pcd, width, et, color, quantity, cost, cost_online, wholesale_price1, wholesale_price2, retail_price, image_url)
-                        # บันทึก Barcode ID สำหรับแม็กที่เพิ่มใหม่
-                        database.add_wheel_barcode(conn, new_wheel_id, barcode_id_from_excel, is_primary=True)
+                        new_wheel_id = database.add_wheel_import(conn, brand, model, diameter, pcd, width, et, color, quantity, cost, cost_online, wholesale_price1, wholesale_price2, retail_price, image_url) 
+                        if barcode_id_to_save:
+                            database.add_wheel_barcode(conn, new_wheel_id, barcode_id_to_save, is_primary=True) 
                         database.add_wheel_movement(conn, new_wheel_id, 'IN', quantity, quantity, "Import from Excel (initial stock)", None, user_id=current_user.id)
                         imported_count += 1
                 except Exception as row_e:
@@ -2039,7 +2440,7 @@ def import_wheels_action():
             
             message = f'นำเข้าข้อมูลแม็กสำเร็จ: เพิ่มใหม่ {imported_count} รายการ, อัปเดต {updated_count} รายการ.'
             if error_rows:
-                message += f' พบข้อผิดพลาดใน {len(error_rows)} แถว: {"; ".join(error_rows[:3])}{"..." if len(error_rows) > 3 else ""}'
+                message += f' พบข้อผิดพลาดใน {len(error_rows)} แถว: {"; ".join(error_rows[:5])}{"..." if len(error_rows) > 5 else ""}'
                 flash(message, 'warning')
             else:
                 flash(message, 'success')
@@ -2047,7 +2448,7 @@ def import_wheels_action():
             return redirect(url_for('export_import', tab='wheels_excel'))
 
         except Exception as e:
-            flash(f'เกิดข้อผิดพลาดในการนำเข้าไฟล์ Excel ของแม็ก: {e}', 'danger')
+            flash(f'เกิดข้อผิดพลาดร้ายแรงในการนำเข้าไฟล์ Excel ของแม็ก: {e}', 'danger')
             if 'db' in g and g.db is not None:
                 g.db.rollback()
             return redirect(url_for('export_import', tab='wheels_excel'))
