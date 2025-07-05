@@ -105,9 +105,13 @@ class User(UserMixin):
         self.role = role
     @staticmethod
     def get(conn, user_id):
+            # MODIFIED: Use cursor for psycopg2 connections
             if "psycopg2" in str(type(conn)):
-                user_data = conn.execute("SELECT id, username, password, role FROM users WHERE id = %s", (user_id,)).fetchone()
-            else:
+                cursor = conn.cursor()
+                cursor.execute("SELECT id, username, password, role FROM users WHERE id = %s", (user_id,))
+                user_data = cursor.fetchone()
+                cursor.close() # Close cursor after use
+            else: # SQLite
                 user_data = conn.execute("SELECT id, username, password, role FROM users WHERE id = ?", (user_id,)).fetchone()
             if user_data:
                 return User(user_data['id'], user_data['username'], user_data['password'], user_data['role'])
@@ -115,9 +119,13 @@ class User(UserMixin):
             
     @staticmethod
     def get_by_username(conn, username):
+        # MODIFIED: Use cursor for psycopg2 connections
         if "psycopg2" in str(type(conn)):
-            user_data = conn.execute("SELECT id, username, password, role FROM users WHERE username = %s", (username,)).fetchone()
-        else:
+            cursor = conn.cursor()
+            cursor.execute("SELECT id, username, password, role FROM users WHERE username = %s", (username,))
+            user_data = cursor.fetchone()
+            cursor.close() # Close cursor after use
+        else: # SQLite
             user_data = conn.execute("SELECT id, username, password, role FROM users WHERE username = ?", (username,)).fetchone()
         if user_data:
             return User(user_data['id'], user_data['username'], user_data['password'], user_data['role'])
@@ -279,44 +287,44 @@ def process_tire_report_data(all_tires, current_user_obj, include_summary_in_out
     return grouped_data
         
 
-# MODIFIED: ปรับโครงสร้าง return data ใน process_wheel_report_data
-def process_wheel_report_data(all_wheels, include_summary_in_output=True): #
-    grouped_data = OrderedDict() #
-    brand_quantities = defaultdict(int) #
+# MODIFIED: Adjust return data structure in process_wheel_report_data
+def process_wheel_report_data(all_wheels, include_summary_in_output=True):
+    grouped_data = OrderedDict()
+    brand_quantities = defaultdict(int)
 
-    sorted_wheels = sorted(all_wheels, key=lambda x: (x['brand'], x['model'], x['diameter'], x['width'], x['pcd'])) #
+    sorted_wheels = sorted(all_wheels, key=lambda x: (x['brand'], x['model'], x['diameter'], x['width'], x['pcd']))
 
-    for wheel in sorted_wheels: #
-        brand = wheel['brand'] #
-        if brand not in grouped_data: #
-            grouped_data[brand] = {'items_list': [], 'summary': {}} # เปลี่ยนชื่อเป็น items_list
+    for wheel in sorted_wheels:
+        brand = wheel['brand']
+        if brand not in grouped_data:
+            grouped_data[brand] = {'items_list': [], 'summary': {}}
             
-        grouped_data[brand]['items_list'].append({ #
-            'is_summary': False, #
-            'brand': wheel['brand'], #
-            'model': wheel['model'], #
-            'diameter': wheel['diameter'], #
-            'pcd': wheel['pcd'], #
-            'width': wheel['width'], #
-            'et': wheel['et'], #
-            'color': wheel['color'], #
-            'quantity': wheel['quantity'], #
-            'cost': wheel['cost'], #
-            'retail_price': wheel['retail_price'], #
-            'image_filename': wheel['image_filename'], #
-            'id': wheel['id'] #
+        grouped_data[brand]['items_list'].append({
+            'is_summary': False,
+            'brand': wheel['brand'],
+            'model': wheel['model'],
+            'diameter': wheel['diameter'],
+            'pcd': wheel['pcd'],
+            'width': wheel['width'],
+            'et': wheel['et'],
+            'color': wheel['color'],
+            'quantity': wheel['quantity'],
+            'cost': wheel['cost'],
+            'retail_price': wheel['retail_price'],
+            'image_filename': wheel['image_filename'],
+            'id': wheel['id']
         })
-        brand_quantities[brand] += wheel['quantity'] #
+        brand_quantities[brand] += wheel['quantity']
 
-    for brand, data in grouped_data.items(): #
-        data['summary'] = { #
-            'is_summary': True, #
-            'is_summary_to_show': include_summary_in_output, #
-            'brand': brand, #
-            'quantity': brand_quantities[brand], #
+    for brand, data in grouped_data.items():
+        data['summary'] = {
+            'is_summary': True,
+            'is_summary_to_show': include_summary_in_output,
+            'brand': brand,
+            'quantity': brand_quantities[brand],
             'formatted_quantity': f'<span class="summary-quantity-value">{brand_quantities[brand]}</span>' # type: ignore
         }
-    return grouped_data #
+    return grouped_data
 
 
 @app.route('/')
@@ -409,7 +417,7 @@ def index():
 @login_required
 def promotions():
     # Check permission directly inside the route function
-    if not current_user.can_edit():
+    if not current_user.can_edit(): # Admin or Editor
         flash('คุณไม่มีสิทธิ์ในการจัดการโปรโมชัน', 'danger')
         return redirect(url_for('index'))
         
@@ -421,7 +429,7 @@ def promotions():
 @login_required
 def add_promotion():
     # Check permission directly inside the route function
-    if not current_user.can_edit():
+    if not current_user.can_edit(): # Admin or Editor
         flash('คุณไม่มีสิทธิ์ในการเพิ่มโปรโมชัน', 'danger')
         return redirect(url_for('promotions'))
         
@@ -464,7 +472,7 @@ def add_promotion():
 @login_required
 def edit_promotion(promo_id):
     # Check permission directly inside the route function
-    if not current_user.can_edit():
+    if not current_user.can_edit(): # Admin or Editor
         flash('คุณไม่มีสิทธิ์ในการแก้ไขโปรโมชัน', 'danger')
         return redirect(url_for('promotions'))
         
@@ -514,7 +522,7 @@ def edit_promotion(promo_id):
 @login_required
 def delete_promotion(promo_id):
     # Check permission directly inside the route function
-    if not current_user.can_edit():
+    if not current_user.can_edit(): # Admin or Editor
         flash('คุณไม่มีสิทธิ์ในการลบโปรโมชัน', 'danger')
         return redirect(url_for('promotions'))
         
@@ -538,7 +546,7 @@ def delete_promotion(promo_id):
 @login_required
 def add_item():
     # Check permission directly inside the route function
-    if not current_user.can_edit():
+    if not current_user.can_edit(): # Admin or Editor
         flash('คุณไม่มีสิทธิ์ในการเพิ่มสินค้า', 'danger')
         return redirect(url_for('index'))
         
@@ -742,7 +750,7 @@ def add_item():
 @login_required
 def edit_tire(tire_id):
     # Check permission directly inside the route function
-    if not current_user.can_edit():
+    if not current_user.can_edit(): # Admin or Editor
         flash('คุณไม่มีสิทธิ์ในการแก้ไขข้อมูลยาง', 'danger')
         return redirect(url_for('index'))
         
@@ -811,7 +819,7 @@ def edit_tire(tire_id):
 @app.route('/api/tire/<int:tire_id>/barcodes', methods=['POST', 'DELETE'])
 @login_required
 def api_manage_tire_barcodes(tire_id):
-    if not current_user.can_edit():
+    if not current_user.can_edit(): # Admin or Editor
         return jsonify({"success": False, "message": "คุณไม่มีสิทธิ์ในการจัดการ Barcode ID"}), 403
 
     conn = get_db()
@@ -896,7 +904,7 @@ def wheel_detail(wheel_id):
 @login_required
 def edit_wheel(wheel_id):
     # Check permission directly inside the route function
-    if not current_user.can_edit():
+    if not current_user.can_edit(): # Admin or Editor
         flash('คุณไม่มีสิทธิ์ในการแก้ไขข้อมูลแม็ก', 'danger')
         return redirect(url_for('index'))
         
@@ -977,7 +985,7 @@ def edit_wheel(wheel_id):
 @app.route('/api/wheel/<int:wheel_id>/barcodes', methods=['POST', 'DELETE'])
 @login_required
 def api_manage_wheel_barcodes(wheel_id):
-    if not current_user.can_edit():
+    if not current_user.can_edit(): # Admin or Editor
         return jsonify({"success": False, "message": "คุณไม่มีสิทธิ์ในการจัดการ Barcode ID"}), 403
 
     conn = get_db()
@@ -1014,6 +1022,8 @@ def api_manage_wheel_barcodes(wheel_id):
             
     except Exception as e:
         conn.rollback()
+        if "UNIQUE constraint failed" in str(e) or "duplicate key value violates unique constraint" in str(e):
+             return jsonify({"success": False, "message": f"บาร์โค้ด '{barcode_string}' มีอยู่ในระบบแล้ว"}), 409
         return jsonify({"success": False, "message": f"เกิดข้อผิดพลาดในการจัดการ Barcode ID: {str(e)}"}), 500
 
 @app.route('/delete_wheel/<int:wheel_id>', methods=('POST',))
@@ -1045,7 +1055,7 @@ def delete_wheel(wheel_id):
 @login_required
 def add_fitment(wheel_id):
     # Check permission directly inside the route function
-    if not current_user.can_edit():
+    if not current_user.can_edit(): # Admin or Editor
         flash('คุณไม่มีสิทธิ์ในการเพิ่มข้อมูลการรองรับรถยนต์', 'danger')
         return redirect(url_for('wheel_detail', wheel_id=wheel_id))
         
@@ -1078,7 +1088,7 @@ def add_fitment(wheel_id):
 @login_required
 def delete_fitment(fitment_id, wheel_id):
     # Check permission directly inside the route function
-    if not current_user.can_edit():
+    if not current_user.can_edit(): # Admin or Editor
         flash('คุณไม่มีสิทธิ์ในการลบข้อมูลการรองรับรถยนต์', 'danger')
         return redirect(url_for('wheel_detail', wheel_id=wheel_id))
         
@@ -1098,7 +1108,7 @@ def delete_fitment(fitment_id, wheel_id):
 def stock_movement():
     # Check permission directly inside the route function
     # Only admin and editor can adjust stock manually
-    if not current_user.can_edit():
+    if not current_user.can_edit(): # Admin or Editor
         flash('คุณไม่มีสิทธิ์ในการจัดการการเคลื่อนไหวสต็อก', 'danger')
         return redirect(url_for('index'))
         
@@ -1263,7 +1273,7 @@ def stock_movement():
 @login_required
 def edit_tire_movement(movement_id):
     # Check permission directly inside the route function
-    if not current_user.is_admin():
+    if not current_user.is_admin(): # Only Admin can edit movement history
         flash('คุณไม่มีสิทธิ์ในการแก้ไขข้อมูลการเคลื่อนไหวสต็อกยาง', 'danger')
         return redirect(url_for('daily_stock_report'))
 
@@ -1323,7 +1333,7 @@ def edit_tire_movement(movement_id):
 @login_required
 def edit_wheel_movement(movement_id):
     # Check permission directly inside the route function
-    if not current_user.is_admin():
+    if not current_user.is_admin(): # Only Admin can edit movement history
         flash('คุณไม่มีสิทธิ์ในการแก้ไขข้อมูลการเคลื่อนไหวสต็อกแม็ก', 'danger')
         return redirect(url_for('daily_stock_report'))
 
@@ -1429,6 +1439,7 @@ def daily_stock_report():
         cursor = conn.cursor() 
         cursor.execute(tire_movements_query_today, (sql_date_filter,))
         tire_movements_raw_today = cursor.fetchall()
+        cursor.close() # Close cursor
     else:
         tire_movements_raw_today = conn.execute(tire_movements_query_today.replace('%s', '?'), (sql_date_filter,)).fetchall()
 
@@ -1454,8 +1465,10 @@ def daily_stock_report():
         WHERE timestamp <= %s
     """
     if is_psycopg2_conn:
+        cursor = conn.cursor() # New cursor for this query
         cursor.execute(distinct_tire_ids_query_all_history, (sql_date_filter_end_of_day,))
         rows = cursor.fetchall() 
+        cursor.close() # Close cursor
     else:
         query_result_obj = conn.execute(distinct_tire_ids_query_all_history.replace('%s', '?'), (sql_date_filter_end_of_day,))
         rows = query_result_obj.fetchall() 
@@ -1472,8 +1485,10 @@ def daily_stock_report():
             ORDER BY timestamp ASC
         """
         if is_psycopg2_conn:
+            cursor = conn.cursor() # New cursor for this query
             cursor.execute(history_query_up_to_day_before, (tire_id, day_before_report_iso))
             moves = cursor.fetchall() 
+            cursor.close() # Close cursor
         else:
             query_result_obj = conn.execute(history_query_up_to_day_before.replace('%s', '?'), (tire_id, day_before_report_iso,))
             moves = query_result_obj.fetchall() 
@@ -1504,7 +1519,7 @@ def daily_stock_report():
             detailed_tire_report[key]['IN'] += movement['quantity_change']
             detailed_tire_report[key]['remaining_quantity'] += movement['quantity_change']
         elif movement['type'] == 'OUT':
-            detailed_tire_report[key]['OUT'] += movement['quantity_change']
+            detailed_tire_report[key]['OUT'] -= movement['quantity_change']
             detailed_tire_report[key]['remaining_quantity'] -= movement['quantity_change']
     
     for tire_id, qty in tire_quantities_before_report.items():
@@ -1577,6 +1592,7 @@ def daily_stock_report():
         cursor_wheel = conn.cursor() 
         cursor_wheel.execute(wheel_movements_query_today, (sql_date_filter,))
         wheel_movements_raw_today = cursor_wheel.fetchall()
+        cursor_wheel.close() # Close cursor
     else:
         wheel_movements_raw_today = conn.execute(wheel_movements_query_today.replace('%s', '?'), (sql_date_filter,)).fetchall()
 
@@ -1602,8 +1618,10 @@ def daily_stock_report():
         WHERE timestamp <= %s
     """
     if is_psycopg2_conn:
+        cursor_wheel = conn.cursor() # New cursor
         cursor_wheel.execute(distinct_wheel_ids_query_all_history, (sql_date_filter_end_of_day,))
         rows = cursor_wheel.fetchall() 
+        cursor_wheel.close() # Close cursor
     else:
         query_result_obj = conn.execute(distinct_wheel_ids_query_all_history.replace('%s', '?'), (sql_date_filter_end_of_day,))
         rows = query_result_obj.fetchall() 
@@ -1620,8 +1638,10 @@ def daily_stock_report():
             ORDER BY timestamp ASC
         """
         if is_psycopg2_conn:
+            cursor_wheel = conn.cursor() # New cursor
             cursor_wheel.execute(history_query_up_to_day_before, (wheel_id, day_before_report_iso))
             moves = cursor_wheel.fetchall() 
+            cursor_wheel.close() # Close cursor
         else:
             query_result_obj = conn.execute(history_query_up_to_day_before.replace('%s', '?'), (wheel_id, day_before_report_iso,))
             moves = query_result_obj.fetchall() 
@@ -1655,7 +1675,7 @@ def daily_stock_report():
             detailed_wheel_report[key]['IN'] += movement['quantity_change']
             detailed_wheel_report[key]['remaining_quantity'] += movement['quantity_change']
         elif movement['type'] == 'OUT':
-            detailed_wheel_report[key]['OUT'] += movement['quantity_change']
+            detailed_wheel_report[key]['OUT'] -= movement['quantity_change']
             detailed_wheel_report[key]['remaining_quantity'] -= movement['quantity_change']
     
     for wheel_id, qty in wheel_quantities_before_report.items():
@@ -1720,13 +1740,15 @@ def daily_stock_report():
     
     tire_total_remaining_for_report_date = 0
     query_total_before_tires = f"""
-        SELECT SUM(CASE WHEN type = 'IN' THEN quantity_change ELSE -quantity_change END)
+        SELECT COALESCE(SUM(CASE WHEN type = 'IN' THEN quantity_change ELSE -quantity_change END), 0)
         FROM tire_movements
         WHERE timestamp < %s
     """
     if is_psycopg2_conn:
+        cursor = conn.cursor() # New cursor
         cursor.execute(query_total_before_tires, (start_of_report_day_iso,))
         initial_total_tires = cursor.fetchone()[0] or 0 
+        cursor.close() # Close cursor
     else:
         query_result_obj = conn.execute(query_total_before_tires.replace('%s', '?'), (start_of_report_day_iso,))
         initial_total_tires = query_result_obj.fetchone()[0] or 0 
@@ -1739,13 +1761,15 @@ def daily_stock_report():
 
     wheel_total_remaining_for_report_date = 0
     query_total_before_wheels = f"""
-        SELECT SUM(CASE WHEN type = 'IN' THEN quantity_change ELSE -quantity_change END)
+        SELECT COALESCE(SUM(CASE WHEN type = 'IN' THEN quantity_change ELSE -quantity_change END), 0)
         FROM wheel_movements
         WHERE timestamp < %s;
     """
     if is_psycopg2_conn:
+        cursor = conn.cursor() # New cursor
         cursor.execute(query_total_before_wheels, (start_of_report_day_iso,))
         initial_total_wheels = cursor.fetchone()[0] or 0 
+        cursor.close() # Close cursor
     else:
         query_result_obj = conn.execute(query_total_before_wheels.replace('%s', '?'), (start_of_report_day_iso,))
         initial_total_wheels = query_result_obj.fetchone()[0] or 0 
@@ -1825,11 +1849,6 @@ def summary_stock_report():
     end_of_period_iso = end_date_obj.isoformat()
     is_psycopg2_conn = "psycopg2" in str(type(conn))
 
-    if is_psycopg2_conn:
-        cursor = conn.cursor()
-    else:
-        cursor = None 
-
     # --- Tire Movements by Brand (สำหรับสรุปยอดรวมใหญ่) ---
     tire_movements_query_sql = f"""
         SELECT t.brand, tm.type, SUM(tm.quantity_change) AS total_quantity
@@ -1840,8 +1859,10 @@ def summary_stock_report():
         ORDER BY t.brand, tm.type;
     """
     if is_psycopg2_conn:
+        cursor = conn.cursor()
         cursor.execute(tire_movements_query_sql, (start_of_period_iso, end_of_period_iso))
         tire_movements_by_brand_raw = cursor.fetchall()
+        cursor.close() # Close cursor
     else: # SQLite
         query_result_obj = conn.execute(tire_movements_query_sql.replace('%s', '?'), (start_of_period_iso, end_of_period_iso))
         tire_movements_by_brand_raw = query_result_obj.fetchall()
@@ -1864,10 +1885,10 @@ def summary_stock_report():
         ORDER BY w.brand, wm.type;
     """
     if is_psycopg2_conn:
-        if 'cursor' not in locals(): 
-            cursor = conn.cursor() 
+        cursor = conn.cursor() # New cursor
         cursor.execute(wheel_movements_query_sql, (start_of_period_iso, end_of_period_iso))
         wheel_movements_by_brand_raw = cursor.fetchall()
+        cursor.close() # Close cursor
     else: # SQLite
         query_result_obj = conn.execute(wheel_movements_query_sql.replace('%s', '?'), (start_of_period_iso, end_of_period_iso))
         wheel_movements_by_brand_raw = query_result_obj.fetchall()
@@ -1893,10 +1914,10 @@ def summary_stock_report():
         WHERE timestamp < %s;
     """
     if is_psycopg2_conn:
-        if 'cursor' not in locals(): 
-            cursor = conn.cursor() 
+        cursor = conn.cursor() # New cursor
         cursor.execute(query_overall_initial_tires, (start_of_period_iso,))
         overall_tire_initial = cursor.fetchone()[0] or 0
+        cursor.close() # Close cursor
     else:
         query_result_obj = conn.execute(query_overall_initial_tires.replace('%s', '?'), (start_of_period_iso,))
         overall_tire_initial = query_result_obj.fetchone()[0] or 0
@@ -1907,10 +1928,10 @@ def summary_stock_report():
         WHERE timestamp < %s;
     """
     if is_psycopg2_conn:
-        if 'cursor' not in locals(): 
-            cursor = conn.cursor() 
+        cursor = conn.cursor() # New cursor
         cursor.execute(query_overall_initial_wheels, (start_of_period_iso,))
         overall_wheel_initial = cursor.fetchone()[0] or 0
+        cursor.close() # Close cursor
     else:
         query_result_obj = conn.execute(query_overall_initial_wheels.replace('%s', '?'), (start_of_period_iso,))
         overall_wheel_initial = query_result_obj.fetchone()[0] or 0
@@ -1956,8 +1977,10 @@ def summary_stock_report():
     )
 
     if is_psycopg2_conn:
+        cursor = conn.cursor() # New cursor
         cursor.execute(tire_detailed_movements_query, tire_params)
         tire_detailed_movements_raw = cursor.fetchall()
+        cursor.close() # Close cursor
     else:
         query_result_obj = conn.execute(tire_detailed_movements_query.replace('%s', '?'), tire_params)
         tire_detailed_movements_raw = query_result_obj.fetchall()
@@ -2021,8 +2044,10 @@ def summary_stock_report():
     )
 
     if is_psycopg2_conn:
+        cursor = conn.cursor() # New cursor
         cursor.execute(wheel_detailed_movements_query, wheel_params)
         wheel_detailed_movements_raw = cursor.fetchall()
+        cursor.close() # Close cursor
     else:
         query_result_obj = conn.execute(wheel_detailed_movements_query.replace('%s', '?'), wheel_params)
         wheel_detailed_movements_raw = query_result_obj.fetchall()
@@ -2061,10 +2086,10 @@ def summary_stock_report():
             WHERE t.brand = %s AND tm.timestamp < %s;
         """
         if is_psycopg2_conn:
-            if 'cursor' not in locals(): 
-                 cursor = conn.cursor()
+            cursor = conn.cursor() # New cursor
             cursor.execute(query_brand_initial_tire, (brand, start_of_period_iso))
             brand_initial_qty = cursor.fetchone()[0] or 0
+            cursor.close() # Close cursor
         else:
             query_result_obj = conn.execute(query_brand_initial_tire.replace('%s', '?'), (brand, start_of_period_iso))
             brand_initial_qty = query_result_obj.fetchone()[0] or 0
@@ -2089,10 +2114,10 @@ def summary_stock_report():
             WHERE w.brand = %s AND wm.timestamp < %s;
         """
         if is_psycopg2_conn:
-            if 'cursor' not in locals(): 
-                cursor = conn.cursor()
+            cursor = conn.cursor() # New cursor
             cursor.execute(query_brand_initial_wheel, (brand, start_of_period_iso))
             brand_initial_qty = cursor.fetchone()[0] or 0
+            cursor.close() # Close cursor
         else:
             query_result_obj = conn.execute(query_brand_initial_wheel.replace('%s', '?'), (brand, start_of_period_iso))
             brand_initial_qty = query_result_obj.fetchone()[0] or 0
@@ -2134,7 +2159,7 @@ def summary_stock_report():
 @login_required
 def export_import():
     # Check permission directly inside the route function
-    if not current_user.is_admin():
+    if not current_user.is_admin(): # Only Admin can import/export
         flash('คุณไม่มีสิทธิ์ในการนำเข้า/ส่งออกข้อมูล', 'danger')
         return redirect(url_for('index'))
         
@@ -2146,7 +2171,7 @@ def export_import():
 @login_required
 def export_tires_action():
     # Check permission directly inside the route function
-    if not current_user.can_edit():
+    if not current_user.can_edit(): # Admin or Editor
         flash('คุณไม่มีสิทธิ์ในการส่งออกข้อมูลยาง', 'danger')
         return redirect(url_for('export_import', tab='tires_excel'))
         
@@ -2203,9 +2228,10 @@ def export_tires_action():
     return send_file(output, download_name='tire_stock.xlsx', as_attachment=True, mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
 
 @app.route('/import_tires_action', methods=['POST'])
+@login_required
 def import_tires_action():
     # Check permission directly inside the route function
-    if not current_user.can_edit():
+    if not current_user.can_edit(): # Admin or Editor
         flash('คุณไม่มีสิทธิ์ในการนำเข้าข้อมูลยาง', 'danger')
         return redirect(url_for('export_import', tab='tires_excel'))
         
@@ -2358,7 +2384,7 @@ def import_tires_action():
 @login_required
 def export_wheels_action():
     # Check permission directly inside the route function
-    if not current_user.can_edit():
+    if not current_user.can_edit(): # Admin or Editor
         flash('คุณไม่มีสิทธิ์ในการส่งออกข้อมูลแม็ก', 'danger')
         return redirect(url_for('export_import', tab='wheels_excel'))
         
@@ -2410,9 +2436,10 @@ def export_wheels_action():
     return send_file(output, download_name='wheel_stock.xlsx', as_attachment=True, mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
 
 @app.route('/import_wheels_action', methods=['POST'])
+@login_required
 def import_wheels_action():
     # Check permission directly inside the route function
-    if not current_user.can_edit():
+    if not current_user.can_edit(): # Admin or Editor
         flash('คุณไม่มีสิทธิ์ในการนำเข้าข้อมูลแม็ก', 'danger')
         return redirect(url_for('export_import', tab='wheels_excel'))
         
@@ -2558,7 +2585,7 @@ def import_wheels_action():
 @login_required
 def manage_users():
     # Check permission directly inside the route function
-    if not current_user.is_admin():
+    if not current_user.is_admin(): # Only Admin
         flash('คุณไม่มีสิทธิ์เข้าถึงหน้าจัดการผู้ใช้', 'danger')
         return redirect(url_for('index'))
         
@@ -2570,7 +2597,7 @@ def manage_users():
 @login_required
 def add_new_user():
     # Check permission directly inside the route function
-    if not current_user.is_admin():
+    if not current_user.is_admin(): # Only Admin
         flash('คุณไม่มีสิทธิ์ในการเพิ่มผู้ใช้', 'danger')
         return redirect(url_for('manage_users'))
         
@@ -2598,7 +2625,7 @@ def add_new_user():
 @login_required
 def edit_user_role(user_id):
     # Check permission directly inside the route function
-    if not current_user.is_admin():
+    if not current_user.is_admin(): # Only Admin
         flash('คุณไม่มีสิทธิ์ในการแก้ไขบทบาทผู้ใช้', 'danger')
         return redirect(url_for('manage_users'))
     
@@ -2624,7 +2651,7 @@ def edit_user_role(user_id):
 @login_required
 def delete_user(user_id):
     # Check permission directly inside the route function
-    if not current_user.is_admin():
+    if not current_user.is_admin(): # Only Admin
         flash('คุณไม่มีสิทธิ์ในการลบผู้ใช้', 'danger')
         return redirect(url_for('manage_users'))
 
@@ -2641,7 +2668,7 @@ def delete_user(user_id):
 @login_required
 def admin_dashboard():
     # Check permission directly inside the route function
-    if not current_user.is_admin():
+    if not current_user.is_admin(): # Only Admin
         flash('คุณไม่มีสิทธิ์เข้าถึง Admin Dashboard', 'danger')
         return redirect(url_for('index'))
         
@@ -2651,7 +2678,7 @@ def admin_dashboard():
 @login_required
 def admin_deleted_items():
     # Check permission directly inside the route function
-    if not current_user.is_admin():
+    if not current_user.is_admin(): # Only Admin
         flash('คุณไม่มีสิทธิ์เข้าถึงหน้ารายการสินค้าที่ถูกลบ', 'danger')
         return redirect(url_for('index'))
     
@@ -2671,7 +2698,7 @@ def admin_deleted_items():
 @login_required
 def restore_tire_action(tire_id):
     # Check permission directly inside the route function
-    if not current_user.is_admin():
+    if not current_user.is_admin(): # Only Admin
         flash('คุณไม่มีสิทธิ์ในการกู้คืนยาง', 'danger')
         return redirect(url_for('index'))
         
@@ -2687,7 +2714,7 @@ def restore_tire_action(tire_id):
 @login_required
 def restore_wheel_action(wheel_id):
     # Check permission directly inside the route function
-    if not current_user.is_admin():
+    if not current_user.is_admin(): # Only Admin
         flash('คุณไม่มีสิทธิ์ในการกู้คืนแม็ก', 'danger')
         return redirect(url_for('index'))
         
@@ -2765,7 +2792,7 @@ def api_process_stock_transaction():
         return jsonify({"success": False, "message": "ไม่มีรายการสินค้าให้ทำรายการ"}), 400
 
     # Permission check for 'OUT' transaction
-    if transaction_type == 'OUT' and not current_user.can_edit():
+    if transaction_type == 'OUT' and not current_user.can_edit(): # Admin or Editor
         return jsonify({"success": False, "message": "คุณไม่มีสิทธิ์ในการจ่ายสินค้าออกจากสต็อก"}), 403
 
     conn = get_db()
@@ -2829,6 +2856,12 @@ def api_search_items_for_link():
         return jsonify({"success": False, "message": "กรุณาใส่คำค้นหา"}), 400
 
     conn = get_db()
+
+    # Create a cursor for psycopg2
+    cursor = None
+    if "psycopg2" in str(type(conn)):
+        cursor = conn.cursor()
+
     items = []
 
     tire_search_query = f"""
@@ -2843,12 +2876,12 @@ def api_search_items_for_link():
         LIMIT 50
     """
     if "psycopg2" in str(type(conn)):
-        cursor = conn.cursor()
         cursor.execute(tire_search_query, (f"%{query}%", f"%{query}%", f"%{query}%"))
+        tire_results = cursor.fetchall()
     else:
-        cursor = conn.execute(tire_search_query.replace('%s', '?'), (f"%{query}%", f"%{query}%", f"%{query}%"))
+        tire_results = conn.execute(tire_search_query.replace('%s', '?'), (f"%{query}%", f"%{query}%", f"%{query}%")).fetchall()
     
-    for row in cursor.fetchall():
+    for row in tire_results:
         item = dict(row)
         item['type'] = 'tire'
         items.append(item)
@@ -2866,13 +2899,17 @@ def api_search_items_for_link():
     """
     if "psycopg2" in str(type(conn)):
         cursor.execute(wheel_search_query, (f"%{query}%", f"%{query}%", f"%{query}%"))
+        wheel_results = cursor.fetchall()
     else:
-        cursor = conn.execute(wheel_search_query.replace('%s', '?'), (f"%{query}%", f"%{query}%", f"%{query}%"))
+        wheel_results = conn.execute(wheel_search_query.replace('%s', '?'), (f"%{query}%", f"%{query}%", f"%{query}%")).fetchall()
     
-    for row in cursor.fetchall():
+    for row in wheel_results:
         item = dict(row)
         item['type'] = 'wheel'
         items.append(item)
+
+    if cursor: # Close cursor if it was created
+        cursor.close()
 
     return jsonify({"success": True, "items": items}), 200
     
