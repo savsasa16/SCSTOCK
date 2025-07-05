@@ -25,9 +25,11 @@
                     <td>
                         <form action="{{ url_for('edit_user_role', user_id=user.id) }}" method="post" style="display:inline-flex; align-items:center;">
                             <select name="role" onchange="this.form.submit()" {% if user.id == current_user.id %}disabled{% endif %}>
-                                <option value="admin" {% if user.role == 'admin' %}selected{% endif %}>Admin</option>
-                                <option value="editor" {% if user.role == 'editor' %}selected{% endif %}>Editor</option>
-                                <option value="viewer" {% if user.role == 'viewer' %}selected{% endif %}>Viewer</option>
+                                <option value="admin" {% if user.role == 'admin' %}selected{% endif %}>ผู้ดูแลระบบ</option>
+                                <option value="editor" {% if user.role == 'editor' %}selected{% endif %}>จัดการสต๊อก</option>
+                                <option value="retail_sales" {% if user.role == 'retail_sales' %}selected{% endif %}>พนักงานขาย</option> {# เพิ่ม Retail Sales #}
+                                <option value="wholesale_sales" {% if user.role == 'wholesale_sales' %}selected{% endif %}>ค้าส่ง</option> {# เพิ่ม Wholesale Sales #}
+                                <option value="viewer" {% if user.role == 'viewer' %}selected{% endif %}>ทั่วไป</option>
                             </select>
                         </form>
                     </td>

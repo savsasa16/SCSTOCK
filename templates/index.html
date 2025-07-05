@@ -30,6 +30,7 @@
             </div>
             <div class="form-group quarter-width">
                 <button type="submit" class="btn btn-primary"><i class="fas fa-search"></i> ค้นหา/กรอง</button>
+                <a href="{{ url_for('index', tab='tires') }}" class="btn btn-secondary">ล้างค่า</a>
             </div>
         </form>
     </div>
@@ -45,65 +46,94 @@
                                 <th>รุ่นยาง</th>
                                 <th>เบอร์ยาง</th>
                                 <th>สต็อก</th>
-                                <th>ราคาต่อเส้น</th> 
-                                <th>โปรโมชัน</th> 
-                                <th>ราคา 4 เส้น</th>
-                                <th>ปีผลิต</th>
+                                {% if current_user.can_view_cost() %}
+                                    <th>ต้นทุน (SC)</th>
+                                    <th>ต้นทุน (Dunlop)</th>
+                                    <th>ต้นทุน (Online)</th>
+                                {% endif %}
+                                {% if current_user.can_view_wholesale_price() %}
+                                    <th>ราคาขายส่ง 1</th>
+                                    <th>ราคาขายส่ง 2</th>
+                                {% endif %}
+                                {% if current_user.can_view_retail_price() %}
+                                    <th>ราคาต่อเส้น</th> 
+                                    <th>โปรโมชัน</th> 
+                                    <th>ราคา 4 เส้น</th>
+                                {% endif %}
+								<th>ปีผลิต</th>
+                                {% if current_user.can_edit() %}
                                 <th>การดำเนินการ</th>
+                                {% endif %}
                             </tr>
                         </thead>
                         <tbody>
-                            {# MODIFIED: Loop through brand_data.items_list #}
                             {% for item in brand_data.items_list %} 
                                 <tr>
                                     <td>{{ item.model | title }}</td>
-                                    <td>{{ item.size }}</td>
+                                    <td>{{ item.size }}</td>                                  
                                     <td><span class="{% if item.quantity <= 5 %}text-danger{% elif item.quantity <= 10 %}text-warning{% endif %}">{{ item.quantity }}</span></td>
-                                    <td>
-                                        {{ "{:,.0f}".format(item.price_per_item) }}
-                                    </td>
-                                    <td>
-                                        {% if item.promotion_id and item.promo_is_active == 1 %} 
-                                            <span class="promo-badge" title="{{ item.promo_name }}: {{ item.display_promo_description_text }}">{{ item.promo_name }}</span>
-                                        {% else %}
-                                            -
-                                        {% endif %}
-                                    </td>
-                                    <td>
-                                        {% if item.display_price_for_4 is not none %}
-                                            <span class="{% if item.promotion_id and item.promo_is_active == 1 %}promo-price-text{% endif %}">{{ "{:,.0f}".format(item.display_price_for_4) }}</span>
-                                        {% else %}
-                                            -
-                                        {% endif %}
-                                    </td>
-                                    <td>{{ item.year_of_manufacture | int if item.year_of_manufacture else '-' }}</td>
+                                    {% if current_user.can_view_cost() %}
+                                        <td>{{ "{:,.0f}".format(item.get('cost_sc')) if item.get('cost_sc') is not none else '-' }}</td>
+                                        <td>{{ "{:,.0f}".format(item.get('cost_dunlop')) if item.get('cost_dunlop') is not none else '-' }}</td>
+                                        <td>{{ "{:,.0f}".format(item.get('cost_online')) if item.get('cost_online') is not none else '-' }}</td>
+                                    {% endif %}
+                                    {% if current_user.can_view_wholesale_price() %}
+                                        <td>{{ "{:,.0f}".format(item.get('wholesale_price1')) if item.get('wholesale_price1') is not none else '-' }}</td>
+                                        <td>{{ "{:,.0f}".format(item.get('wholesale_price2')) if item.get('wholesale_price2') is not none else '-' }}</td>
+                                    {% endif %}
+                                    {% if current_user.can_view_retail_price() %}
+                                        <td>
+                                            {{ "{:,.0f}".format(item.get('price_per_item')) if item.get('price_per_item') is not none else '-' }}
+                                        </td>
+                                        <td>
+                                            {% if item.get('promotion_id') and item.get('promo_is_active') == 1 %} 
+                                                <span class="promo-badge" title="{{ item.get('promo_name') }}: {{ item.get('display_promo_description_text') }}">{{ item.get('promo_name') }}</span>
+                                            {% else %}
+                                                -
+                                            {% endif %}
+                                        </td>
+                                        <td>
+                                            {% if item.get('display_price_for_4') is not none %}
+                                                <span class="{% if item.get('promotion_id') and item.get('promo_is_active') == 1 %}promo-price-text{% endif %}">{{ "{:,.0f}".format(item.get('display_price_for_4')) }}</span>
+                                            {% else %}
+                                                -
+                                            {% endif %}
+                                        </td>
+                                    {% endif %}
+										<td>{{ item.year_of_manufacture | int if item.year_of_manufacture else '-' }}</td>
+                                    {% if current_user.can_edit() %}
                                     <td class="action-buttons">
                                         <a href="{{ url_for('edit_tire', tire_id=item.id) }}" class="btn btn-primary btn-sm" title="แก้ไข"><i class="fas fa-edit"></i></a>
                                         <form class="delete-form" action="{{ url_for('delete_tire', tire_id=item.id) }}" method="post" style="display:inline;">
                                             <button type="submit" class="btn btn-danger btn-sm" title="ลบ" data-quantity="{{ item.quantity }}"><i class="fas fa-trash-alt"></i></button>
                                         </form>
                                     </td>
+                                    {% endif %}
                                 </tr>
                             {% endfor %}
-                            {# แสดง summary row ถ้ามีและ is_summary_to_show เป็น True #}
                             {% if brand_data.summary.is_summary_to_show %}
                                 <tr class="summary-row">
 									<td><b class="summary-brand-text">ยอดรวม {{ brand_data.summary.brand | title }}</b></td>
+									<td colspan="3"></td>
+                                    {% if current_user.can_view_cost() %}<td></td><td></td><td></td>{% endif %}
+                                    {% if current_user.can_view_wholesale_price() %}<td></td><td></td>{% endif %}
+                                    {% if current_user.can_view_retail_price() %}<td></td><td></td><td></td><td></td>{% endif %}
 									<td>{{ brand_data.summary.formatted_quantity | safe }}</td>
-									<td colspan="5"></td>
 								</tr>
                             {% endif %}
                         </tbody>
                     </table>
                 </div>
-            </div> {# End brand-group-container #}
+            </div>
         {% endfor %}
     {% else %}
         <p class="no-data">ไม่พบข้อมูลยาง</p>
     {% endif %}
+    {% if current_user.can_edit() %}
     <div class="add-item-button">
         <a href="{{ url_for('add_item', tab='tire') }}" class="btn btn-success"><i class="fas fa-plus"></i> เพิ่มยางใหม่</a>
     </div>
+    {% endif %}
 </div>
 
 
@@ -127,6 +157,7 @@
             </div>
             <div class="form-group quarter-width">
                 <button type="submit" class="btn btn-primary"><i class="fas fa-search"></i> ค้นหา/กรอง</button>
+                <a href="{{ url_for('index', tab='wheels') }}" class="btn btn-secondary">ล้างค่า</a>
             </div>
         </form>
     </div>
@@ -144,14 +175,24 @@
                                 <th>รู ET</th>
                                 <th>สี</th>
                                 <th>สต็อก</th>
-                                <th>ทุน</th>
-                                <th>ราคาปลีก</th>
+                                {% if current_user.can_view_cost() %}
+                                    <th>ต้นทุน (Offline)</th>
+                                    <th>ต้นทุน (Online)</th>
+                                {% endif %}
+                                {% if current_user.can_view_wholesale_price() %}
+                                    <th>ราคาขายส่ง 1</th>
+                                    <th>ราคาขายส่ง 2</th>
+                                {% endif %}
+                                {% if current_user.can_view_retail_price() %}
+                                    <th>ราคาปลีก</th>
+                                {% endif %}
                                 <th>รูปภาพ</th>
+                                {% if current_user.can_edit() %}
                                 <th>การดำเนินการ</th>
+                                {% endif %}
                             </tr>
                         </thead>
                         <tbody>
-                            {# MODIFIED: Loop through brand_data.items_list #}
                             {% for item in brand_data.items_list %} 
                                 <tr>
                                     <td>{{ item.model }}</td>
@@ -159,8 +200,17 @@
                                     <td>{{ item.pcd }} {{ item.et if item.et else '-' }}</td>
                                     <td>{{ item.color if item.color else '-' }}</td>
                                     <td><span class="{% if item.quantity <= 2 %}text-danger{% elif item.quantity <= 4 %}text-warning{% endif %}">{{ item.quantity }}</span></td>
-                                    <td>{{ "{:,.0f}".format(item.cost) if item.cost is not none else '-' }}</td>
-                                    <td>{{ "{:,.0f}".format(item.retail_price) }}</td>
+                                    {% if current_user.can_view_cost() %}
+                                        <td>{{ "{:,.0f}".format(item.get('cost')) if item.get('cost') is not none else '-' }}</td>
+                                        <td>{{ "{:,.0f}".format(item.get('cost_online')) if item.get('cost_online') is not none else '-' }}</td>
+                                    {% endif %}
+                                    {% if current_user.can_view_wholesale_price() %}
+                                        <td>{{ "{:,.0f}".format(item.get('wholesale_price1')) if item.get('wholesale_price1') is not none else '-' }}</td>
+                                        <td>{{ "{:,.0f}".format(item.get('wholesale_price2')) if item.get('wholesale_price2') is not none else '-' }}</td>
+                                    {% endif %}
+                                    {% if current_user.can_view_retail_price() %}
+                                        <td>{{ "{:,.0f}".format(item.get('retail_price')) if item.get('retail_price') is not none else '-' }}</td>
+                                    {% endif %}
                                     <td>
                                         {% if item.image_filename %}
                                             <img src="{{ item.image_filename }}" alt="{{ item.brand }} {{ item.model }}" class="img-fluid" style="max-width: 100px;">
@@ -168,6 +218,7 @@
                                             <img src="{{ url_for('static', filename='images/placeholder.png') }}" alt="No Image" class="img-fluid" style="max-width: 100px;">
                                         {% endif %}
                                     </td>
+                                    {% if current_user.can_edit() %}
                                     <td class="action-buttons">
                                         <a href="{{ url_for('wheel_detail', wheel_id=item.id) }}" class="btn btn-success btn-sm" title="ดูรายละเอียด"><i class="fas fa-info-circle"></i></a>
                                         <a href="{{ url_for('edit_wheel', wheel_id=item.id) }}" class="btn btn-primary btn-sm" title="แก้ไข"><i class="fas fa-edit"></i></a>
@@ -175,27 +226,32 @@
                                             <button type="submit" class="btn btn-danger btn-sm" title="ลบ" data-quantity="{{ item.quantity }}"><i class="fas fa-trash-alt"></i></button>
                                         </form>
                                     </td>
+                                    {% endif %}
                                 </tr>
                             {% endfor %}
-                            {# แสดง summary row ถ้ามีและ is_summary_to_show เป็น True #}
                             {% if brand_data.summary.is_summary_to_show %}
                                 <tr class="summary-row">
-									<td colspan="4"><b><span class="summary-brand-text">ยอดรวม {{ brand_data.summary.brand | title }}</span></b></td> {# MODIFIED #}
+									<td colspan="4"><b><span class="summary-brand-text">ยอดรวม {{ brand_data.summary.brand | title }}</span></b></td>
 									<td>{{ brand_data.summary.formatted_quantity | safe }}</td>
-									<td colspan="4"></td>
+                                    {% if current_user.can_view_cost() %}<td></td><td></td>{% endif %}
+                                    {% if current_user.can_view_wholesale_price() %}<td></td><td></td>{% endif %}
+                                    {% if current_user.can_view_retail_price() %}<td></td>{% endif %}
+									<td colspan="2"></td>
 								</tr>
                             {% endif %}
                         </tbody>
                     </table>
                 </div>
-            </div> {# End brand-group-container #}
+            </div>
         {% endfor %}
     {% else %}
         <p class="no-data">ไม่พบข้อมูลแม็ก</p>
     {% endif %}
+    {% if current_user.can_edit() %}
     <div class="add-item-button">
         <a href="{{ url_for('add_item', tab='wheel') }}" class="btn btn-success"><i class="fas fa-plus"></i> เพิ่มแม็กใหม่</a>
     </div>
+    {% endif %}
 </div>
 
 <script>
@@ -260,24 +316,24 @@
 <style>
     /* เพิ่ม CSS สำหรับราคาโปรโมชันสีเขียว */
     .promo-price-text {
-        color: green; /* สามารถเปลี่ยนเป็นสีที่คุณต้องการ หรือใช้ตัวแปร CSS เช่น var(--success-color) ได้ */
-        font-weight: bold; /* เพื่อเน้น */
+        color: green;
+        font-weight: bold;
     }
 
     /* NEW CSS for brand group container */
     .brand-group-container {
-        border: 1px solid var(--border-color); /* กรอบโดยรวมของแบรนด์ */
+        border: 1px solid var(--border-color);
         border-radius: var(--border-radius-md);
-        margin-bottom: 20px; /* ระยะห่างระหว่างกรอบแบรนด์ */
-        overflow: hidden; /* เพื่อให้ border-radius แสดงผลถูกต้องกับ content */
+        margin-bottom: 20px;
+        overflow: hidden;
         box-shadow: var(--shadow-light);
     }
 
     .brand-header {
-        background-color: var(--primary-color); /* สีพื้นหลังของหัวข้อแบรนด์ */
+        background-color: var(--primary-color);
         color: white;
         padding: 10px 15px;
-        margin: 0; /* ลบ margin เริ่มต้นของ h4 */
+        margin: 0;
         font-size: 1.2em;
         font-weight: bold;
     }
@@ -285,23 +341,20 @@
     .brand-table {
         width: 100%;
         border-collapse: collapse;
-        margin-top: 0; /* ลบ margin ด้านบน เพราะ h4 จัดการพื้นที่แล้ว */
-        border: none; /* ลบ border หลักของ table เพราะ brand-group-container จัดการแล้ว */
+        margin-top: 0;
+        border: none;
     }
 
-    /* ปรับปรุง th, td สำหรับตารางย่อยภายในแบรนด์ */
     .brand-table th, .brand-table td {
-        border: 1px solid var(--border-color); /* ขอบระหว่างเซลล์ยังคงอยู่ */
+        border: 1px solid var(--border-color);
         padding: 10px;
         text-align: left;
     }
 
-    /* ลบ border ด้านบนของ td แถวแรกของแต่ละตารางย่อย (หากไม่ต้องการ) */
     .brand-table tbody tr:first-child td {
         border-top: none;
     }
 
-    /* CSS ที่เหลือของคุณ (จาก style.css หรือส่วนอื่นใน index.html) */
     .summary-row {
         background-color: var(--primary-color) !important;
         color: var(--text-white) !important;
@@ -315,7 +368,7 @@
     .table-responsive {
         overflow-x: auto;
     }
-    table { /* ต้องแน่ใจว่าไม่ได้ override .brand-table */
+    table {
         width: 100%;
         border-collapse: collapse;
         margin-top: 15px;
@@ -353,26 +406,22 @@
     }
     .add-item-button {
         margin-top: 20px;
-        text-align: right; /* หรือ center หากต้องการ */
+        text-align: right;
     }
     .add-item-button .btn {
         padding: 10px 20px;
         font-size: 1.1em;
     }
 
-    /* ... (CSS อื่นๆ) ... */
-
     .summary-brand-text {
-        color: white !important; /* เปลี่ยนเป็นสีที่คุณต้องการ เช่น white, yellow */
+        color: white !important;
         font-weight: bold;
-        font-size: larger; /* เพื่อความหนา */
-        /* อาจปรับ font-size หากต้องการให้โดดเด่น */
+        font-size: larger;
     }
     .summary-quantity-value {
-        color: rgb(255, 255, 255) !important; /* หรือสีที่คุณต้องการ เช่น white, #FFFFFF */
+        color: rgb(255, 255, 255) !important;
         font-weight: bold;
         font-size: large;
-        /* อาจเพิ่ม font-size เพื่อให้โดดเด่น */
     }
     .tabs {
         display: flex;
