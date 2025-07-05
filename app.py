@@ -14,7 +14,7 @@ import os
 
 import database # Your existing database.py file
 
-# *** เพิ่ม Cloudinary imports ***
+# *** Add Cloudinary imports ***
 import cloudinary
 import cloudinary.uploader
 from dotenv import load_dotenv
@@ -25,7 +25,7 @@ app.secret_key = os.environ.get('SECRET_KEY', 'your_super_secret_key_here_please
 
 app.config['UPLOAD_FOLDER'] = 'uploads'
 
-# *** ตั้งค่า Cloudinary (ใช้ Environment Variables) ***
+# *** Cloudinary settings (using Environment Variables) ***
 cloudinary.config(
     cloud_name=os.environ.get('CLOUDINARY_CLOUD_NAME'),
     api_key=os.environ.get('CLOUDINARY_API_KEY'),
@@ -74,7 +74,6 @@ def convert_to_bkk_time(timestamp_obj):
             dt_obj = datetime.fromisoformat(timestamp_obj)
         except ValueError:
             # Fallback for non-isoformat strings, if necessary, or return None
-            # For this context, assuming isoformat or datetime object
             return None
     elif isinstance(timestamp_obj, datetime):
         dt_obj = timestamp_obj
@@ -97,10 +96,75 @@ login_manager = LoginManager()
 login_manager.init_app(app)
 login_manager.login_view = 'login'
 
+from flask_login import UserMixin
+class User(UserMixin):
+    def __init__(self, id, username, password, role):
+        self.id = id
+        self.username = username
+        self.password = password
+        self.role = role
+    @staticmethod
+    def get(conn, user_id):
+            if "psycopg2" in str(type(conn)):
+                user_data = conn.execute("SELECT id, username, password, role FROM users WHERE id = %s", (user_id,)).fetchone()
+            else:
+                user_data = conn.execute("SELECT id, username, password, role FROM users WHERE id = ?", (user_id,)).fetchone()
+            if user_data:
+                return User(user_data['id'], user_data['username'], user_data['password'], user_data['role'])
+            return None
+            
+    @staticmethod
+    def get_by_username(conn, username):
+        if "psycopg2" in str(type(conn)):
+            user_data = conn.execute("SELECT id, username, password, role FROM users WHERE username = %s", (username,)).fetchone()
+        else:
+            user_data = conn.execute("SELECT id, username, password, role FROM users WHERE username = ?", (username,)).fetchone()
+        if user_data:
+            return User(user_data['id'], user_data['username'], user_data['password'], user_data['role'])
+        return None
+
+    def is_active(self):
+        return True
+
+    def is_authenticated(self):
+        return True
+
+    def is_anonymous(self):
+        return False
+
+    def get_id(self):
+        return str(self.id)
+
+    def is_admin(self):
+        return self.role == 'admin'
+
+    def is_editor(self):
+        return self.role == 'editor'
+
+    def is_retail_sales(self):
+        return self.role == 'retail_sales'
+
+    def is_wholesale_sales(self):
+        return self.role == 'wholesale_sales'
+        
+    def can_edit(self):
+        return self.is_admin() or self.is_editor()
+        
+    def can_view_cost(self):
+        return self.is_admin()
+
+    def can_view_wholesale_price(self):
+        return self.is_admin() or self.is_wholesale_sales()
+        
+    def can_view_retail_price(self):
+        return self.is_admin() or self.is_editor() or self.is_retail_sales()
+
+        
+
 @login_manager.user_loader
 def load_user(user_id):
     conn = get_db()
-    return database.User.get(conn, user_id)
+    return User.get(conn, user_id)
 
 # --- Login/Logout Routes ---
 @app.route('/login', methods=['GET', 'POST'])
@@ -131,14 +195,56 @@ def logout():
     return redirect(url_for('login'))
 
 # --- Helper function for processing report tables in app.py (for index and daily_stock_report) ---
-def process_tire_report_data(all_tires, include_summary_in_output=True):
+def process_tire_report_data(all_tires, current_user_obj, include_summary_in_output=True):
     grouped_data = OrderedDict()
     brand_quantities = defaultdict(int)
 
     sorted_tires = sorted(all_tires, key=lambda x: (x['brand'], x['model'], x['size']))
 
     for tire in sorted_tires:
-        brand = tire['brand']
+        # Ensure tire is a mutable dictionary for modifications
+        tire_dict = dict(tire)
+
+        # Get the original price_per_item (might be None if filtered by can_view_retail_price earlier)
+        original_price_per_item = tire_dict.get('price_per_item')
+
+        # Initialize display fields with default values (regular prices or None if not viewable)
+        tire_dict['display_promo_price_per_item'] = None
+        tire_dict['display_price_for_4'] = original_price_per_item * 4 if original_price_per_item is not None else None
+        tire_dict['display_promo_description_text'] = None
+
+        promo_active_check = tire_dict.get('promo_is_active')
+        if isinstance(promo_active_check, int):
+            promo_active_check = (promo_active_check == 1) # Convert SQLite boolean to Python boolean
+
+        # Only apply promotion calculations if there's a promotion ID and it's active
+        # AND if the original_price_per_item is not None (meaning user has retail price viewing rights)
+        if tire_dict.get('promotion_id') is not None and promo_active_check and original_price_per_item is not None:
+            promo_calc_result = database.calculate_tire_promo_prices(
+                original_price_per_item, # Use the initial price for calculation
+                tire_dict['promo_type'],
+                tire_dict['promo_value1'],
+                tire_dict['promo_value2']
+            )
+
+            # Apply specific logic based on user role
+            if current_user_obj.is_retail_sales():
+                # For 'retail_sales', hide promo price per item
+                tire_dict['display_promo_price_per_item'] = None
+                # Show the *calculated promotional price* for 4 tires
+                tire_dict['display_price_for_4'] = promo_calc_result['price_for_4_promo']
+                # Show promo description
+                tire_dict['display_promo_description_text'] = promo_calc_result['promo_description_text']
+            else:
+                # For other roles (admin, editor) who can view retail prices, show the calculated promo prices
+                tire_dict['display_promo_price_per_item'] = promo_calc_result['price_per_item_promo']
+                tire_dict['display_price_for_4'] = promo_calc_result['price_for_4_promo']
+                tire_dict['display_promo_description_text'] = promo_calc_result['promo_description_text']
+        # If no active promotion, or original_price_per_item is None,
+        # display_promo_price_per_item and display_promo_description_text remain None,
+        # and display_price_for_4 remains the regular price (or None if not viewable).
+
+        brand = tire_dict['brand']
         # ถ้ายังไม่มีแบรนด์นี้ใน grouped_data ให้สร้าง entry ใหม่
         if brand not in grouped_data:
             grouped_data[brand] = {'items_list': [], 'summary': {}} # เปลี่ยนชื่อเป็น items_list
@@ -146,21 +252,21 @@ def process_tire_report_data(all_tires, include_summary_in_output=True):
         # เพิ่มรายการยางลงใน 'items_list'
         grouped_data[brand]['items_list'].append({
             'is_summary': False,
-            'brand': tire['brand'],
-            'model': tire['model'],
-            'size': tire['size'],
-            'quantity': tire['quantity'],
-            'price_per_item': tire['price_per_item'],
-            'promotion_id': tire['promotion_id'],
-            'promo_is_active': tire['promo_is_active'],
-            'promo_name': tire['promo_name'],
-            'display_promo_description_text': tire['display_promo_description_text'],
-            'display_promo_price_per_item': tire['display_promo_price_per_item'],
-            'display_price_for_4': tire['display_price_for_4'],
-            'year_of_manufacture': tire['year_of_manufacture'],
-            'id': tire['id']
+            'brand': tire_dict['brand'],
+            'model': tire_dict['model'],
+            'size': tire_dict['size'],
+            'quantity': tire_dict['quantity'],
+            'price_per_item': tire_dict['price_per_item'], # Original price_per_item
+            'promotion_id': tire_dict['promotion_id'],
+            'promo_is_active': tire_dict['promo_is_active'],
+            'promo_name': tire_dict['promo_name'],
+            'display_promo_description_text': tire_dict['display_promo_description_text'],
+            'display_promo_price_per_item': tire_dict['display_promo_price_per_item'],
+            'display_price_for_4': tire_dict['display_price_for_4'], # This will be the promo price for retail_sales if active, else regular
+            'year_of_manufacture': tire_dict['year_of_manufacture'],
+            'id': tire_dict['id']
         })
-        brand_quantities[brand] += tire['quantity']
+        brand_quantities[brand] += tire_dict['quantity']
 
     for brand, data in grouped_data.items():
         data['summary'] = {
@@ -174,43 +280,43 @@ def process_tire_report_data(all_tires, include_summary_in_output=True):
         
 
 # MODIFIED: ปรับโครงสร้าง return data ใน process_wheel_report_data
-def process_wheel_report_data(all_wheels, include_summary_in_output=True):
-    grouped_data = OrderedDict()
-    brand_quantities = defaultdict(int)
+def process_wheel_report_data(all_wheels, include_summary_in_output=True): #
+    grouped_data = OrderedDict() #
+    brand_quantities = defaultdict(int) #
 
-    sorted_wheels = sorted(all_wheels, key=lambda x: (x['brand'], x['model'], x['diameter'], x['width'], x['pcd']))
+    sorted_wheels = sorted(all_wheels, key=lambda x: (x['brand'], x['model'], x['diameter'], x['width'], x['pcd'])) #
 
-    for wheel in sorted_wheels:
-        brand = wheel['brand']
-        if brand not in grouped_data:
+    for wheel in sorted_wheels: #
+        brand = wheel['brand'] #
+        if brand not in grouped_data: #
             grouped_data[brand] = {'items_list': [], 'summary': {}} # เปลี่ยนชื่อเป็น items_list
             
-        grouped_data[brand]['items_list'].append({
-            'is_summary': False,
-            'brand': wheel['brand'],
-            'model': wheel['model'],
-            'diameter': wheel['diameter'],
-            'pcd': wheel['pcd'],
-            'width': wheel['width'],
-            'et': wheel['et'],
-            'color': wheel['color'],
-            'quantity': wheel['quantity'],
-            'cost': wheel['cost'],
-            'retail_price': wheel['retail_price'],
-            'image_filename': wheel['image_filename'],
-            'id': wheel['id']
+        grouped_data[brand]['items_list'].append({ #
+            'is_summary': False, #
+            'brand': wheel['brand'], #
+            'model': wheel['model'], #
+            'diameter': wheel['diameter'], #
+            'pcd': wheel['pcd'], #
+            'width': wheel['width'], #
+            'et': wheel['et'], #
+            'color': wheel['color'], #
+            'quantity': wheel['quantity'], #
+            'cost': wheel['cost'], #
+            'retail_price': wheel['retail_price'], #
+            'image_filename': wheel['image_filename'], #
+            'id': wheel['id'] #
         })
-        brand_quantities[brand] += wheel['quantity']
+        brand_quantities[brand] += wheel['quantity'] #
 
-    for brand, data in grouped_data.items():
-        data['summary'] = {
-            'is_summary': True,
-            'is_summary_to_show': include_summary_in_output,
-            'brand': brand,
-            'quantity': brand_quantities[brand],
+    for brand, data in grouped_data.items(): #
+        data['summary'] = { #
+            'is_summary': True, #
+            'is_summary_to_show': include_summary_in_output, #
+            'brand': brand, #
+            'quantity': brand_quantities[brand], #
             'formatted_quantity': f'<span class="summary-quantity-value">{brand_quantities[brand]}</span>' # type: ignore
         }
-    return grouped_data
+    return grouped_data #
 
 
 @app.route('/')
@@ -222,17 +328,66 @@ def index():
     tire_selected_brand = request.args.get('tire_brand_filter', 'all').strip()
     is_tire_search_active = bool(tire_query or (tire_selected_brand and tire_selected_brand != 'all'))
 
-    all_tires = database.get_all_tires(conn, query=tire_query, brand_filter=tire_selected_brand, include_deleted=False)
+    all_tires_raw = database.get_all_tires(conn, query=tire_query, brand_filter=tire_selected_brand, include_deleted=False)
     available_tire_brands = database.get_all_tire_brands(conn)
-    tires_by_brand_for_display = process_tire_report_data(all_tires, include_summary_in_output=is_tire_search_active)
+    
+    # NEW: Filter tire data based on viewing permissions before sending to template
+    tires_for_display_filtered_by_permissions = []
+    for tire_data in all_tires_raw:
+        filtered_tire = dict(tire_data) # Create a copy to modify
+        if not current_user.can_view_cost(): # If no permission to view cost
+            filtered_tire['cost_sc'] = None
+            filtered_tire['cost_dunlop'] = None
+            filtered_tire['cost_online'] = None
+        if not current_user.can_view_wholesale_price(): # If no permission to view wholesale price
+            filtered_tire['wholesale_price1'] = None
+            filtered_tire['wholesale_price2'] = None
+        # NOTE: Logic for hiding retail price and promotions for 'wholesale_sales' and 'viewer' roles
+        # will be handled in process_tire_report_data using current_user.can_view_retail_price()
+        # and current_user.is_retail_sales() together.
+        if not current_user.can_view_retail_price():
+            filtered_tire['price_per_item'] = None
+            # Clear all promotion data if retail price cannot be viewed
+            filtered_tire['promotion_id'] = None
+            filtered_tire['promo_is_active'] = None
+            filtered_tire['promo_name'] = None
+            filtered_tire['promo_type'] = None
+            filtered_tire['promo_value1'] = None
+            filtered_tire['promo_value2'] = None
+            filtered_tire['display_promo_description_text'] = None
+            filtered_tire['display_promo_price_per_item'] = None
+            filtered_tire['display_price_for_4'] = None
+        tires_for_display_filtered_by_permissions.append(filtered_tire) #
+
+    # Pass current_user object to process_tire_report_data
+    tires_by_brand_for_display = process_tire_report_data(
+        tires_for_display_filtered_by_permissions,
+        current_user, # Pass the current_user object
+        include_summary_in_output=is_tire_search_active
+    )
     
     wheel_query = request.args.get('wheel_query', '').strip()
     wheel_selected_brand = request.args.get('wheel_brand_filter', 'all').strip()
     is_wheel_search_active = bool(wheel_query or (wheel_selected_brand and wheel_selected_brand != 'all'))
 
     all_wheels = database.get_all_wheels(conn, query=wheel_query, brand_filter=wheel_selected_brand, include_deleted=False)
-    available_wheel_brands = database.get_all_wheel_brands(conn) 
-    wheels_by_brand_for_display = process_wheel_report_data(all_wheels, include_summary_in_output=is_wheel_search_active)
+    available_wheel_brands = database.get_all_wheel_brands(conn)
+    
+    # NEW: Filter wheel data based on viewing permissions before sending to template
+    wheels_for_display = []
+    for wheel_data in all_wheels:
+        filtered_wheel = dict(wheel_data) # Create a copy to modify
+        if not current_user.can_view_cost(): # If no permission to view cost
+            filtered_wheel['cost'] = None
+            filtered_wheel['cost_online'] = None
+        if not current_user.can_view_wholesale_price(): # If no permission to view wholesale price
+            filtered_wheel['wholesale_price1'] = None
+            filtered_wheel['wholesale_price2'] = None
+        if not current_user.can_view_retail_price(): # If no permission to view retail price
+            filtered_wheel['retail_price'] = None
+        wheels_for_display.append(filtered_wheel) #
+
+    wheels_by_brand_for_display = process_wheel_report_data(wheels_for_display, include_summary_in_output=is_wheel_search_active)
     
     active_tab = request.args.get('tab', 'tires')
 
@@ -245,22 +400,31 @@ def index():
                            wheel_query=wheel_query,
                            available_wheel_brands=available_wheel_brands,
                            wheel_selected_brand=wheel_selected_brand,
-                           active_tab=active_tab)
+                           active_tab=active_tab,
+                           current_user=current_user # Pass current_user to template
+                          )
 
 # --- Promotions Routes ---
 @app.route('/promotions')
 @login_required
 def promotions():
+    # Check permission directly inside the route function
+    if not current_user.can_edit():
+        flash('คุณไม่มีสิทธิ์ในการจัดการโปรโมชัน', 'danger')
+        return redirect(url_for('index'))
+        
     conn = get_db()
     all_promotions = database.get_all_promotions(conn, include_inactive=True)
-    return render_template('promotions.html', promotions=all_promotions)
+    return render_template('promotions.html', promotions=all_promotions, current_user=current_user)
 
 @app.route('/add_promotion', methods=('GET', 'POST'))
 @login_required
 def add_promotion():
+    # Check permission directly inside the route function
     if not current_user.can_edit():
         flash('คุณไม่มีสิทธิ์ในการเพิ่มโปรโมชัน', 'danger')
         return redirect(url_for('promotions'))
+        
     if request.method == 'POST':
         name = request.form['name'].strip()
         promo_type = request.form['type'].strip()
@@ -294,14 +458,16 @@ def add_promotion():
                 else:
                     flash(f'เกิดข้อผิดพลาดในการเพิ่มโปรโมชัน: {e}', 'danger')
 
-    return render_template('add_promotion.html')
+    return render_template('add_promotion.html', current_user=current_user)
 
 @app.route('/edit_promotion/<int:promo_id>', methods=('GET', 'POST'))
 @login_required
 def edit_promotion(promo_id):
+    # Check permission directly inside the route function
     if not current_user.can_edit():
         flash('คุณไม่มีสิทธิ์ในการแก้ไขโปรโมชัน', 'danger')
         return redirect(url_for('promotions'))
+        
     conn = get_db()
     promotion = database.get_promotion(conn, promo_id)
 
@@ -342,14 +508,16 @@ def edit_promotion(promo_id):
                 else:
                     flash(f'เกิดข้อผิดพลาดในการแก้ไขโปรโมชัน: {e}', 'danger')
 
-    return render_template('edit_promotion.html', promotion=promotion)
+    return render_template('edit_promotion.html', promotion=promotion, current_user=current_user)
 
 @app.route('/delete_promotion/<int:promo_id>', methods=('POST',))
 @login_required
 def delete_promotion(promo_id):
+    # Check permission directly inside the route function
     if not current_user.can_edit():
         flash('คุณไม่มีสิทธิ์ในการลบโปรโมชัน', 'danger')
         return redirect(url_for('promotions'))
+        
     conn = get_db()
     promotion = database.get_promotion(conn, promo_id)
 
@@ -365,13 +533,15 @@ def delete_promotion(promo_id):
     return redirect(url_for('promotions'))
 
 
-# --- Tire Routes (Main item editing) ---
+# --- Item Management Routes (Add/Edit/Delete) ---
 @app.route('/add_item', methods=('GET', 'POST'))
 @login_required
 def add_item():
+    # Check permission directly inside the route function
     if not current_user.can_edit():
         flash('คุณไม่มีสิทธิ์ในการเพิ่มสินค้า', 'danger')
         return redirect(url_for('index'))
+        
     conn = get_db()
     current_year = get_bkk_time().year
     form_data = None
@@ -391,9 +561,7 @@ def add_item():
             size = request.form['size'].strip()
             quantity = request.form['quantity']
 
-            # --- แก้ไขตรงนี้: Barcode ID เป็นทางเลือก (optional) ---
             scanned_barcode_for_add = request.form.get('barcode_id_for_add', '').strip()
-            # ----------------------------------------------------
 
             cost_sc = request.form.get('cost_sc')
             price_per_item = request.form['price_per_item']
@@ -414,17 +582,15 @@ def add_item():
             if not brand or not model or not size or not quantity or not price_per_item:
                 flash('กรุณากรอกข้อมูลยางให้ครบถ้วนในช่องที่มีเครื่องหมาย *', 'danger')
                 active_tab = 'tire'
-                return render_template('add_item.html', form_data=form_data, active_tab=active_tab, current_year=current_year, all_promotions=all_promotions)
+                return render_template('add_item.html', form_data=form_data, active_tab=active_tab, current_year=current_year, all_promotions=all_promotions, current_user=current_user)
             
-            # --- เพิ่ม/ปรับการตรวจสอบ Barcode ID ที่กรอกมา (ถ้ามี) ---
-            if scanned_barcode_for_add: # ตรวจสอบเฉพาะถ้ามีการกรอก Barcode ID
+            if scanned_barcode_for_add:
                 existing_barcode_tire_id = database.get_tire_id_by_barcode(conn, scanned_barcode_for_add)
                 existing_barcode_wheel_id = database.get_wheel_id_by_barcode(conn, scanned_barcode_for_add)
                 if existing_barcode_tire_id or existing_barcode_wheel_id:
                     flash(f"Barcode ID '{scanned_barcode_for_add}' มีอยู่ในระบบแล้ว. ไม่สามารถใช้ซ้ำได้.", 'danger')
                     active_tab = 'tire'
-                    return render_template('add_item.html', form_data=form_data, active_tab=active_tab, current_year=current_year, all_promotions=all_promotions)
-            # --------------------------------------------------------
+                    return render_template('add_item.html', form_data=form_data, active_tab=active_tab, current_year=current_year, all_promotions=all_promotions, current_user=current_user)
 
             try:
                 quantity = int(quantity)
@@ -455,10 +621,8 @@ def add_item():
                                                     price_per_item, promotion_id_db,
                                                     year_of_manufacture,
                                                     user_id=current_user_id)
-                    # --- เพิ่มตรงนี้: บันทึก Barcode ID สำหรับยาง (เฉพาะถ้ามีการกรอก) ---
                     if scanned_barcode_for_add:
                         database.add_tire_barcode(conn, new_tire_id, scanned_barcode_for_add, is_primary=True)
-                    # -------------------------------------------------------------------                    
                     conn.commit()
                     flash(f'เพิ่มยาง {brand.title()} รุ่น {model.title()} เบอร์ {size} จำนวน {quantity} เส้น สำเร็จ!', 'success')
                 return redirect(url_for('add_item', tab='tire'))
@@ -467,7 +631,7 @@ def add_item():
                 conn.rollback()
                 flash('ข้อมูลตัวเลขไม่ถูกต้อง กรุณาตรวจสอบ', 'danger')
                 active_tab = 'tire'
-                return render_template('add_item.html', form_data=form_data, active_tab=active_tab, current_year=current_year, all_promotions=all_promotions)
+                return render_template('add_item.html', form_data=form_data, active_tab=active_tab, current_year=current_year, all_promotions=all_promotions, current_user=current_user)
             except (sqlite3.IntegrityError, Exception) as e:
                 conn.rollback()
                 if "UNIQUE constraint failed" in str(e) or "duplicate key value violates unique constraint" in str(e):
@@ -475,7 +639,7 @@ def add_item():
                 else:
                     flash(f'เกิดข้อผิดพลาดในการเพิ่มยาง: {e}', 'danger')
                 active_tab = 'tire'
-                return render_template('add_item.html', form_data=form_data, active_tab=active_tab, current_year=current_year, all_promotions=all_promotions)
+                return render_template('add_item.html', form_data=form_data, active_tab=active_tab, current_year=current_year, all_promotions=all_promotions, current_user=current_user)
 
 
         elif submit_type == 'add_wheel':
@@ -497,31 +661,36 @@ def add_item():
             wholesale_price2 = request.form.get('wholesale_price2')
             
             image_file = request.files.get('image_file') 
-            image_url = None # กำหนดค่าเริ่มต้น
+            image_url = None # Set initial value
             
             if image_file and image_file.filename != '':
                 if allowed_image_file(image_file.filename):
-                    try: # <--- เริ่มต้น try block สำหรับการอัปโหลด Cloudinary
+                    try:
                         upload_result = cloudinary.uploader.upload(image_file)
                         image_url = upload_result['secure_url']
-                    except Exception as e: # <--- except block ที่จับ error จาก Cloudinary upload
+                    except Exception as e:
                         flash(f'เกิดข้อผิดพลาดในการอัปโหลดรูปภาพไปยังเซิฟเวอร์: {e}', 'danger')
                         active_tab = 'wheel'
-                        return render_template('add_item.html', form_data=form_data, active_tab=active_tab, current_year=current_year, all_promotions=all_promotions)
-                else: # <--- else block ของ if allowed_image_file
+                        return render_template('add_item.html', form_data=form_data, active_tab=active_tab, current_year=current_year, all_promotions=all_promotions, current_user=current_user)
+                else:
                     flash('ชนิดไฟล์รูปภาพไม่ถูกต้อง อนุญาตเฉพาะ .png, .jpg, .jpeg, .gif เท่านั้น', 'danger')
                     active_tab = 'wheel'
-                    return render_template('add_item.html', form_data=form_data, active_tab=active_tab, current_year=current_year, all_promotions=all_promotions)
-            # ไม่มี else: ตรงนี้แล้ว เพราะเป็นโครงสร้าง try-except-else ที่ใช้กับ try/except เท่านั้น
+                    return render_template('add_item.html', form_data=form_data, active_tab=active_tab, current_year=current_year, all_promotions=all_promotions, current_user=current_user)
 
-            # ... (โค้ดต่อจากการจัดการรูปภาพ: validation ของ form fields, ตรวจสอบ barcode) ...
             if not brand or not model or not pcd or not diameter or not width or not quantity or not retail_price:
                 flash('กรุณากรอกข้อมูลแม็กให้ครบถ้วนในช่องที่มีเครื่องหมาย *', 'danger')
                 active_tab = 'wheel'
-                return render_template('add_item.html', form_data=form_data, active_tab=active_tab, current_year=current_year, all_promotions=all_promotions)
+                return render_template('add_item.html', form_data=form_data, active_tab=active_tab, current_year=current_year, all_promotions=all_promotions, current_user=current_user)
             
-            # ... (ต่อด้วยการตรวจสอบ Barcode ID และ try/except หลักของ add_wheel) ...
-            try: # <--- นี่คือ try block หลักสำหรับ logic การเพิ่มแม็กทั้งหมด
+            if scanned_barcode_for_add:
+                existing_barcode_tire_id = database.get_tire_id_by_barcode(conn, scanned_barcode_for_add)
+                existing_barcode_wheel_id = database.get_wheel_id_by_barcode(conn, scanned_barcode_for_add)
+                if existing_barcode_tire_id or existing_barcode_wheel_id:
+                    flash(f"Barcode ID '{scanned_barcode_for_add}' มีอยู่ในระบบแล้ว. ไม่สามารถใช้ซ้ำได้.", 'danger')
+                    active_tab = 'wheel'
+                    return render_template('add_item.html', form_data=form_data, active_tab=active_tab, current_year=current_year, all_promotions=all_promotions, current_user=current_user)
+
+            try:
                 diameter = float(diameter)
                 width = float(width)
                 quantity = int(quantity)
@@ -557,7 +726,7 @@ def add_item():
                 conn.rollback()
                 flash('ข้อมูลตัวเลขไม่ถูกต้อง กรุณาตรวจสอบ', 'danger')
                 active_tab = 'wheel'
-                return render_template('add_item.html', form_data=form_data, active_tab=active_tab, current_year=current_year, all_promotions=all_promotions)
+                return render_template('add_item.html', form_data=form_data, active_tab=active_tab, current_year=current_year, all_promotions=all_promotions, current_user=current_user)
             except (sqlite3.IntegrityError, Exception) as e:
                 conn.rollback()
                 if "UNIQUE constraint failed" in str(e) or "duplicate key value violates unique constraint" in str(e):
@@ -565,92 +734,18 @@ def add_item():
                 else:
                     flash(f'เกิดข้อผิดพลาดในการเพิ่มแม็ก: {e}', 'danger')
                 active_tab = 'wheel'
-                return render_template('add_item.html', form_data=form_data, active_tab=active_tab, current_year=current_year, all_promotions=all_promotions)
-            
-            # --- เพิ่ม/ปรับการตรวจสอบ Barcode ID ที่กรอกมา (ถ้ามี) ---
-            if scanned_barcode_for_add: # ตรวจสอบเฉพาะถ้ามีการกรอก Barcode ID
-                existing_barcode_tire_id = database.get_tire_id_by_barcode(conn, scanned_barcode_for_add)
-                existing_barcode_wheel_id = database.get_wheel_id_by_barcode(conn, scanned_barcode_for_add)
-                if existing_barcode_tire_id or existing_barcode_wheel_id:
-                    flash(f"Barcode ID '{scanned_barcode_for_add}' มีอยู่ในระบบแล้ว. ไม่สามารถใช้ซ้ำได้.", 'danger')
-                    active_tab = 'wheel'
-                    return render_template('add_item.html', form_data=form_data, active_tab=active_tab, current_year=current_year, all_promotions=all_promotions)
-            # --------------------------------------------------------
-
-            try:
-                diameter = float(diameter)
-                width = float(width)
-                quantity = int(quantity)
-                retail_price = float(retail_price)
-
-                cost = float(cost) if cost and cost.strip() else None
-                et = int(et) if et and et.strip() else None
-                cost_online = float(cost_online) if cost_online and cost_online.strip() else None
-                wholesale_price1 = float(wholesale_price1) if wholesale_price1 and wholesale_price1.strip() else None
-                wholesale_price2 = float(wholesale_price2) if wholesale_price2 and wholesale_price2.strip() else None
-
-                image_url = None
-                
-                if image_file and image_file.filename != '':
-                    if allowed_image_file(image_file.filename):
-                        try:
-                            upload_result = cloudinary.uploader.upload(image_file)
-                            image_url = upload_result['secure_url']
-                            
-                        except Exception as e:
-                            flash(f'เกิดข้อผิดพลาดในการอัปโหลดรูปภาพไปยังเซิฟเวอร์: {e}', 'danger')
-                            active_tab = 'wheel'
-                            return render_template('add_item.html', form_data=form_data, active_tab=active_tab, current_year=current_year, all_promotions=all_promotions)
-                    else:
-                        flash('ชนิดไฟล์รูปภาพไม่ถูกต้อง อนุญาตเฉพาะ .png, .jpg, .jpeg, .gif เท่านั้น', 'danger')
-                        active_tab = 'wheel'
-                        return render_template('add_item.html', form_data=form_data, active_tab=active_tab, current_year=current_year, all_promotions=all_promotions)
-                
-                cursor = conn.cursor()
-                if "psycopg2" in str(type(conn)):
-                    cursor.execute("SELECT id FROM wheels WHERE brand = %s AND model = %s AND diameter = %s AND width = %s AND pcd = %s AND et = %s", 
-                                   (brand, model, diameter, width, pcd, et))
-                else:
-                    cursor.execute("SELECT id FROM wheels WHERE brand = ? AND model = ? AND diameter = ? AND width = ? AND pcd = ? AND et = ?", 
-                                   (brand, model, diameter, width, pcd, et))
-                
-                existing_wheel = cursor.fetchone()
-
-                if existing_wheel:
-                    flash(f'แม็ก {brand.title()} ลาย {model.title()} ขนาด {diameter}x{width} มีอยู่ในระบบแล้ว', 'warning')
-                else:
-                    new_wheel_id = database.add_wheel(conn, brand, model, diameter, pcd, width, et, color, 
-                                                    quantity, cost, cost_online, wholesale_price1, wholesale_price2, retail_price, image_url)
-                    # --- เพิ่มตรงนี้: บันทึก Barcode ID สำหรับแม็ก (เฉพาะถ้ามีการกรอก) ---
-                    if scanned_barcode_for_add:
-                        database.add_wheel_barcode(conn, new_wheel_id, scanned_barcode_for_add, is_primary=True)
-                    # -----------------------------------------------------------------
-                    database.add_wheel_movement(conn, new_wheel_id, 'IN', quantity, quantity, "Initial Stock (Manual Add)", None, user_id=current_user.id)
-                    conn.commit()
-                    flash(f'เพิ่มแม็ก {brand.title()} ลาย {model.title()} จำนวน {quantity} วง สำเร็จ!', 'success')
-                return redirect(url_for('index', tab='wheels'))
-            except ValueError:
-                conn.rollback()
-                flash('ข้อมูลตัวเลขไม่ถูกต้อง กรุณาตรวจสอบ', 'danger')
-                active_tab = 'wheel'
-                return render_template('add_item.html', form_data=form_data, active_tab=active_tab, current_year=current_year, all_promotions=all_promotions)
-            except (sqlite3.IntegrityError, Exception) as e:
-                conn.rollback()
-                if "UNIQUE constraint failed" in str(e) or "duplicate key value violates unique constraint" in str(e):
-                    flash(f'เกิดข้อผิดพลาด: ข้อมูลซ้ำซ้อนในระบบ หรือ Barcode ID นี้มีอยู่แล้ว. รายละเอียด: {e}', 'warning')
-                else:
-                    flash(f'เกิดข้อผิดพลาดในการเพิ่มแม็ก: {e}', 'danger')
-                active_tab = 'wheel'
-                return render_template('add_item.html', form_data=form_data, active_tab=active_tab, current_year=current_year, all_promotions=all_promotions)
+                return render_template('add_item.html', form_data=form_data, active_tab=active_tab, current_year=current_year, all_promotions=all_promotions, current_user=current_user)
     
-    return render_template('add_item.html', form_data=form_data, active_tab=active_tab, current_year=current_year, all_promotions=all_promotions)
+    return render_template('add_item.html', form_data=form_data, active_tab=active_tab, current_year=current_year, all_promotions=all_promotions, current_user=current_user)
 
 @app.route('/edit_tire/<int:tire_id>', methods=('GET', 'POST'))
 @login_required
 def edit_tire(tire_id):
+    # Check permission directly inside the route function
     if not current_user.can_edit():
         flash('คุณไม่มีสิทธิ์ในการแก้ไขข้อมูลยาง', 'danger')
         return redirect(url_for('index'))
+        
     conn = get_db()
     tire = database.get_tire(conn, tire_id)
     current_year = get_bkk_time().year
@@ -711,7 +806,7 @@ def edit_tire(tire_id):
                 else:
                     flash(f'เกิดข้อผิดพลาดในการแก้ไขข้อมูลยาง: {e}', 'danger')
 
-    return render_template('edit_tire.html', tire=tire, current_year=current_year, all_promotions=all_promotions, tire_barcodes=tire_barcodes)
+    return render_template('edit_tire.html', tire=tire, current_year=current_year, all_promotions=all_promotions, tire_barcodes=tire_barcodes, current_user=current_user)
     
 @app.route('/api/tire/<int:tire_id>/barcodes', methods=['POST', 'DELETE'])
 @login_required
@@ -728,40 +823,31 @@ def api_manage_tire_barcodes(tire_id):
 
     try:
         if request.method == 'POST':
-            # เพิ่ม Barcode ID ใหม่
-            # ตรวจสอบว่า Barcode ID นี้มีอยู่ในระบบแล้วหรือไม่ (ไม่ว่าจะผูกกับยาง/แม็กอื่นหรือไม่)
             existing_tire_id_by_barcode = database.get_tire_id_by_barcode(conn, barcode_string)
             existing_wheel_id_by_barcode = database.get_wheel_id_by_barcode(conn, barcode_string)
 
             if existing_tire_id_by_barcode:
-                # ถ้า Barcode ผูกกับยางตัวอื่นที่ไม่ใช่ tire_id ปัจจุบัน
                 if existing_tire_id_by_barcode != tire_id:
                     conn.rollback()
                     return jsonify({"success": False, "message": f"บาร์โค้ด '{barcode_string}' ถูกเชื่อมโยงกับยาง (ID: {existing_tire_id_by_barcode}) แล้ว"}), 409
-                # ถ้า Barcode ผูกกับ tire_id ปัจจุบันอยู่แล้ว (พยายามเพิ่มซ้ำ)
                 else:
-                    # ถือว่าสำเร็จ ไม่ต้องทำอะไรอีก
                     return jsonify({"success": True, "message": f"บาร์โค้ด '{barcode_string}' ถูกเชื่อมโยงกับยางนี้อยู่แล้ว"}), 200
             
-            # ถ้า Barcode ผูกกับแม็กตัวอื่น
             if existing_wheel_id_by_barcode:
                 conn.rollback()
                 return jsonify({"success": False, "message": f"บาร์โค้ด '{barcode_string}' ถูกเชื่อมโยงกับแม็ก (ID: {existing_wheel_id_by_barcode}) แล้ว"}), 409
 
-            # ถ้า Barcode ยังไม่ถูกใช้เลย -> เพิ่มใหม่
-            database.add_tire_barcode(conn, tire_id, barcode_string, is_primary=False) # is_primary = False สำหรับ Barcode ที่เพิ่มจากหน้า Edit
+            database.add_tire_barcode(conn, tire_id, barcode_string, is_primary=False)
             conn.commit()
             return jsonify({"success": True, "message": "เพิ่ม Barcode สำเร็จ!"}), 200
 
         elif request.method == 'DELETE':
-            # ลบ Barcode ID
             database.delete_tire_barcode(conn, barcode_string)
             conn.commit()
             return jsonify({"success": True, "message": "ลบ Barcode สำเร็จ!"}), 200
             
     except Exception as e:
         conn.rollback()
-        # กรณี UNIQUE constraint failed อาจถูกจับใน add_tire_barcode ถ้าไม่มี ON CONFLICT
         if "UNIQUE constraint failed" in str(e) or "duplicate key value violates unique constraint" in str(e):
              return jsonify({"success": False, "message": f"บาร์โค้ด '{barcode_string}' มีอยู่ในระบบแล้ว"}), 409
         return jsonify({"success": False, "message": f"เกิดข้อผิดพลาดในการจัดการ Barcode ID: {str(e)}"}), 500
@@ -769,9 +855,11 @@ def api_manage_tire_barcodes(tire_id):
 @app.route('/delete_tire/<int:tire_id>', methods=('POST',))
 @login_required
 def delete_tire(tire_id):
-    if not current_user.can_edit():
+    # Check permission directly inside the route function
+    if not current_user.is_admin(): # Only admin can delete
         flash('คุณไม่มีสิทธิ์ในการลบยาง', 'danger')
         return redirect(url_for('index'))
+        
     conn = get_db()
     tire = database.get_tire(conn, tire_id)
 
@@ -802,14 +890,16 @@ def wheel_detail(wheel_id):
         flash('ไม่พบแม็กที่ระบุ', 'danger')
         return redirect(url_for('index', tab='wheels'))
     
-    return render_template('wheel_detail.html', wheel=wheel, fitments=fitments, current_year=current_year)
+    return render_template('wheel_detail.html', wheel=wheel, fitments=fitments, current_year=current_year, current_user=current_user)
 
 @app.route('/edit_wheel/<int:wheel_id>', methods=('GET', 'POST'))
 @login_required
 def edit_wheel(wheel_id):
+    # Check permission directly inside the route function
     if not current_user.can_edit():
         flash('คุณไม่มีสิทธิ์ในการแก้ไขข้อมูลแม็ก', 'danger')
         return redirect(url_for('index'))
+        
     conn = get_db()
     wheel = database.get_wheel(conn, wheel_id)
     current_year = get_bkk_time().year
@@ -866,10 +956,10 @@ def edit_wheel(wheel_id):
                         
                         except Exception as e:
                             flash(f'เกิดข้อผิดพลาดในการอัปโหลดรูปภาพไปยัง Cloudinary: {e}', 'danger')
-                            return render_template('edit_wheel.html', wheel=wheel, current_year=current_year)
+                            return render_template('edit_wheel.html', wheel=wheel, current_year=current_year, current_user=current_user)
                     else:
                         flash('ชนิดไฟล์รูปภาพไม่ถูกต้อง อนุญาตเฉพาะ .png, .jpg, .jpeg, .gif เท่านั้น', 'danger')
-                        return render_template('edit_wheel.html', wheel=wheel, current_year=current_year)
+                        return render_template('edit_wheel.html', wheel=wheel, current_year=current_year, current_user=current_user)
 
                 database.update_wheel(conn, wheel_id, brand, model, diameter, pcd, width, et, color, cost, cost_online, wholesale_price1, wholesale_price2, retail_price, current_image_url)
                 flash('แก้ไขข้อมูลแม็กสำเร็จ!', 'success')
@@ -882,7 +972,7 @@ def edit_wheel(wheel_id):
                 else:
                     flash(f'เกิดข้อผิดพลาดในการแก้ไขข้อมูลแม็ก: {e}', 'danger')
 
-    return render_template('edit_wheel.html', wheel=wheel, current_year=current_year, wheel_barcodes=wheel_barcodes)
+    return render_template('edit_wheel.html', wheel=wheel, current_year=current_year, wheel_barcodes=wheel_barcodes, current_user=current_user)
 
 @app.route('/api/wheel/<int:wheel_id>/barcodes', methods=['POST', 'DELETE'])
 @login_required
@@ -899,34 +989,28 @@ def api_manage_wheel_barcodes(wheel_id):
 
     try:
         if request.method == 'POST':
-            # เพิ่ม Barcode ID ใหม่
             existing_tire_id_by_barcode = database.get_tire_id_by_barcode(conn, barcode_string)
             existing_wheel_id_by_barcode = database.get_wheel_id_by_barcode(conn, barcode_string)
 
-            # ถ้า Barcode ผูกกับแม็กตัวอื่นที่ไม่ใช่ wheel_id ปัจจุบัน
-            if existing_wheel_id_by_barcode: # This line always true if it finds any wheel
+            if existing_wheel_id_by_barcode:
                 if existing_wheel_id_by_barcode != wheel_id:
                     conn.rollback()
                     return jsonify({"success": False, "message": f"บาร์โค้ด '{barcode_string}' ถูกเชื่อมโยงกับแม็กอื่น (ID: {existing_wheel_id_by_barcode}) แล้ว"}), 409
-                # ถ้า Barcode ผูกกับ wheel_id ปัจจุบันอยู่แล้ว (พยายามเพิ่มซ้ำ)
                 else:
                     return jsonify({"success": True, "message": f"บาร์โค้ด '{barcode_string}' ถูกเชื่อมโยงกับแม็กนี้อยู่แล้ว"}), 200
             
-            # ถ้า Barcode ผูกกับยางตัวอื่น
             if existing_tire_id_by_barcode:
                 conn.rollback()
                 return jsonify({"success": False, "message": f"บาร์โค้ด '{barcode_string}' ถูกเชื่อมโยงกับยาง (ID: {existing_tire_id_by_barcode}) แล้ว"}), 409
             
-            # ถ้า Barcode ยังไม่ถูกใช้เลย -> เพิ่มใหม่
-            database.add_wheel_barcode(conn, wheel_id, barcode_string, is_primary=False) # is_primary = False สำหรับ Barcode ที่เพิ่มจากหน้า Edit
+            database.add_wheel_barcode(conn, wheel_id, barcode_string, is_primary=False)
             conn.commit()
             return jsonify({"success": True, "message": "เพิ่ม Barcode ID สำเร็จ!"}), 200
 
         elif request.method == 'DELETE':
-            # ลบ Barcode ID
             database.delete_wheel_barcode(conn, barcode_string)
             conn.commit()
-            return jsonify({"success": True, "message": "ลบ Barcode ID สำsembling!"}), 200
+            return jsonify({"success": True, "message": "ลบ Barcode ID สำเร็จ!"}), 200
             
     except Exception as e:
         conn.rollback()
@@ -935,9 +1019,11 @@ def api_manage_wheel_barcodes(wheel_id):
 @app.route('/delete_wheel/<int:wheel_id>', methods=('POST',))
 @login_required
 def delete_wheel(wheel_id):
-    if not current_user.can_edit():
+    # Check permission directly inside the route function
+    if not current_user.is_admin(): # Only admin can delete
         flash('คุณไม่มีสิทธิ์ในการลบแม็ก', 'danger')
         return redirect(url_for('index'))
+        
     conn = get_db()
     wheel = database.get_wheel(conn, wheel_id)
 
@@ -958,9 +1044,11 @@ def delete_wheel(wheel_id):
 @app.route('/add_fitment/<int:wheel_id>', methods=('POST',))
 @login_required
 def add_fitment(wheel_id):
+    # Check permission directly inside the route function
     if not current_user.can_edit():
         flash('คุณไม่มีสิทธิ์ในการเพิ่มข้อมูลการรองรับรถยนต์', 'danger')
         return redirect(url_for('wheel_detail', wheel_id=wheel_id))
+        
     conn = get_db()
     brand = request.form['brand'].strip()
     model = request.form['model'].strip()
@@ -989,9 +1077,11 @@ def add_fitment(wheel_id):
 @app.route('/delete_fitment/<int:fitment_id>/<int:wheel_id>', methods=('POST',))
 @login_required
 def delete_fitment(fitment_id, wheel_id):
+    # Check permission directly inside the route function
     if not current_user.can_edit():
         flash('คุณไม่มีสิทธิ์ในการลบข้อมูลการรองรับรถยนต์', 'danger')
         return redirect(url_for('wheel_detail', wheel_id=wheel_id))
+        
     conn = get_db()
     try:
         database.delete_wheel_fitment(conn, fitment_id)
@@ -1006,9 +1096,12 @@ def delete_fitment(fitment_id, wheel_id):
 @app.route('/stock_movement', methods=('GET', 'POST'))
 @login_required
 def stock_movement():
+    # Check permission directly inside the route function
+    # Only admin and editor can adjust stock manually
     if not current_user.can_edit():
         flash('คุณไม่มีสิทธิ์ในการจัดการการเคลื่อนไหวสต็อก', 'danger')
         return redirect(url_for('index'))
+        
     conn = get_db()
 
     tires = database.get_all_tires(conn)
@@ -1016,7 +1109,7 @@ def stock_movement():
     
     active_tab = request.args.get('tab', 'tire_movements') 
 
-    # --- สำหรับ Tire Movements History ---
+    # --- For Tire Movements History ---
     tire_movements_query = """
         SELECT tm.*, t.brand, t.model, t.size, u.username AS user_username
         FROM tire_movements tm
@@ -1039,7 +1132,7 @@ def stock_movement():
     tire_movements_history = processed_tire_movements_history
 
 
-    # --- สำหรับ Wheel Movements History ---
+    # --- For Wheel Movements History ---
     wheel_movements_query = """
         SELECT wm.*, w.brand, w.model, w.diameter, u.username AS user_username
         FROM wheel_movements wm
@@ -1163,11 +1256,13 @@ def stock_movement():
                            wheels=wheels, 
                            active_tab=active_tab,
                            tire_movements=tire_movements_history, 
-                           wheel_movements=wheel_movements_history)
+                           wheel_movements=wheel_movements_history,
+                           current_user=current_user)
 
 @app.route('/edit_tire_movement/<int:movement_id>', methods=['GET', 'POST'])
 @login_required
 def edit_tire_movement(movement_id):
+    # Check permission directly inside the route function
     if not current_user.is_admin():
         flash('คุณไม่มีสิทธิ์ในการแก้ไขข้อมูลการเคลื่อนไหวสต็อกยาง', 'danger')
         return redirect(url_for('daily_stock_report'))
@@ -1210,10 +1305,10 @@ def edit_tire_movement(movement_id):
                     bill_image_url_to_db = new_image_url
                 except Exception as e:
                     flash(f'เกิดข้อผิดพลาดในการอัปโหลดรูปภาพบิลไปยัง Cloudinary: {e}', 'danger')
-                    return render_template('edit_tire_movement.html', movement=movement_data)
+                    return render_template('edit_tire_movement.html', movement=movement_data, current_user=current_user)
             else:
                 flash('ชนิดไฟล์รูปภาพบิลไม่ถูกต้อง อนุญาตเฉพาะ .png, .jpg, .jpeg, .gif เท่านั้น', 'danger')
-                return render_template('edit_tire_movement.html', movement=movement_data)
+                return render_template('edit_tire_movement.html', movement=movement_data, current_user=current_user)
 
         try:
             database.update_tire_movement(conn, movement_id, new_notes, bill_image_url_to_db)
@@ -1222,11 +1317,12 @@ def edit_tire_movement(movement_id):
         except Exception as e:
             flash(f'เกิดข้อผิดพลาดในการแก้ไขข้อมูล: {e}', 'danger')
 
-    return render_template('edit_tire_movement.html', movement=movement_data)
+    return render_template('edit_tire_movement.html', movement=movement_data, current_user=current_user)
 
 @app.route('/edit_wheel_movement/<int:movement_id>', methods=['GET', 'POST'])
 @login_required
 def edit_wheel_movement(movement_id):
+    # Check permission directly inside the route function
     if not current_user.is_admin():
         flash('คุณไม่มีสิทธิ์ในการแก้ไขข้อมูลการเคลื่อนไหวสต็อกแม็ก', 'danger')
         return redirect(url_for('daily_stock_report'))
@@ -1268,10 +1364,10 @@ def edit_wheel_movement(movement_id):
                     bill_image_url_to_db = new_image_url
                 except Exception as e:
                     flash(f'เกิดข้อผิดพลาดในการอัปโหลดรูปภาพบิลไปยัง Cloudinary: {e}', 'danger')
-                    return render_template('edit_wheel_movement.html', movement=movement_data)
+                    return render_template('edit_wheel_movement.html', movement=movement_data, current_user=current_user)
             else:
                 flash('ชนิดไฟล์รูปภาพบิลไม่ถูกต้อง อนุญาตเฉพาะ .png, .jpg, .jpeg, .gif เท่านั้น', 'danger')
-                return render_template('edit_wheel_movement.html', movement=movement_data)
+                return render_template('edit_wheel_movement.html', movement=movement_data, current_user=current_user)
 
         try:
             database.update_wheel_movement(conn, movement_id, new_notes, bill_image_url_to_db)
@@ -1280,12 +1376,17 @@ def edit_wheel_movement(movement_id):
         except Exception as e:
             flash(f'เกิดข้อผิดพลาดในการแก้ไขข้อมูล: {e}', 'danger')
 
-    return render_template('edit_wheel_movement.html', movement=movement_data)
+    return render_template('edit_wheel_movement.html', movement=movement_data, current_user=current_user)
 
 # --- daily_stock_report ---
 @app.route('/daily_stock_report')
 @login_required
 def daily_stock_report():
+    # Check permission directly inside the route function
+    if not (current_user.is_admin() or current_user.is_editor() or current_user.is_wholesale_sales()):
+        flash('คุณไม่มีสิทธิ์เข้าถึงหน้ารายงานสต็อกประจำวัน', 'danger')
+        return redirect(url_for('index'))
+        
     conn = get_db()
     
     report_date_str = request.args.get('date')
@@ -1544,7 +1645,7 @@ def daily_stock_report():
         if key not in detailed_wheel_report:
             detailed_wheel_report[key]['wheel_main_id'] = wheel_id
             detailed_wheel_report[key]['brand'] = movement['brand']
-            detailed_wheel_report[key]['model'] = movement['model'] # FIXED: Changed from detailed_tire_report to detailed_wheel_report
+            detailed_wheel_report[key]['model'] = movement['model']
             detailed_wheel_report[key]['diameter'] = movement['diameter']
             detailed_wheel_report[key]['pcd'] = movement['pcd']
             detailed_wheel_report[key]['width'] = movement['width']
@@ -1673,13 +1774,20 @@ def daily_stock_report():
                            wheel_total_remaining=wheel_total_remaining_for_report_date, 
                            
                            tire_movements_raw=tire_movements_raw,
-                           wheel_movements_raw=wheel_movements_raw
+                           wheel_movements_raw=wheel_movements_raw,
+                           current_user=current_user # Pass current_user to template
                           )
+
 
 # --- NEW: Summary Stock Report Route ---
 @app.route('/summary_stock_report')
 @login_required
 def summary_stock_report():
+    # Check permission directly inside the route function
+    if not (current_user.is_admin() or current_user.is_editor() or current_user.is_wholesale_sales()):
+        flash('คุณไม่มีสิทธิ์เข้าถึงหน้ารายงานสรุปสต็อก', 'danger')
+        return redirect(url_for('index'))
+
     conn = get_db()
     
     start_date_str = request.args.get('start_date')
@@ -1838,7 +1946,7 @@ def summary_stock_report():
         ORDER BY t.brand, t.model, t.size;
     """
     
-    # Corrected parameter list based on 9 bindings required [cite: 2025-06-23]
+    # Corrected parameter list based on 9 bindings required
     tire_params = (
         start_of_period_iso, end_of_period_iso, # for IN_qty SUM
         start_of_period_iso, end_of_period_iso, # for OUT_qty SUM
@@ -1854,7 +1962,7 @@ def summary_stock_report():
         query_result_obj = conn.execute(tire_detailed_movements_query.replace('%s', '?'), tire_params)
         tire_detailed_movements_raw = query_result_obj.fetchall()
 
-    # ประมวลผลข้อมูลสำหรับ tires_by_brand_for_summary_report
+    # Process data for tires_by_brand_for_summary_report
     tires_by_brand_for_summary_report = OrderedDict()
     for row_data_raw in tire_detailed_movements_raw: 
         row = dict(row_data_raw) 
@@ -1903,7 +2011,7 @@ def summary_stock_report():
         HAVING SUM(CASE WHEN wm.timestamp BETWEEN %s AND %s THEN wm.quantity_change ELSE 0 END) > 0 
         ORDER BY w.brand, w.model, w.diameter;
     """
-    # Corrected parameter list based on 9 bindings required [cite: 2025-06-23]
+    # Corrected parameter list based on 9 bindings required
     wheel_params = (
         start_of_period_iso, end_of_period_iso, # for IN_qty SUM
         start_of_period_iso, end_of_period_iso, # for OUT_qty SUM
@@ -1919,7 +2027,7 @@ def summary_stock_report():
         query_result_obj = conn.execute(wheel_detailed_movements_query.replace('%s', '?'), wheel_params)
         wheel_detailed_movements_raw = query_result_obj.fetchall()
 
-    # ประมวลผลข้อมูลสำหรับ wheels_by_brand_for_summary_report
+    # Process data for wheels_by_brand_for_summary_report
     wheels_by_brand_for_summary_report = OrderedDict()
     for row_data_raw in wheel_detailed_movements_raw: 
         row = dict(row_data_raw) 
@@ -1943,7 +2051,7 @@ def summary_stock_report():
             'OUT': out_qty,
             'final_quantity': final_qty,
         })
-    # --- สำหรับสรุปยอดรวมแยกตามยี่ห้อยาง (tire_brand_totals_for_summary_report) ---
+    # --- For summary totals by tire brand (tire_brand_totals_for_summary_report) ---
     tire_brand_totals_for_summary_report = OrderedDict()
     for brand, data in tire_movements_by_brand.items():
         query_brand_initial_tire = f"""
@@ -1971,7 +2079,7 @@ def summary_stock_report():
             'final_quantity_sum': final_qty_brand,
         }
 
-    # --- สำหรับสรุปยอดรวมแยกตามยี่ห้อแม็ก (wheel_brand_totals_for_summary_report) ---
+    # --- For summary totals by wheel brand (wheel_brand_totals_for_summary_report) ---
     wheel_brand_totals_for_summary_report = OrderedDict()
     for brand, data in wheel_movements_by_brand.items():
         query_brand_initial_wheel = f"""
@@ -2016,7 +2124,8 @@ def summary_stock_report():
                            tires_by_brand_for_summary_report=tires_by_brand_for_summary_report,
                            wheels_by_brand_for_summary_report=wheels_by_brand_for_summary_report,
                            tire_brand_totals_for_summary_report=tire_brand_totals_for_summary_report,
-                           wheel_brand_totals_for_summary_report=wheel_brand_totals_for_summary_report
+                           wheel_brand_totals_for_summary_report=wheel_brand_totals_for_summary_report,
+                           current_user=current_user # Pass current_user to template
                           )
 
 
@@ -2024,19 +2133,23 @@ def summary_stock_report():
 @app.route('/export_import', methods=('GET', 'POST'))
 @login_required
 def export_import():
+    # Check permission directly inside the route function
     if not current_user.is_admin():
         flash('คุณไม่มีสิทธิ์ในการนำเข้า/ส่งออกข้อมูล', 'danger')
         return redirect(url_for('index'))
+        
     conn = get_db()
     active_tab = request.args.get('tab', 'tires_excel')
-    return render_template('export_import.html', active_tab=active_tab)
+    return render_template('export_import.html', active_tab=active_tab, current_user=current_user)
 
 @app.route('/export_tires_action')
 @login_required
 def export_tires_action():
+    # Check permission directly inside the route function
     if not current_user.can_edit():
         flash('คุณไม่มีสิทธิ์ในการส่งออกข้อมูลยาง', 'danger')
         return redirect(url_for('export_import', tab='tires_excel'))
+        
     conn = get_db()
     tires = database.get_all_tires(conn)
 
@@ -2046,14 +2159,13 @@ def export_tires_action():
 
     data = []
     for tire in tires:
-        # ดึง Barcode ID หลักสำหรับยางเส้นนี้
         primary_barcode = ""
         barcodes = database.get_barcodes_for_tire(conn, tire['id'])
         for bc in barcodes:
             if bc['is_primary_barcode']:
                 primary_barcode = bc['barcode_string']
                 break
-        if not primary_barcode and barcodes: # ถ้าไม่มี primary แต่มี barcode อื่นๆ ให้เอาอันแรก (หรือตามตรรกะที่คุณต้องการ)
+        if not primary_barcode and barcodes:
             primary_barcode = barcodes[0]['barcode_string']
 
         data.append({
@@ -2092,9 +2204,11 @@ def export_tires_action():
 
 @app.route('/import_tires_action', methods=['POST'])
 def import_tires_action():
+    # Check permission directly inside the route function
     if not current_user.can_edit():
         flash('คุณไม่มีสิทธิ์ในการนำเข้าข้อมูลยาง', 'danger')
         return redirect(url_for('export_import', tab='tires_excel'))
+        
     if 'file' not in request.files:
         flash('ไม่พบไฟล์ที่อัปโหลด', 'danger')
         return redirect(url_for('export_import', tab='tires_excel'))
@@ -2107,14 +2221,12 @@ def import_tires_action():
     
     if file and allowed_excel_file(file.filename):
         try:
-            # บังคับให้ Pandas อ่าน 'Barcode ID' เป็นสตริง เพื่อจัดการค่าว่างได้ถูกต้อง
             df = pd.read_excel(file, dtype={'Barcode ID': str}) 
             conn = get_db()
             imported_count = 0
             updated_count = 0
             error_rows = []
 
-            # ตรวจสอบคอลัมน์ที่จำเป็น
             expected_tire_cols = [
                 'ยี่ห้อ', 'รุ่นยาง', 'เบอร์ยาง', 'สต็อก', 'ราคาต่อเส้น', 'Barcode ID'
             ]
@@ -2129,14 +2241,12 @@ def import_tires_action():
                     model = str(row.get('รุ่นยาง', '')).strip().lower()
                     size = str(row.get('เบอร์ยาง', '')).strip()
 
-                    # ดึงค่า Barcode ID และจัดการค่าว่างให้เป็น None
                     barcode_id_from_excel = str(row.get('Barcode ID', '')).strip()
                     if not barcode_id_from_excel or barcode_id_from_excel.lower() == 'none' or barcode_id_from_excel.lower() == 'nan':
-                        barcode_id_to_save = None # ถ้าว่างเปล่า, ให้เป็น None
+                        barcode_id_to_save = None
                     else:
-                        barcode_id_to_save = barcode_id_from_excel # ถ้ามีค่า, ใช้ค่านั้น
+                        barcode_id_to_save = barcode_id_from_excel
 
-                    # ตรวจสอบคอลัมน์ที่จำเป็นอื่นๆ
                     if not brand or not model or not size:
                         raise ValueError("ข้อมูล 'ยี่ห้อ', 'รุ่นยาง', หรือ 'เบอร์ยาง' ไม่สามารถเว้นว่างได้")
 
@@ -2170,7 +2280,6 @@ def import_tires_action():
                     cursor = conn.cursor()
 
                     existing_tire = None
-                    # ค้นหาด้วย Barcode ID ก่อน ถ้ามีค่า
                     if barcode_id_to_save:
                         existing_tire_id_by_barcode = database.get_tire_id_by_barcode(conn, barcode_id_to_save) 
                         if existing_tire_id_by_barcode:
@@ -2181,14 +2290,12 @@ def import_tires_action():
                             
                             found_tire_data = cursor.fetchone()
                             if found_tire_data:
-                                existing_tire = dict(found_tire_data) # แปลงเป็น dict เพื่อความชัวร์
+                                existing_tire = dict(found_tire_data)
 
-                        # ตรวจสอบว่า Barcode ID นี้ไม่ได้ถูกใช้กับ Wheel
                         existing_wheel_id_by_barcode = database.get_wheel_id_by_barcode(conn, barcode_id_to_save) 
                         if existing_wheel_id_by_barcode:
                             raise ValueError(f"Barcode ID '{barcode_id_to_save}' ซ้ำกับล้อแม็ก ID {existing_wheel_id_by_barcode}. Barcode ID ต้องไม่ซ้ำกันข้ามประเภทสินค้า.")
 
-                    # ถ้าไม่พบด้วย Barcode ID (หรือ Barcode ID เป็น None), ให้ลองค้นหาด้วย Brand, Model, Size
                     if not existing_tire:
                         if "psycopg2" in str(type(conn)):
                             cursor.execute("SELECT id, brand, model, size, quantity FROM tires WHERE brand = %s AND model = %s AND size = %s", (brand, model, size))
@@ -2197,21 +2304,17 @@ def import_tires_action():
                         
                         found_tire_data = cursor.fetchone()
                         if found_tire_data:
-                            existing_tire = dict(found_tire_data) # แปลงเป็น dict เพื่อความชัวร์
+                            existing_tire = dict(found_tire_data)
 
                     if existing_tire:
-                        # ถ้าพบยางที่มีอยู่แล้ว (ไม่ว่าจะจาก Barcode หรือ Brand/Model/Size)
-                        tire_id = existing_tire['id'] # ใช้ 'id' ตัวเล็กตามโครงสร้าง DB ที่ยืนยันมา
+                        tire_id = existing_tire['id']
                         
-                        # ถ้ามี Barcode ID ใน Excel และมันยังไม่ถูกผูกกับยางตัวนี้ (ป้องกันการเพิ่มซ้ำ)
                         if barcode_id_to_save and not database.get_tire_id_by_barcode(conn, barcode_id_to_save):
                              database.add_tire_barcode(conn, tire_id, barcode_id_to_save, is_primary=False)
                         
-                        # อัปเดตข้อมูลยางหลัก
                         database.update_tire_import(conn, tire_id, brand, model, size, quantity, cost_sc, cost_dunlop, cost_online, wholesale_price1, wholesale_price2, price_per_item,
                                                     promotion_id, year_of_manufacture) 
                         
-                        # บันทึก movement ถ้า quantity เปลี่ยน
                         old_quantity = existing_tire['quantity']
                         if quantity != old_quantity:
                             movement_type = 'IN' if quantity > old_quantity else 'OUT'
@@ -2220,10 +2323,9 @@ def import_tires_action():
                         updated_count += 1
                         
                     else:
-                        # ถ้าไม่พบยางที่มีอยู่แล้ว: เพิ่มเป็นรายการใหม่
                         new_tire_id = database.add_tire_import(conn, brand, model, size, quantity, cost_sc, cost_dunlop, cost_online, wholesale_price1, wholesale_price2, price_per_item,
                                                                 promotion_id, year_of_manufacture) 
-                        if barcode_id_to_save: # ถ้ามี Barcode ID ให้บันทึก
+                        if barcode_id_to_save:
                             database.add_tire_barcode(conn, new_tire_id, barcode_id_to_save, is_primary=True) 
                         database.add_tire_movement(conn, new_tire_id, 'IN', quantity, quantity, "Import from Excel (initial stock)", None, user_id=current_user.id)
                         imported_count += 1
@@ -2235,7 +2337,6 @@ def import_tires_action():
 
             message = f'นำเข้าข้อมูลยางสำเร็จ: เพิ่มใหม่ {imported_count} รายการ, อัปเดต {updated_count} รายการ.'
             if error_rows:
-                # แสดงข้อผิดพลาดที่พบ
                 message += f' พบข้อผิดพลาดใน {len(error_rows)} แถว: {"; ".join(error_rows[:5])}{"..." if len(error_rows) > 5 else ""}'
                 flash(message, 'warning')
             else:
@@ -2256,9 +2357,11 @@ def import_tires_action():
 @app.route('/export_wheels_action')
 @login_required
 def export_wheels_action():
+    # Check permission directly inside the route function
     if not current_user.can_edit():
         flash('คุณไม่มีสิทธิ์ในการส่งออกข้อมูลแม็ก', 'danger')
         return redirect(url_for('export_import', tab='wheels_excel'))
+        
     conn = get_db()
     wheels = database.get_all_wheels(conn)
     
@@ -2268,14 +2371,13 @@ def export_wheels_action():
 
     data = []
     for wheel in wheels:
-        # ดึง Barcode ID หลักสำหรับแม็กวงนี้
         primary_barcode = ""
         barcodes = database.get_barcodes_for_wheel(conn, wheel['id'])
         for bc in barcodes:
             if bc['is_primary_barcode']:
                 primary_barcode = bc['barcode_string']
                 break
-        if not primary_barcode and barcodes: # ถ้าไม่มี primary แต่มี barcode อื่นๆ ให้เอาอันแรก (หรือตามตรรกะที่คุณต้องการ)
+        if not primary_barcode and barcodes:
             primary_barcode = barcodes[0]['barcode_string']
 
         data.append({
@@ -2309,9 +2411,11 @@ def export_wheels_action():
 
 @app.route('/import_wheels_action', methods=['POST'])
 def import_wheels_action():
+    # Check permission directly inside the route function
     if not current_user.can_edit():
         flash('คุณไม่มีสิทธิ์ในการนำเข้าข้อมูลแม็ก', 'danger')
         return redirect(url_for('export_import', tab='wheels_excel'))
+        
     if 'file' not in request.files:
         flash('ไม่พบไฟล์ที่อัปโหลด', 'danger')
         return redirect(url_for('export_import', tab='wheels_excel'))
@@ -2324,14 +2428,12 @@ def import_wheels_action():
     
     if file and allowed_excel_file(file.filename):
         try:
-            # บังคับให้ Pandas อ่าน 'Barcode ID' เป็นสตริง
             df = pd.read_excel(file, dtype={'Barcode ID': str}) 
             conn = get_db()
             imported_count = 0
             updated_count = 0
             error_rows = []
 
-            # ตรวจสอบคอลัมน์ที่จำเป็น
             expected_wheel_cols = [
                 'ยี่ห้อ', 'ลาย', 'ขอบ', 'รู', 'กว้าง', 'สต็อก', 'ราคาขายปลีก', 'Barcode ID'
             ]
@@ -2346,14 +2448,12 @@ def import_wheels_action():
                     model = str(row.get('ลาย', '')).strip().lower()
                     pcd = str(row.get('รู', '')).strip()
 
-                    # ดึงค่า Barcode ID และจัดการค่าว่างให้เป็น None
                     barcode_id_from_excel = str(row.get('Barcode ID', '')).strip()
                     if not barcode_id_from_excel or barcode_id_from_excel.lower() == 'none' or barcode_id_from_excel.lower() == 'nan':
                         barcode_id_to_save = None
                     else:
                         barcode_id_to_save = barcode_id_from_excel
 
-                    # ตรวจสอบคอลัมน์ที่จำเป็นอื่นๆ
                     if not brand or not model or not pcd:
                             raise ValueError("ข้อมูล 'ยี่ห้อ', 'ลาย', หรือ 'รู' ไม่สามารถเว้นว่างได้")
 
@@ -2380,7 +2480,6 @@ def import_wheels_action():
                     cursor = conn.cursor()
 
                     existing_wheel = None
-                    # ค้นหาด้วย Barcode ID ก่อน ถ้ามีค่า
                     if barcode_id_to_save:
                         existing_wheel_id_by_barcode = database.get_wheel_id_by_barcode(conn, barcode_id_to_save) 
                         if existing_wheel_id_by_barcode:
@@ -2393,12 +2492,10 @@ def import_wheels_action():
                             if found_wheel_data:
                                 existing_wheel = dict(found_wheel_data)
 
-                        # ตรวจสอบว่า Barcode ID นี้ไม่ได้ถูกใช้กับ Tire
                         existing_tire_id_by_barcode = database.get_tire_id_by_barcode(conn, barcode_id_to_save) 
                         if existing_tire_id_by_barcode:
                             raise ValueError(f"Barcode ID '{barcode_id_to_save}' ซ้ำกับยาง ID {existing_tire_id_by_barcode}. Barcode ID ต้องไม่ซ้ำกันข้ามประเภทสินค้า.")
 
-                    # ถ้าไม่พบด้วย Barcode ID (หรือ Barcode ID เป็น None), ให้ลองค้นหาด้วย Brand, Model, Diameter, PCD, Width
                     if not existing_wheel:
                         if "psycopg2" in str(type(conn)):
                             cursor.execute("SELECT id, brand, model, diameter, pcd, width, quantity FROM wheels WHERE brand = %s AND model = %s AND diameter = %s AND pcd = %s AND width = %s", 
@@ -2412,9 +2509,8 @@ def import_wheels_action():
                             existing_wheel = dict(found_wheel_data)
 
                     if existing_wheel:
-                        wheel_id = existing_wheel['id'] # ใช้ 'id' ตัวเล็กตามโครงสร้าง DB ที่ยืนยันมา
+                        wheel_id = existing_wheel['id']
                         
-                        # ถ้ามี Barcode ID ใน Excel และมันยังไม่ถูกผูกกับแม็กตัวนี้ (ป้องกันการเพิ่มซ้ำ)
                         if barcode_id_to_save and not database.get_wheel_id_by_barcode(conn, barcode_id_to_save):
                              database.add_wheel_barcode(conn, wheel_id, barcode_id_to_save, is_primary=False)
                         
@@ -2461,21 +2557,23 @@ def import_wheels_action():
 @app.route('/manage_users')
 @login_required
 def manage_users():
+    # Check permission directly inside the route function
     if not current_user.is_admin():
         flash('คุณไม่มีสิทธิ์เข้าถึงหน้าจัดการผู้ใช้', 'danger')
         return redirect(url_for('index'))
+        
     conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute("SELECT id, username, role FROM users")
-    users = cursor.fetchall()
-    return render_template('manage_users.html', users=users)
+    users = database.get_all_users(conn)
+    return render_template('manage_users.html', users=users, current_user=current_user)
 
 @app.route('/add_user', methods=['GET', 'POST'])
 @login_required
 def add_new_user():
+    # Check permission directly inside the route function
     if not current_user.is_admin():
         flash('คุณไม่มีสิทธิ์ในการเพิ่มผู้ใช้', 'danger')
         return redirect(url_for('manage_users'))
+        
     if request.method == 'POST':
         username = request.form['username']
         password = request.form['password']
@@ -2494,11 +2592,12 @@ def add_new_user():
                 return redirect(url_for('manage_users'))
             else:
                 flash(f'ชื่อผู้ใช้ "{username}" มีอยู่ในระบบแล้ว', 'danger')
-    return render_template('add_user.html')
+    return render_template('add_user.html', username=request.form.get('username', ''), role=request.form.get('role', 'viewer'), current_user=current_user)
 
 @app.route('/edit_user_role/<int:user_id>', methods=['POST'])
 @login_required
 def edit_user_role(user_id):
+    # Check permission directly inside the route function
     if not current_user.is_admin():
         flash('คุณไม่มีสิทธิ์ในการแก้ไขบทบาทผู้ใช้', 'danger')
         return redirect(url_for('manage_users'))
@@ -2508,23 +2607,23 @@ def edit_user_role(user_id):
         return redirect(url_for('manage_users'))
 
     new_role = request.form.get('role')
-    if new_role not in ['admin', 'editor', 'viewer']:
+    allowed_roles = ['admin', 'editor', 'retail_sales', 'wholesale_sales', 'viewer']
+    if new_role not in allowed_roles:
         flash('บทบาทไม่ถูกต้อง', 'danger')
         return redirect(url_for('manage_users'))
 
     conn = get_db()
-    cursor = conn.cursor()
-    if "psycopg2" in str(type(conn)):
-        cursor.execute("UPDATE users SET role = %s WHERE id = %s", (new_role, user_id))
+    success = database.update_user_role(conn, user_id, new_role)
+    if success:
+        flash(f'แก้ไขบทบาทผู้ใช้ ID {user_id} เป็น "{new_role}" สำเร็จ!', 'success')
     else:
-        cursor.execute("UPDATE users SET role = ? WHERE id = ?", (new_role, user_id))
-    conn.commit()
-    flash(f'แก้ไขบทบาทผู้ใช้ ID {user_id} เป็น "{new_role}" สำเร็จ!', 'success')
+        flash(f'เกิดข้อผิดพลาดในการแก้ไขบทบาทผู้ใช้ ID {user_id}', 'danger')
     return redirect(url_for('manage_users'))
 
 @app.route('/delete_user/<int:user_id>', methods=['POST'])
 @login_required
 def delete_user(user_id):
+    # Check permission directly inside the route function
     if not current_user.is_admin():
         flash('คุณไม่มีสิทธิ์ในการลบผู้ใช้', 'danger')
         return redirect(url_for('manage_users'))
@@ -2533,12 +2632,7 @@ def delete_user(user_id):
     if str(user_id) == current_user.get_id():
         flash('ไม่สามารถลบผู้ใช้ที่กำลังเข้าสู่ระบบอยู่ได้', 'danger')
     else:
-        cursor = conn.cursor()
-        if "psycopg2" in str(type(conn)):
-            cursor.execute("DELETE FROM users WHERE id = %s", (user_id,))
-        else:
-            cursor.execute("DELETE FROM users WHERE id = ?", (user_id,))
-        conn.commit()
+        database.delete_user(conn, user_id)
         flash('ลบผู้ใช้สำเร็จ!', 'success')
     return redirect(url_for('manage_users'))
 
@@ -2546,14 +2640,17 @@ def delete_user(user_id):
 @app.route('/admin_dashboard')
 @login_required
 def admin_dashboard():
+    # Check permission directly inside the route function
     if not current_user.is_admin():
         flash('คุณไม่มีสิทธิ์เข้าถึง Admin Dashboard', 'danger')
         return redirect(url_for('index'))
-    return render_template('admin_dashboard.html')
+        
+    return render_template('admin_dashboard.html', current_user=current_user)
 
 @app.route('/admin_deleted_items')
 @login_required
 def admin_deleted_items():
+    # Check permission directly inside the route function
     if not current_user.is_admin():
         flash('คุณไม่มีสิทธิ์เข้าถึงหน้ารายการสินค้าที่ถูกลบ', 'danger')
         return redirect(url_for('index'))
@@ -2567,14 +2664,17 @@ def admin_deleted_items():
     return render_template('admin_deleted_items.html', 
                            deleted_tires=deleted_tires, 
                            deleted_wheels=deleted_wheels,
-                           active_tab=active_tab)
+                           active_tab=active_tab,
+                           current_user=current_user)
 
 @app.route('/restore_tire/<int:tire_id>', methods=['POST'])
 @login_required
 def restore_tire_action(tire_id):
+    # Check permission directly inside the route function
     if not current_user.is_admin():
         flash('คุณไม่มีสิทธิ์ในการกู้คืนยาง', 'danger')
         return redirect(url_for('index'))
+        
     conn = get_db()
     try:
         database.restore_tire(conn, tire_id)
@@ -2586,9 +2686,11 @@ def restore_tire_action(tire_id):
 @app.route('/restore_wheel/<int:wheel_id>', methods=['POST'])
 @login_required
 def restore_wheel_action(wheel_id):
+    # Check permission directly inside the route function
     if not current_user.is_admin():
         flash('คุณไม่มีสิทธิ์ในการกู้คืนแม็ก', 'danger')
         return redirect(url_for('index'))
+        
     conn = get_db()
     try:
         database.restore_wheel(conn, wheel_id)
@@ -2597,11 +2699,17 @@ def restore_wheel_action(wheel_id):
         flash(f'เกิดข้อผิดพลาดในการกู้คืนแม็ก: {e}', 'danger')
     return redirect(url_for('admin_deleted_items', tab='deleted_wheels'))
 
-@app.route('/barcode_scanner')
+@app.route('/barcode_scanner_page') # Renamed to avoid conflict with barcode_scanner route
 @login_required
 def barcode_scanner_page():
     """Renders the barcode scanning page."""
-    return render_template('barcode_scanner.html')
+    # Check permission directly inside the route function
+    # Retail sales can use barcode scanner for IN/OUT, but OUT is restricted by API
+    if not (current_user.is_admin() or current_user.is_editor() or current_user.is_retail_sales()):
+        flash('คุณไม่มีสิทธิ์เข้าถึงหน้าสแกนบาร์โค้ด', 'danger')
+        return redirect(url_for('index'))
+
+    return render_template('barcode_scanner.html', current_user=current_user)
     
 @app.route('/api/scan_item_lookup', methods=['GET'])
 @login_required
@@ -2612,35 +2720,31 @@ def api_scan_item_lookup():
 
     conn = get_db()
 
-    # --- ขั้นตอนที่ 1: ค้นหาในตาราง tire_barcodes ---
     tire_id = database.get_tire_id_by_barcode(conn, scanned_barcode_string)
     if tire_id:
-        tire = database.get_tire(conn, tire_id) # ดึงข้อมูลยางหลัก
+        tire = database.get_tire(conn, tire_id)
         if tire:
-            # แปลง sqlite3.Row/DictRow เป็น dict เพื่อให้ง่ายต่อการส่ง JSON
             if not isinstance(tire, dict):
                 tire = dict(tire)
             tire['type'] = 'tire'
-            tire['current_quantity'] = tire['quantity'] # ใช้ current_quantity ใน Frontend
+            tire['current_quantity'] = tire['quantity']
             return jsonify({"success": True, "item": tire})
 
-    # --- ขั้นตอนที่ 2: ค้นหาในตาราง wheel_barcodes ---
     wheel_id = database.get_wheel_id_by_barcode(conn, scanned_barcode_string)
     if wheel_id:
-        wheel = database.get_wheel(conn, wheel_id) # ดึงข้อมูลแม็กหลัก
+        wheel = database.get_wheel(conn, wheel_id)
         if wheel:
             if not isinstance(wheel, dict):
                 wheel = dict(wheel)
             wheel['type'] = 'wheel'
-            wheel['current_quantity'] = wheel['quantity'] # ใช้ current_quantity ใน Frontend
+            wheel['current_quantity'] = wheel['quantity']
             return jsonify({"success": True, "item": wheel})
 
-    # --- ถ้าไม่พบเลย: ส่งคืนข้อความว่าไม่พบ และแนะนำให้เชื่อมโยง ---
     return jsonify({
         "success": False,
         "message": f"ไม่พบสินค้าสำหรับบาร์โค้ด: '{scanned_barcode_string}'. คุณต้องการเชื่อมโยงบาร์โค้ดนี้กับสินค้าที่มีอยู่หรือไม่?",
-        "action_required": "link_new_barcode", # บอก Frontend ให้เปิด Modal เชื่อมโยง
-        "scanned_barcode": scanned_barcode_string # ส่ง Barcode ที่สแกนกลับไปด้วย
+        "action_required": "link_new_barcode",
+        "scanned_barcode": scanned_barcode_string
     }), 404
     
 @app.route('/api/process_stock_transaction', methods=['POST'])
@@ -2650,9 +2754,9 @@ def api_process_stock_transaction():
     if not data:
         return jsonify({"success": False, "message": "ไม่มีข้อมูลส่งมา"}), 400
 
-    transaction_type = data.get('type') # 'IN' or 'OUT'
+    transaction_type = data.get('type')
     items_to_process = data.get('items', [])
-    notes = data.get('notes', '') # รับ notes จาก Frontend
+    notes = data.get('notes', '')
     user_id = current_user.id if current_user.is_authenticated else None
 
     if transaction_type not in ['IN', 'OUT']:
@@ -2660,27 +2764,21 @@ def api_process_stock_transaction():
     if not items_to_process:
         return jsonify({"success": False, "message": "ไม่มีรายการสินค้าให้ทำรายการ"}), 400
 
+    # Permission check for 'OUT' transaction
+    if transaction_type == 'OUT' and not current_user.can_edit():
+        return jsonify({"success": False, "message": "คุณไม่มีสิทธิ์ในการจ่ายสินค้าออกจากสต็อก"}), 403
+
     conn = get_db()
-    # ใช้ try...except บล็อกเพื่อให้แน่ใจว่ามีการ rollback transaction ถ้าเกิดข้อผิดพลาด
     try:
-        # เริ่มต้น transaction (สำหรับ psycopg2 จะจัดการโดยอัตโนมัติเมื่อใช้ cursor, สำหรับ SQLite อาจต้องใช้ conn.begin() หากต้องการ Transaction แยกย่อย)
-        # conn.autocommit = False # ถ้าใช้ psycopg2 และต้องการควบคุม transaction เอง
-        
-        # สำหรับ SQLite ที่ไม่มี explicit begin() ต้องมั่นใจว่าการ execute แต่ละครั้งอยู่ใน scope ที่ต้องการ
-        # ในที่นี้ เราจะให้ Flask จัดการ conn.commit() หรือ conn.rollback() ท้ายสุด
-        
         for item_data in items_to_process:
             item_id = item_data.get('id')
             item_type = item_data.get('item_type')
-            quantity_change = item_data.get('quantity') # ใช้ quantity_change เพื่อสื่อถึงจำนวนที่เปลี่ยน
+            quantity_change = item_data.get('quantity')
 
-            # ตรวจสอบข้อมูลพื้นฐาน
             if not item_id or not item_type or not quantity_change or not isinstance(quantity_change, int) or quantity_change <= 0:
-                # ถ้าข้อมูลไม่สมบูรณ์ ให้ rollback ทันที
                 conn.rollback() 
                 return jsonify({"success": False, "message": f"ข้อมูลสินค้าไม่สมบูรณ์สำหรับรายการ ID: {item_id}"}), 400
 
-            # ดึงสต็อกปัจจุบันเพื่อตรวจสอบ
             current_qty = 0
             db_item = None
             if item_type == 'tire':
@@ -2702,33 +2800,27 @@ def api_process_stock_transaction():
                 new_qty += quantity_change
             elif transaction_type == 'OUT':
                 if current_qty < quantity_change:
-                    conn.rollback() # สำคัญ: Rollback หากสต็อกไม่พอ
+                    conn.rollback()
                     return jsonify({"success": False, "message": f"สต็อกไม่พอสำหรับ {db_item['brand'].title()} {db_item['model'].title()} (มีอยู่: {current_qty}, ต้องการ: {quantity_change})"}), 400
                 new_qty -= quantity_change
             
-            # อัปเดตสต็อกหลักในตาราง tires/wheels
             if item_type == 'tire':
                 database.update_tire_quantity(conn, item_id, new_qty)
             elif item_type == 'wheel':
                 database.update_wheel_quantity(conn, item_id, new_qty)
             
-            # บันทึกการเคลื่อนไหวในตาราง tire_movements/wheel_movements
             if item_type == 'tire':
                 database.add_tire_movement(conn, item_id, transaction_type, quantity_change, new_qty, notes, None, user_id)
             elif item_type == 'wheel':
                 database.add_wheel_movement(conn, item_id, transaction_type, quantity_change, new_qty, notes, None, user_id)
 
-        conn.commit() # ถ้าทุกรายการใน loop สำเร็จ ให้ commit transaction
+        conn.commit()
         return jsonify({"success": True, "message": f"ทำรายการ {transaction_type} สำเร็จสำหรับ {len(items_to_process)} รายการ"}), 200
 
     except Exception as e:
-        conn.rollback() # หากเกิดข้อผิดพลาดใดๆ ให้ rollback transaction ทั้งหมด
+        conn.rollback()
         return jsonify({"success": False, "message": f"เกิดข้อผิดพลาดในการทำรายการ ระบบทำการย้อนกลับข้อมูล: {str(e)}"}), 500
         
-        # app.py
-
-# ... (โค้ดส่วนบน, imports, และ API Endpoints อื่นๆ เช่น api_scan_item_lookup, api_process_stock_transaction) ...
-
 @app.route('/api/search_items_for_link', methods=['GET'])
 @login_required
 def api_search_items_for_link():
@@ -2739,8 +2831,6 @@ def api_search_items_for_link():
     conn = get_db()
     items = []
 
-    # ค้นหายาง (Tires)
-    # ใช้ LIKE เพื่อค้นหาส่วนหนึ่งของยี่ห้อ, รุ่น, หรือเบอร์ยาง
     tire_search_query = f"""
         SELECT id, brand, model, size, quantity AS current_quantity
         FROM tires
@@ -2763,7 +2853,6 @@ def api_search_items_for_link():
         item['type'] = 'tire'
         items.append(item)
 
-    # ค้นหาแม็ก (Wheels)
     wheel_search_query = f"""
         SELECT id, brand, model, diameter, pcd, width, quantity AS current_quantity
         FROM wheels
@@ -2792,32 +2881,28 @@ def api_search_items_for_link():
 def api_link_barcode_to_item():
     data = request.get_json()
     scanned_barcode = data.get('scanned_barcode')
-    item_id = data.get('item_id') # ID ของยาง/แม็ก ที่ผู้ใช้เลือกจากหน้าค้นหา
-    item_type = data.get('item_type') # 'tire' or 'wheel' (มาจาก frontend)
+    item_id = data.get('item_id')
+    item_type = data.get('item_type')
 
     if not scanned_barcode or not item_id or not item_type:
         return jsonify({"success": False, "message": "ข้อมูลไม่สมบูรณ์สำหรับการเชื่อมโยงบาร์โค้ด"}), 400
 
     conn = get_db()
     try:
-        # ตรวจสอบว่า Barcode ID นี้มีอยู่ในระบบ tire_barcodes หรือ wheel_barcodes แล้วหรือยัง
         existing_tire_barcode_id = database.get_tire_id_by_barcode(conn, scanned_barcode)
         existing_wheel_barcode_id = database.get_wheel_id_by_barcode(conn, scanned_barcode)
         
         if existing_tire_barcode_id or existing_wheel_barcode_id:
-            # ถ้ามีอยู่แล้วและผูกกับ item_id เดิม ก็ถือว่าสำเร็จ (ไม่ทำอะไร)
             if (item_type == 'tire' and existing_tire_barcode_id == item_id) or \
                (item_type == 'wheel' and existing_wheel_barcode_id == item_id):
                 return jsonify({"success": True, "message": f"บาร์โค้ด '{scanned_barcode}' ถูกเชื่อมโยงกับสินค้านี้อยู่แล้ว"}), 200
             else:
-                # ถ้ามีอยู่แล้วแต่ผูกกับ item_id อื่น แสดงว่าซ้ำซ้อน
                 return jsonify({"success": False, "message": f"บาร์โค้ด '{scanned_barcode}' มีอยู่ในระบบแล้ว และถูกเชื่อมโยงกับสินค้าอื่น"}), 409
 
-        # ถ้ายังไม่มีในระบบ ให้เพิ่มการเชื่อมโยงใหม่
         if item_type == 'tire':
-            database.add_tire_barcode(conn, item_id, scanned_barcode, is_primary=False) # ตั้งเป็น False เพราะเป็นบาร์โค้ดทางเลือก
+            database.add_tire_barcode(conn, item_id, scanned_barcode, is_primary=False)
         elif item_type == 'wheel':
-            database.add_wheel_barcode(conn, item_id, scanned_barcode, is_primary=False) # ตั้งเป็น False เพราะเป็นบาร์โค้ดทางเลือก
+            database.add_wheel_barcode(conn, item_id, scanned_barcode, is_primary=False)
         else:
             conn.rollback()
             return jsonify({"success": False, "message": "ประเภทสินค้าไม่ถูกต้อง (ต้องเป็น tire หรือ wheel)"}), 400
@@ -2827,7 +2912,6 @@ def api_link_barcode_to_item():
 
     except Exception as e:
         conn.rollback()
-        # ตรวจสอบข้อผิดพลาดเฉพาะเจาะจงมากขึ้นหากจำเป็น (เช่น UNIQUE constraint failed)
         return jsonify({"success": False, "message": f"เกิดข้อผิดพลาดในการเชื่อมโยงบาร์โค้ด: {str(e)}"}), 500
 
 # --- Main entry point ---

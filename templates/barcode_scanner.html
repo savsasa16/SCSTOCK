@@ -136,24 +136,26 @@
         cursor: pointer;
     }
 
-    /* สไตล์สำหรับปรับขนาดกล้องให้ responsive */
+    /* สไตล์สำหรับปรับขนาดกล้องให้ responsive (สามารถลบออกได้หากไม่มีกล้องแล้ว) */
+    /*
     #qr-reader {
-        width: 100%; /* ให้ใช้ความกว้างเต็มพื้นที่ของ container */
-        max-width: 450px; /* จำกัดความกว้างสูงสุดตามที่คุณต้องการ */
-        aspect-ratio: 450 / 250; /* รักษาสัดส่วน 450px กว้าง ต่อ 250px สูง */
-        height: auto; /* ให้ความสูงปรับตาม aspect-ratio */
-        overflow: hidden; /* ซ่อนส่วนเกิน */
+        width: 100%;
+        max-width: 450px;
+        aspect-ratio: 450 / 250;
+        height: auto;
+        overflow: hidden;
         margin: 0 auto;
-        display: none; /* ซ่อนไว้ก่อน */
+        display: none;
     }
     #qr-reader__scan_region {
-        border: 2px solid var(--primary-color); /* เพิ่มขอบให้เห็นชัดเจน */
+        border: 2px solid var(--primary-color);
     }
     #qr-reader video {
         width: 100% !important;
         height: auto !important;
-        object-fit: cover; /* ครอบคลุมพื้นที่แต่รักษาสัดส่วน */
+        object-fit: cover;
     }
+    */
 </style>
 
 <div class="barcode-scan-section">
@@ -165,9 +167,9 @@
     </div>
     <div id="scanStatus" class="flash-message"></div>
 
-    {# --- ส่วนสำหรับเปิด/ปิดกล้องสแกน --- #}
-    <div id="qr-reader"></div> {# แก้ไขตรงนี้: ลบ inline style ออก #}
-    <div id="qr-reader-results" style="text-align: center; margin-top: 10px;"></div>
+    {# --- ส่วนสำหรับเปิด/ปิดกล้องสแกน (ถูกลบออกไปแล้ว) --- #}
+    {# <div id="qr-reader"></div> #}
+    {# <div id="qr-reader-results" style="text-align: center; margin-top: 10px;"></div> #}
     {# ------------------------------------------------ #}
 
     <h3>รายการที่สแกนแล้ว</h3>
@@ -232,8 +234,8 @@
 <audio id="scanErrorSound" src="https://cdn.freesound.org/previews/516/516905_4864041-lq.mp3" preload="auto"></audio>
 {# --------------------------------------------- #}
 
-{# --- เพิ่ม Script Library ของ html5-qrcode ที่นี่ --- #}
-<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+{# --- ลบ Script Library ของ html5-qrcode ที่นี่ --- #}
+{# <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script> #}
 {# ------------------------------------------------- #}
 
 <script>
@@ -252,7 +254,7 @@
         const processOutBtn = document.getElementById('processOutBtn');
         const clearAllBtn = document.getElementById('clearAllBtn');
         // เพิ่ม: ดึง element ของช่องหมายเหตุ (คุณมีใน HTML แล้ว!)
-        const transactionNotesInput = document.getElementById('transactionNotes'); // <-- บรรทัดนี้ถูกต้องแล้ว
+        const transactionNotesInput = document.getElementById('transactionNotes');
 
         // Modal elements
         const linkBarcodeModal = document.getElementById('linkBarcodeModal');
@@ -263,31 +265,25 @@
         const searchItemResultsDiv = document.getElementById('searchItemResults');
         const goToAddItemBtn = document.getElementById('goToAddItemBtn');
 
-        // --- Camera Scan Elements ---
-        const startScanBtn = document.getElementById('startScanBtn');
-        const stopScanBtn = document.getElementById('stopScanBtn');
-        const qrReaderDiv = document.getElementById('qr-reader');
-        const qrReaderResultsDiv = document.getElementById('qr-reader-results');
-        let html5QrCode = null; // Instance for Html5Qrcode
+        // --- Camera Scan Elements (ถูกลบออกไปแล้ว) ---
+        // const startScanBtn = document.getElementById('startScanBtn');
+        // const stopScanBtn = document.getElementById('stopScanBtn');
+        // const qrReaderDiv = document.getElementById('qr-reader');
+        // const qrReaderResultsDiv = document.getElementById('qr-reader-results');
+        // let html5QrCode = null;
         // -----------------------------
 
         // --- Audio/Vibration Elements and Flags ---
         const scanSuccessSound = document.getElementById('scanSuccessSound');
-		const scanErrorSound = document.getElementById('scanErrorSound'); // <-- ดึง element เสียง Error
+		const scanErrorSound = document.getElementById('scanErrorSound');
         let currentTimeout = null; // Used for input debounce (physical scanner)
         let isProcessingScan = false; // Flag to prevent rapid processing from camera scan
-        const SCAN_COOLDOWN_TIME = 1500; // 1.5 วินาที Cooldown Time (ปรับตามความเหมาะสม)
-        let lastScannedBarcode = ''; // Keep track of the last scanned barcode from camera
-        let lastScanTime = 0; // Keep track of when the last barcode was processed from camera
+        // Removed SCAN_COOLDOWN_TIME, lastScannedBarcode, lastScanTime as they are for camera scan
         // ------------------------------------------
 
-        console.log("Elements fetched. startScanBtn:", startScanBtn, "qrReaderDiv:", qrReaderDiv);
+        // console.log("Elements fetched. startScanBtn:", startScanBtn, "qrReaderDiv:", qrReaderDiv);
+        // Removed camera-specific console.log and error check
 
-        if (!startScanBtn || !qrReaderDiv) {
-            console.error("DEBUG: Missing critical HTML elements for camera scan. Check IDs in HTML.");
-            showStatus("เกิดข้อผิดพลาด: ไม่พบ Element สำหรับกล้องสแกน", 'danger');
-        }
-        
         // Function to display messages
         function showStatus(message, type = 'info') {
             scanStatus.textContent = message;
@@ -386,67 +382,7 @@
             barcodeInput.focus(); // Keep focus on barcode input, useful for physical scanners
         }
 		
-		startScanBtn.addEventListener('click', () => {
-            qrReaderDiv.style.display = 'block';
-            stopScanBtn.style.display = 'inline-block';
-            startScanBtn.style.display = 'none';
-
-            html5QrCode = new Html5Qrcode("qr-reader");
-            html5QrCode.start(
-                { facingMode: "environment" },
-                {
-                    fps: 10,
-                    qrbox: {width: 450, height: 250}, // กำหนดขนาดของกล่องสแกน
-                    formatsToSupport: [ // เพิ่ม formatsToSupport ตรงนี้
-                        Html5QrcodeSupportedFormats.CODE_128,
-                        Html5QrcodeSupportedFormats.EAN_13,
-                        // เพิ่ม format อื่นๆ
-                    ]
-                },
-                (decodedText, decodedResult) => { // decodedText คือ barcode ที่สแกนได้
-                    // นี่คือจุดสำคัญ: เพิ่ม Debounce Logic สำหรับกล้อง
-                    const currentTime = new Date().getTime();
-                    // ตรวจสอบว่าบาร์โค้ดเหมือนเดิมหรือไม่ และผ่านช่วง Cooldown หรือยัง
-                    if (decodedText === lastScannedBarcode && (currentTime - lastScanTime) < SCAN_COOLDOWN_TIME) {
-                        console.log("Ignored duplicate scan within cooldown period:", decodedText);
-                        return; 
-                    }
-
-                    // อัปเดตค่าสำหรับ Cooldown
-                    lastScannedBarcode = decodedText;
-                    lastScanTime = currentTime;
-
-                    // เรียกใช้ฟังก์ชันประมวลผลบาร์โค้ด
-                    processScannedBarcode(decodedText);
-                },
-                errorMessage => {
-                    // แสดงเฉพาะถ้าต้องการ debug
-                    // console.warn(`QR code scan error: ${errorMessage}`);
-                }
-            ).catch(err => {
-                console.error("Failed to start scanner:", err);
-                showStatus("ไม่สามารถเปิดกล้องได้: " + err, 'danger');
-                playScanFeedback(false); // Feedback เมื่อเปิดกล้องไม่ได้
-            });
-        });
-
-        stopScanBtn.addEventListener('click', () => {
-            if (html5QrCode) {
-                html5QrCode.stop().then(() => {
-                    html5QrCode.clear();
-                    qrReaderDiv.style.display = 'none';
-                    stopScanBtn.style.display = 'none';
-                    startScanBtn.style.display = 'inline-block';
-                    // Reset cooldown flags when stopping the camera
-                    lastScannedBarcode = '';
-                    lastScanTime = 0;
-                }).catch(err => {
-                    console.error("Failed to stop scanner:", err);
-                    showStatus("ไม่สามารถปิดกล้องได้: " + err, 'danger');
-                    playScanFeedback(false); // Feedback เมื่อปิดกล้องไม่ได้
-                });
-            }
-        });
+        // Removed startScanBtn.addEventListener and stopScanBtn.addEventListener
 
         // --- ฟังก์ชันประมวลผลบาร์โค้ดที่สแกน (ใช้สำหรับทั้ง Input และกล้อง) ---
         function processScannedBarcode(barcode) {
@@ -460,17 +396,14 @@
             }
 
             // สำหรับ Physical Scanner (barcodeInput)
-            if (document.activeElement === barcodeInput || (barcodeInput.value && barcode === barcodeInput.value)) { 
-                if (currentTimeout) {
-                    clearTimeout(currentTimeout);
-                }
-                currentTimeout = setTimeout(() => {
-                    fetchAndProcess(barcode);
-                    barcodeInput.value = ''; // เคลียร์ค่า input หลังประมวลผล (สำหรับ physical scanner)
-                }, 100); // Debounce for physical scanner
-            } else { // ถ้ามาจากกล้อง (ไม่มี setTimeout เพราะจัดการ debounce ใน callback ของ html5QrCode.start แล้ว)
-                 fetchAndProcess(barcode);
+            // Removed camera-specific debounce logic
+            if (currentTimeout) {
+                clearTimeout(currentTimeout);
             }
+            currentTimeout = setTimeout(() => {
+                fetchAndProcess(barcode);
+                barcodeInput.value = ''; // เคลียร์ค่า input หลังประมวลผล (สำหรับ physical scanner)
+            }, 100); // Debounce for physical scanner
         }
 
         function fetchAndProcess(barcode) {
@@ -531,7 +464,6 @@
             if (e.key === 'Enter') {
                 e.preventDefault(); // Prevent form submission
                 const barcode = this.value.trim();
-                // this.value = ''; // ย้ายไปใน setTimeout ของ physical scanner เพื่อให้ clear หลัง debounce
                 if (barcode) {
                     processScannedBarcode(barcode); // เรียกใช้ฟังก์ชันประมวลผลรวม
                 }

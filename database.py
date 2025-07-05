@@ -73,6 +73,7 @@ def init_db(conn):
                 value1 FLOAT NOT NULL,
                 value2 FLOAT NULL,
                 is_active BOOLEAN DEFAULT TRUE,
+                 is_deleted BOOLEAN DEFAULT 0,
                 created_at TIMESTAMP WITH TIME ZONE NOT NULL
             );
         """)
@@ -85,6 +86,7 @@ def init_db(conn):
                 value1 REAL NOT NULL,
                 value2 REAL NULL,
                 is_active BOOLEAN DEFAULT 1,
+                 is_deleted BOOLEAN DEFAULT 0,
                 created_at TEXT NOT NULL
             );
         """)
@@ -293,48 +295,49 @@ def init_db(conn):
                 password TEXT NOT NULL,
                 role TEXT NOT NULL DEFAULT 'viewer'
             );
+            
         """)
+        
+        # เพิ่มส่วนนี้เข้ามา: Barcodes Table for Tires
     if is_postgres:
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS tire_barcodes (
-                barcode_string VARCHAR(255) NOT NULL UNIQUE,
+                id SERIAL PRIMARY KEY,
                 tire_id INTEGER NOT NULL,
+                barcode_string VARCHAR(255) NOT NULL UNIQUE,
                 is_primary_barcode BOOLEAN DEFAULT FALSE,
-                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-                PRIMARY KEY (barcode_string),
                 FOREIGN KEY (tire_id) REFERENCES tires(id) ON DELETE CASCADE
             );
         """)
     else: # SQLite
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS tire_barcodes (
-                barcode_string TEXT NOT NULL UNIQUE,
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
                 tire_id INTEGER NOT NULL,
+                barcode_string TEXT NOT NULL UNIQUE,
                 is_primary_barcode BOOLEAN DEFAULT 0,
-                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-                PRIMARY KEY (barcode_string),
                 FOREIGN KEY (tire_id) REFERENCES tires(id) ON DELETE CASCADE
             );
         """)
+
+    # เพิ่มส่วนนี้เข้ามา: Barcodes Table for Wheels
     if is_postgres:
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS wheel_barcodes (
-                barcode_string VARCHAR(255) NOT NULL UNIQUE,
+                id SERIAL PRIMARY KEY,
                 wheel_id INTEGER NOT NULL,
+                barcode_string VARCHAR(255) NOT NULL UNIQUE,
                 is_primary_barcode BOOLEAN DEFAULT FALSE,
-                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-                PRIMARY KEY (barcode_string),
                 FOREIGN KEY (wheel_id) REFERENCES wheels(id) ON DELETE CASCADE
             );
         """)
     else: # SQLite
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS wheel_barcodes (
-                barcode_string TEXT NOT NULL UNIQUE,
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
                 wheel_id INTEGER NOT NULL,
+                barcode_string TEXT NOT NULL UNIQUE,
                 is_primary_barcode BOOLEAN DEFAULT 0,
-                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-                PRIMARY KEY (barcode_string),
                 FOREIGN KEY (wheel_id) REFERENCES wheels(id) ON DELETE CASCADE
             );
         """)
@@ -400,15 +403,18 @@ class User:
 
 # --- User Management Functions ---
 def add_user(conn, username, password, role='viewer'):
+    # อิงจากโค้ดเดิม: ฟังก์ชันนี้รับ 'conn' เป็นพารามิเตอร์ และใช้ generate_password_hash
+    # ไม่มีอะไรเปลี่ยนแปลงในฟังก์ชันนี้ เพราะมันทำงานได้ถูกต้องอยู่แล้วสำหรับการเพิ่มผู้ใช้
+    # และค่า role='viewer' ที่เป็น default ทำให้เราสามารถระบุ role ใหม่ได้โดยตรง
     hashed_password = generate_password_hash(password)
-    cursor = conn.cursor()
+    cursor = conn.cursor() # บรรทัดนี้ยังคงจำเป็นสำหรับ add_user เพราะมีการใช้ cursor.lastrowid/fetchone()
     try:
         if "psycopg2" in str(type(conn)):
             cursor.execute("INSERT INTO users (username, password, role) VALUES (%s, %s, %s) RETURNING id", (username, hashed_password, role))
             user_id = cursor.fetchone()['id']
-        else:
+        else: # สำหรับ SQLite
             cursor.execute("INSERT INTO users (username, password, role) VALUES (?, ?, ?)", (username, hashed_password, role))
-            user_id = cursor.lastrowid
+            user_id = cursor.lastrowid # จำเป็นต้องใช้ cursor.lastrowid
         conn.commit()
         return user_id
     except (sqlite3.IntegrityError, Exception) as e:
@@ -417,13 +423,32 @@ def add_user(conn, username, password, role='viewer'):
         else:
             raise
 
-def update_user_role(conn, user_id, new_role):
-    cursor = conn.cursor()
+def get_all_users(conn):
+    # อิงจากโค้ดเดิม: รับ 'conn' เป็นพารามิเตอร์
+    # การเปลี่ยนแปลง: สำหรับ SQLite จะใช้ conn.execute() โดยตรง เพื่อให้สอดคล้องกับ app.py เดิมของคุณ
     if "psycopg2" in str(type(conn)):
-        cursor.execute("UPDATE users SET role = %s WHERE id = %s", (new_role, user_id))
-    else:
-        cursor.execute("UPDATE users SET role = ? WHERE id = ?", (new_role, user_id))
-    conn.commit()
+        cursor = conn.cursor() # จำเป็นสำหรับ psycopg2
+        cursor.execute("SELECT id, username, role FROM users")
+        users = cursor.fetchall()
+    else: # สำหรับ SQLite
+        users = conn.execute("SELECT id, username, role FROM users").fetchall()
+    return users
+
+def update_user_role(conn, user_id, new_role):
+    # อิงจากโค้ดเดิม: รับ 'conn' เป็นพารามิเตอร์
+    # การเปลี่ยนแปลง: สำหรับ SQLite จะใช้ conn.execute() โดยตรง
+    try:
+        if "psycopg2" in str(type(conn)):
+            cursor = conn.cursor() # จำเป็นสำหรับ psycopg2
+            cursor.execute("UPDATE users SET role = %s WHERE id = %s", (new_role, user_id))
+        else: # สำหรับ SQLite
+            conn.execute("UPDATE users SET role = ? WHERE id = ?", (new_role, user_id))
+        conn.commit()
+        return True
+    except Exception as e:
+        conn.rollback()
+        print(f"Error updating user role: {e}")
+        return False
 
 def delete_user(conn, user_id):
     cursor = conn.cursor()
@@ -432,6 +457,8 @@ def delete_user(conn, user_id):
     else:
         cursor.execute("DELETE FROM users WHERE id = ?", (user_id,))
     conn.commit()
+
+
 
 # --- Promotion Functions ---
 def add_promotion(conn, name, promo_type, value1, value2, is_active):
@@ -465,21 +492,41 @@ def get_promotion(conn, promo_id):
 
 def get_all_promotions(conn, include_inactive=False):
     cursor = conn.cursor()
-    sql_query = "SELECT * FROM promotions"
-    params = []
-    if not include_inactive:
-        sql_query += " WHERE is_active = TRUE" if "psycopg2" in str(type(conn)) else " WHERE is_active = 1"
-    sql_query += " ORDER BY name"
     if "psycopg2" in str(type(conn)):
-        cursor.execute(sql_query, params)
-    else:
-        cursor.execute(sql_query, params)
-    promotions_data = cursor.fetchall()
-    if all(isinstance(row, sqlite3.Row) for row in promotions_data):
-        processed_promotions = [dict(row) for row in promotions_data]
-    else:
-        processed_promotions = promotions_data
-    return processed_promotions
+        query = "SELECT id, name, type, value1, value2, is_active, created_at FROM promotions"
+        if not include_inactive:
+            query += " WHERE is_active = TRUE AND is_deleted = FALSE"
+        query += " ORDER BY created_at DESC"
+        cursor.execute(query)
+    else: # SQLite
+        query = "SELECT id, name, type, value1, value2, is_active, created_at FROM promotions"
+        if not include_inactive:
+            query += " WHERE is_active = 1 AND is_deleted = 0"
+        query += " ORDER BY created_at DESC"
+        cursor.execute(query)
+
+    promotions = cursor.fetchall()
+
+    # แก้ไขส่วนนี้: Convert created_at to datetime objects for SQLite using fromisoformat
+    if "sqlite3" in str(type(conn)):
+        bkk_tz = pytz.timezone('Asia/Bangkok') # Ensure BKK_TZ is defined or imported
+        converted_promotions = []
+        for promo in promotions:
+            promo_dict = dict(promo) # Convert sqlite3.Row to a dictionary
+            if promo_dict['created_at']:
+                try:
+                    # Use fromisoformat for ISO 8601 strings (including timezone offset)
+                    dt_obj = datetime.fromisoformat(promo_dict['created_at'])
+                    # Ensure it's in BKK timezone (it might already be timezone-aware from fromisoformat)
+                    # and convert if necessary
+                    promo_dict['created_at'] = dt_obj.astimezone(bkk_tz)
+                except ValueError:
+                    print(f"Warning: Could not parse created_at string with fromisoformat: {promo_dict['created_at']}")
+                    promo_dict['created_at'] = None # Set to None if parsing fails
+            converted_promotions.append(promo_dict)
+        return converted_promotions
+
+    return promotions
 
 def update_promotion(conn, promo_id, name, promo_type, value1, value2, is_active):
     cursor = conn.cursor()

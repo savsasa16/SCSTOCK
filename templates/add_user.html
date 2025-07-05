@@ -5,30 +5,129 @@
 {% block content %}
 <h2>เพิ่มผู้ใช้ใหม่</h2>
 
-<div class="form-section">
-    <form action="{{ url_for('add_new_user') }}" method="post">
-        <div class="form-group">
-            <label for="username">ชื่อผู้ใช้:</label>
-            <input type="text" id="username" name="username" required>
+{% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+        <div class="flashes">
+            {% for category, message in messages %}
+                <div class="alert alert-{{ category }}">{{ message }}</div>
+            {% endfor %}
         </div>
-        <div class="form-group">
-            <label for="password">รหัสผ่าน:</label>
-            <input type="password" id="password" name="password" required>
-        </div>
-        <div class="form-group">
-            <label for="confirm_password">ยืนยันรหัสผ่าน:</label>
-            <input type="password" id="confirm_password" name="confirm_password" required>
-        </div>
-        <div class="form-group"> {# NEW: Role Selection #}
-            <label for="role">บทบาท:</label>
-            <select id="role" name="role" required>
-                <option value="viewer">Viewer (ดูได้อย่างเดียว)</option>
-                <option value="editor">Editor (ดู, เพิ่ม, แก้ไข, ลบสต็อก)</option>
-                <option value="admin">Admin (ทุกอย่าง + จัดการผู้ใช้)</option>
-            </select>
-        </div>
-        <button type="submit" class="btn btn-primary"><i class="fas fa-plus"></i> เพิ่มผู้ใช้</button>
-        <a href="{{ url_for('manage_users') }}" class="btn btn-outline" style="margin-left: 10px;"><i class="fas fa-arrow-left"></i> ยกเลิก</a>
-    </form>
-</div>
+    {% endif %}
+{% endwith %}
+
+<form method="POST" action="{{ url_for('add_new_user') }}">
+    <div class="form-group">
+        <label for="username">ชื่อผู้ใช้:</label>
+        <input type="text" id="username" name="username" class="form-control" required>
+    </div>
+    {# ส่วนของอีเมลถูกลบออกตามคำขอของผู้ใช้ #}
+    <div class="form-group">
+        <label for="password">รหัสผ่าน:</label>
+        <input type="password" id="password" name="password" class="form-control" required>
+    </div>
+    <div class="form-group">
+        <label for="confirm_password">ยืนยันรหัสผ่าน:</label> {# เพิ่มช่องยืนยันรหัสผ่าน #}
+        <input type="password" id="confirm_password" name="confirm_password" class="form-control" required>
+    </div>
+    <div class="form-group">
+        <label for="role">บทบาท:</label>
+        <select id="role" name="role" class="form-control">
+            <option value="viewer">ผู้เข้าชม (Viewer)</option>
+            <option value="retail_sales">พนักงานขายปลีก (Retail Sales)</option>
+            <option value="wholesale_sales">พนักงานขายส่ง (Wholesale Sales)</option>
+            <option value="editor">ผู้แก้ไข (Editor)</option>
+            <option value="admin">ผู้ดูแลระบบ (Admin)</option>
+        </select>
+    </div>
+    <button type="submit" class="btn btn-primary"><i class="fas fa-plus"></i> เพิ่มผู้ใช้</button>
+    <a href="{{ url_for('manage_users') }}" class="btn btn-secondary">ยกเลิก</a>
+</form>
+
+<style>
+    /* เพิ่ม CSS สำหรับฟอร์ม */
+    form {
+        max-width: 600px;
+        margin: 20px auto;
+        padding: 20px;
+        background-color: var(--bg-white);
+        border-radius: var(--border-radius-md);
+        box-shadow: var(--shadow-light);
+    }
+    .form-group {
+        margin-bottom: 15px;
+    }
+    .form-group label {
+        display: block;
+        margin-bottom: 5px;
+        font-weight: bold;
+    }
+    .form-control {
+        width: 100%;
+        padding: 10px;
+        border: 1px solid var(--border-color);
+        border-radius: var(--border-radius);
+        box-sizing: border-box;
+    }
+    .form-check {
+        display: flex;
+        align-items: center;
+        margin-bottom: 15px;
+    }
+    .form-check-input {
+        margin-right: 10px;
+        width: auto; /* Override .form-control width */
+    }
+    .btn {
+        padding: 10px 15px;
+        border-radius: var(--border-radius);
+        cursor: pointer;
+        font-weight: bold;
+        text-decoration: none;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 5px;
+    }
+    .btn-primary {
+        background-color: var(--primary-color);
+        color: white;
+        border: 1px solid var(--primary-color);
+    }
+    .btn-primary:hover {
+        background-color: var(--primary-dark);
+        border-color: var(--primary-dark);
+    }
+    .btn-secondary {
+        background-color: var(--btn-secondary-bg);
+        color: var(--text-color-secondary);
+        border: 1px solid var(--border-color);
+        margin-left: 10px;
+    }
+    .btn-secondary:hover {
+        background-color: var(--btn-secondary-hover-bg);
+    }
+    .flashes {
+        margin-bottom: 20px;
+    }
+    .alert {
+        padding: 10px;
+        margin-bottom: 10px;
+        border-radius: var(--border-radius);
+    }
+    .alert-success {
+        background-color: #d4edda;
+        color: #155724;
+        border-color: #c3e6cb;
+    }
+    .alert-danger {
+        background-color: #f8d7da;
+        color: #721c24;
+        border-color: #f5c6cb;
+    }
+    .alert-warning {
+        background-color: #fff3cd;
+        color: #856404;
+        border-color: #ffeeba;
+    }
+</style>
 {% endblock %}
