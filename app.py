@@ -1888,12 +1888,14 @@ def summary_stock_report():
         query_result_obj = conn.execute(tire_movements_query_sql.replace('%s', '?'), (start_of_period_iso, end_of_period_iso))
         tire_movements_by_brand_raw = query_result_obj.fetchall()
     
+    print(f"DEBUG: tire_detailed_movements_raw (raw from DB): {tire_detailed_movements_raw}") # This will still show Decimal as it's raw data
+
     tire_movements_by_brand = defaultdict(lambda: {'IN': 0, 'OUT': 0})
     for movement_row in tire_movements_by_brand_raw: 
         row_data = dict(movement_row) 
         brand = row_data['brand']
         move_type = row_data['type']
-        # Explicitly convert to int here
+        # Explicitly convert to int here - CONFIRMED: This conversion is present.
         total_qty = int(row_data['total_quantity']) 
         tire_movements_by_brand[brand][move_type] = total_qty
 
@@ -1915,17 +1917,19 @@ def summary_stock_report():
         query_result_obj = conn.execute(wheel_movements_query_sql.replace('%s', '?'), (start_of_period_iso, end_of_period_iso))
         wheel_movements_by_brand_raw = query_result_obj.fetchall()
     
+    print(f"DEBUG: wheel_detailed_movements_raw (raw from DB): {wheel_movements_by_brand_raw}") # This will still show Decimal as it's raw data
+
     wheel_movements_by_brand = defaultdict(lambda: {'IN': 0, 'OUT': 0})
     for row in wheel_movements_by_brand_raw: 
         row_data = dict(row) 
         brand = row_data['brand']
         move_type = row_data['type']
-        # Explicitly convert to int here
+        # Explicitly convert to int here - CONFIRMED: This conversion is present.
         total_qty = int(row_data['total_quantity']) 
         wheel_movements_by_brand[brand][move_type] = total_qty
 
     # --- Calculate overall totals for the summary section ---
-    # Explicitly convert to int here
+    # Explicitly convert to int here - CONFIRMED: These conversions are present.
     overall_tire_in_period = int(sum(data['IN'] for data in tire_movements_by_brand.values()))
     overall_tire_out_period = int(sum(data['OUT'] for data in tire_movements_by_brand.values()))
     overall_wheel_in_period = int(sum(data['IN'] for data in wheel_movements_by_brand.values()))
@@ -1940,12 +1944,12 @@ def summary_stock_report():
     if is_psycopg2_conn:
         cursor = conn.cursor() # New cursor
         cursor.execute(query_overall_initial_tires, (start_of_period_iso,))
-        # Explicitly convert to int here
+        # Explicitly convert to int here - CONFIRMED: This conversion is present.
         overall_tire_initial = int(cursor.fetchone()[0] or 0) 
         cursor.close() # Close cursor
     else:
         query_result_obj = conn.execute(query_overall_initial_tires.replace('%s', '?'), (start_of_period_iso,))
-        # Explicitly convert to int here
+        # Explicitly convert to int here - CONFIRMED: This conversion is present.
         overall_tire_initial = int(query_result_obj.fetchone()[0] or 0) 
 
     query_overall_initial_wheels = f"""
@@ -1956,12 +1960,12 @@ def summary_stock_report():
     if is_psycopg2_conn:
         cursor = conn.cursor() # New cursor
         cursor.execute(query_overall_initial_wheels, (start_of_period_iso,))
-        # Explicitly convert to int here
+        # Explicitly convert to int here - CONFIRMED: This conversion is present.
         overall_wheel_initial = int(cursor.fetchone()[0] or 0)
         cursor.close() # Close cursor
     else:
         query_result_obj = conn.execute(query_overall_initial_wheels.replace('%s', '?'), (start_of_period_iso,))
-        # Explicitly convert to int here
+        # Explicitly convert to int here - CONFIRMED: This conversion is present.
         overall_wheel_initial = int(query_result_obj.fetchone()[0] or 0)
 
     # Total final stock (initial + movements within period)
@@ -2018,8 +2022,6 @@ def summary_stock_report():
         query_result_obj = conn.execute(tire_detailed_movements_query.replace('%s', '?'), tire_params)
         tire_detailed_movements_raw = query_result_obj.fetchall()
 
-    print(f"DEBUG: tire_detailed_movements_raw: {tire_detailed_movements_raw}")
-
     # Process data for tires_by_brand_for_summary_report
     tires_by_brand_for_summary_report = OrderedDict()
     for row_data_raw in tire_detailed_movements_raw: 
@@ -2028,7 +2030,7 @@ def summary_stock_report():
         if brand not in tires_by_brand_for_summary_report:
             tires_by_brand_for_summary_report[brand] = []
         
-        # Explicitly convert to int here
+        # Explicitly convert to int here - CONFIRMED: This conversion is present.
         initial_qty = int(row.get('initial_qty_before_period', 0)) 
         in_qty = int(row.get('IN_qty', 0)) 
         out_qty = int(row.get('OUT_qty', 0)) 
@@ -2043,6 +2045,7 @@ def summary_stock_report():
             'OUT': out_qty,
             'final_quantity': final_qty,
         })
+    print(f"DEBUG: tires_by_brand_for_summary_report (after int conversion): {tires_by_brand_for_summary_report}") # NEW DEBUG LINE
     
     # --- NEW: สำหรับรายงานการเคลื่อนไหวสต็อกล้อแม็กตามยี่ห้อและขนาด (wheels_by_brand_for_summary_report) ---
     # Binding parameters for wheel_detailed_movements_query:
@@ -2093,8 +2096,6 @@ def summary_stock_report():
         query_result_obj = conn.execute(wheel_detailed_movements_query.replace('%s', '?'), wheel_params)
         wheel_detailed_movements_raw = query_result_obj.fetchall()
 
-    print(f"DEBUG: wheel_detailed_movements_raw: {wheel_detailed_movements_raw}")
-
     # Process data for wheels_by_brand_for_summary_report
     wheels_by_brand_for_summary_report = OrderedDict()
     for row_data_raw in wheel_detailed_movements_raw: 
@@ -2103,7 +2104,7 @@ def summary_stock_report():
         if brand not in wheels_by_brand_for_summary_report:
             wheels_by_brand_for_summary_report[brand] = []
         
-        # Explicitly convert to int here
+        # Explicitly convert to int here - CONFIRMED: This conversion is present.
         initial_qty = int(row.get('initial_qty_before_period', 0)) 
         in_qty = int(row.get('IN_qty', 0)) 
         out_qty = int(row.get('OUT_qty', 0)) 
@@ -2122,6 +2123,8 @@ def summary_stock_report():
             'OUT': out_qty,
             'final_quantity': final_qty,
         })
+    print(f"DEBUG: wheels_by_brand_for_summary_report (after int conversion): {wheels_by_brand_for_summary_report}") # NEW DEBUG LINE
+
     # --- For summary totals by tire brand (tire_brand_totals_for_summary_report) ---
     tire_brand_totals_for_summary_report = OrderedDict()
     for brand, data in tire_movements_by_brand.items():
@@ -2134,15 +2137,15 @@ def summary_stock_report():
         if is_psycopg2_conn:
             cursor = conn.cursor() # New cursor
             cursor.execute(query_brand_initial_tire, (brand, start_of_period_iso))
-            # Explicitly convert to int here
+            # Explicitly convert to int here - CONFIRMED: This conversion is present.
             brand_initial_qty = int(cursor.fetchone()[0] or 0)
             cursor.close() # Close cursor
         else:
             query_result_obj = conn.execute(query_brand_initial_tire.replace('%s', '?'), (brand, start_of_period_iso))
-            # Explicitly convert to int here
+            # Explicitly convert to int here - CONFIRMED: This conversion is present.
             brand_initial_qty = int(query_result_obj.fetchone()[0] or 0)
 
-        # Explicitly convert to int here
+        # Explicitly convert to int here - CONFIRMED: These conversions are present.
         total_in_brand = int(data.get('IN', 0))
         total_out_brand = int(data.get('OUT', 0))
         final_qty_brand = brand_initial_qty + total_in_brand - total_out_brand
@@ -2152,6 +2155,7 @@ def summary_stock_report():
             'OUT': total_out_brand,
             'final_quantity_sum': final_qty_brand,
         }
+    print(f"DEBUG: tire_brand_totals_for_summary_report (after int conversion): {tire_brand_totals_for_summary_report}") # NEW DEBUG LINE
 
     # --- For summary totals by wheel brand (wheel_brand_totals_for_summary_report) ---
     wheel_brand_totals_for_summary_report = OrderedDict()
@@ -2165,15 +2169,15 @@ def summary_stock_report():
         if is_psycopg2_conn:
             cursor = conn.cursor() # New cursor
             cursor.execute(query_brand_initial_wheel, (brand, start_of_period_iso))
-            # Explicitly convert to int here
+            # Explicitly convert to int here - CONFIRMED: This conversion is present.
             brand_initial_qty = int(cursor.fetchone()[0] or 0)
             cursor.close() # Close cursor
         else:
             query_result_obj = conn.execute(query_brand_initial_wheel.replace('%s', '?'), (brand, start_of_period_iso))
-            # Explicitly convert to int here
+            # Explicitly convert to int here - CONFIRMED: This conversion is present.
             brand_initial_qty = int(query_result_obj.fetchone()[0] or 0)
 
-        # Explicitly convert to int here
+        # Explicitly convert to int here - CONFIRMED: These conversions are present.
         total_in_brand = int(data.get('IN', 0))
         total_out_brand = int(data.get('OUT', 0))
         final_qty_brand = brand_initial_qty + total_in_brand - total_out_brand
@@ -2183,6 +2187,7 @@ def summary_stock_report():
             'OUT': total_out_brand,
             'final_quantity_sum': final_qty_brand,
         }
+    print(f"DEBUG: wheel_brand_totals_for_summary_report (after int conversion): {wheel_brand_totals_for_summary_report}") # NEW DEBUG LINE
 
     return render_template('summary_stock_report.html',
                            start_date_param=start_date_obj.strftime('%Y-%m-%d'),
