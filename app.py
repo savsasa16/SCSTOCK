@@ -272,7 +272,11 @@ def process_tire_report_data(all_tires, current_user_obj, include_summary_in_out
             'display_promo_price_per_item': tire_dict['display_promo_price_per_item'],
             'display_price_for_4': tire_dict['display_price_for_4'], # This will be the promo price for retail_sales if active, else regular
             'year_of_manufacture': tire_dict['year_of_manufacture'],
-            'id': tire_dict['id']
+            'id': tire_dict['id'],
+            # NEW: เพิ่มฟิลด์ cost_sc, cost_dunlop, cost_online เข้าไปใน dictionary ที่จะส่งให้ template
+            'cost_sc': tire_dict.get('cost_sc'),
+            'cost_dunlop': tire_dict.get('cost_dunlop'),
+            'cost_online': tire_dict.get('cost_online')
         })
         brand_quantities[brand] += tire_dict['quantity']
 
@@ -312,7 +316,11 @@ def process_wheel_report_data(all_wheels, include_summary_in_output=True):
             'cost': wheel['cost'],
             'retail_price': wheel['retail_price'],
             'image_filename': wheel['image_filename'],
-            'id': wheel['id']
+            'id': wheel['id'],
+            # ตรวจสอบให้แน่ใจว่า cost_online, wholesale_price1, wholesale_price2 ถูกส่งผ่านด้วย
+            'cost_online': wheel.get('cost_online'),
+            'wholesale_price1': wheel.get('wholesale_price1'),
+            'wholesale_price2': wheel.get('wholesale_price2')
         })
         brand_quantities[brand] += wheel['quantity']
 
@@ -1106,12 +1114,9 @@ def delete_fitment(fitment_id, wheel_id):
 @app.route('/stock_movement', methods=('GET', 'POST'))
 @login_required
 def stock_movement():
-    # Check permission directly inside the route function
-    # Only admin and editor can adjust stock manually
-    if not current_user.can_edit(): # Admin or Editor
+    if not current_user.can_edit():
         flash('คุณไม่มีสิทธิ์ในการจัดการการเคลื่อนไหวสต็อก', 'danger')
         return redirect(url_for('index'))
-        
     conn = get_db()
 
     tires = database.get_all_tires(conn)
@@ -1119,7 +1124,7 @@ def stock_movement():
     
     active_tab = request.args.get('tab', 'tire_movements') 
 
-    # --- For Tire Movements History ---
+    # --- สำหรับ Tire Movements History ---
     tire_movements_query = """
         SELECT tm.*, t.brand, t.model, t.size, u.username AS user_username
         FROM tire_movements tm
@@ -1142,7 +1147,7 @@ def stock_movement():
     tire_movements_history = processed_tire_movements_history
 
 
-    # --- For Wheel Movements History ---
+    # --- สำหรับ Wheel Movements History ---
     wheel_movements_query = """
         SELECT wm.*, w.brand, w.model, w.diameter, u.username AS user_username
         FROM wheel_movements wm
@@ -1223,10 +1228,12 @@ def stock_movement():
                 if move_type == 'IN':
                     new_quantity += quantity_change
                 elif move_type == 'OUT':
+                    print(f"DEBUG: ก่อนการจ่ายออก: current_quantity={current_tire['quantity']}, quantity_change={quantity_change}, move_type={move_type}")
                     if new_quantity < quantity_change:
                         flash(f'สต็อกยางไม่พอสำหรับการจ่ายออก. มีเพียง {new_quantity} เส้น.', 'danger')
                         return redirect(url_for('stock_movement', tab=active_tab_on_error))
                     new_quantity -= quantity_change
+                    print(f"DEBUG: หลังการจ่ายออก: new_quantity={new_quantity}")
                 
                 database.update_tire_quantity(conn, tire_id, new_quantity)
                 database.add_tire_movement(conn, tire_id, move_type, quantity_change, new_quantity, notes, bill_image_url_to_db, user_id=current_user_id)
@@ -1266,8 +1273,7 @@ def stock_movement():
                            wheels=wheels, 
                            active_tab=active_tab,
                            tire_movements=tire_movements_history, 
-                           wheel_movements=wheel_movements_history,
-                           current_user=current_user)
+                           wheel_movements=wheel_movements_history)
 
 @app.route('/edit_tire_movement/<int:movement_id>', methods=['GET', 'POST'])
 @login_required
@@ -1916,11 +1922,11 @@ def summary_stock_report():
     if is_psycopg2_conn:
         cursor = conn.cursor() # New cursor
         cursor.execute(query_overall_initial_tires, (start_of_period_iso,))
-        overall_tire_initial = cursor.fetchone()[0] or 0
+        overall_tire_initial = cursor.fetchone()[0] or 0 
         cursor.close() # Close cursor
     else:
         query_result_obj = conn.execute(query_overall_initial_tires.replace('%s', '?'), (start_of_period_iso,))
-        overall_tire_initial = query_result_obj.fetchone()[0] or 0
+        overall_tire_initial = query_result_obj.fetchone()[0] or 0 
 
     query_overall_initial_wheels = f"""
         SELECT COALESCE(SUM(CASE WHEN type = 'IN' THEN quantity_change ELSE -quantity_change END), 0)
@@ -1942,28 +1948,30 @@ def summary_stock_report():
 
     # --- NEW: สำหรับรายงานการเคลื่อนไหวสต็อกยางตามยี่ห้อและขนาด (tires_by_brand_for_summary_report) ---
     # Binding parameters for tire_detailed_movements_query:
-    # 1. initial_qty_before_period: (%s) -> start_of_period_iso
-    # 2. IN_qty: (%s, %s) -> start_of_period_iso, end_of_period_iso
-    # 3. OUT_qty: (%s, %s) -> start_of_period_iso, end_of_period_iso
+    # 1. IN_qty: (%s, %s) -> start_of_period_iso, end_of_period_iso
+    # 2. OUT_qty: (%s, %s) -> start_of_period_iso, end_of_period_iso
+    # 3. initial_qty_before_period: (%s) -> start_of_period_iso
     # 4. INNER JOIN: (%s, %s) -> start_of_period_iso, end_of_period_iso
     # 5. HAVING: (%s, %s) -> start_of_period_iso, end_of_period_iso
-    # Total: 1 + 2 + 2 + 2 + 2 = 9 bindings.
+    # Total: 2 + 2 + 1 + 2 + 2 = 9 bindings.
     tire_detailed_movements_query = f"""
         SELECT
-            t.brand, t.model, t.size,
+            t.id AS tire_id,
+            t.brand,
+            t.model, 
+            t.size,
             COALESCE(SUM(CASE WHEN tm.type = 'IN' AND tm.timestamp BETWEEN %s AND %s THEN tm.quantity_change ELSE 0 END), 0) AS IN_qty,  
             COALESCE(SUM(CASE WHEN tm.type = 'OUT' AND tm.timestamp BETWEEN %s AND %s THEN tm.quantity_change ELSE 0 END), 0) AS OUT_qty, 
-            COALESCE(( 
+            COALESCE((  
                 SELECT SUM(CASE WHEN prev_tm.type = 'IN' THEN prev_tm.quantity_change ELSE -prev_tm.quantity_change END)
                 FROM tire_movements prev_tm
                 WHERE prev_tm.tire_id = t.id AND prev_tm.timestamp < %s
-            ), 0) AS initial_qty_before_period,
-            t.id AS tire_id 
-        FROM tires t 
-        INNER JOIN tire_movements tm ON tm.tire_id = t.id AND tm.timestamp BETWEEN %s AND %s 
-        WHERE t.is_deleted = FALSE 
-        GROUP BY t.id, t.brand, t.model, t.size 
-        HAVING SUM(CASE WHEN tm.timestamp BETWEEN %s AND %s THEN tm.quantity_change ELSE 0 END) > 0 
+            ), 0) AS initial_qty_before_period
+        FROM tires t  
+        INNER JOIN tire_movements tm ON tm.tire_id = t.id AND tm.timestamp BETWEEN %s AND %s  
+        WHERE t.is_deleted = FALSE  
+        GROUP BY t.id, t.brand, t.model, t.size  
+        HAVING SUM(CASE WHEN tm.timestamp BETWEEN %s AND %s THEN tm.quantity_change ELSE 0 END) > 0  
         ORDER BY t.brand, t.model, t.size;
     """
     
@@ -2010,28 +2018,30 @@ def summary_stock_report():
     
     # --- NEW: สำหรับรายงานการเคลื่อนไหวสต็อกล้อแม็กตามยี่ห้อและขนาด (wheels_by_brand_for_summary_report) ---
     # Binding parameters for wheel_detailed_movements_query:
-    # 1. initial_qty_before_period: (%s) -> start_of_period_iso
-    # 2. IN_qty: (%s, %s) -> start_of_period_iso, end_of_period_iso
-    # 3. OUT_qty: (%s, %s) -> start_of_period_iso, end_of_period_iso
+    # 1. IN_qty: (%s, %s) -> start_of_period_iso, end_of_period_iso
+    # 2. OUT_qty: (%s, %s) -> start_of_period_iso, end_of_period_iso
+    # 3. initial_qty_before_period: (%s) -> start_of_period_iso
     # 4. INNER JOIN: (%s, %s) -> start_of_period_iso, end_of_period_iso
     # 5. HAVING: (%s, %s) -> start_of_period_iso, end_of_period_iso
-    # Total: 1 + 2 + 2 + 2 + 2 = 9 bindings.
+    # Total: 2 + 2 + 1 + 2 + 2 = 9 bindings.
     wheel_detailed_movements_query = f"""
         SELECT
+            w.id AS wheel_id,
             w.brand, w.model, w.diameter, w.pcd, w.width,
+            w.et, 
+            w.color, 
             COALESCE(SUM(CASE WHEN wm.type = 'IN' AND wm.timestamp BETWEEN %s AND %s THEN wm.quantity_change ELSE 0 END), 0) AS IN_qty,  
             COALESCE(SUM(CASE WHEN wm.type = 'OUT' AND wm.timestamp BETWEEN %s AND %s THEN wm.quantity_change ELSE 0 END), 0) AS OUT_qty, 
-            COALESCE(( 
+            COALESCE((  
                 SELECT SUM(CASE WHEN prev_wm.type = 'IN' THEN prev_wm.quantity_change ELSE -prev_wm.quantity_change END)
                 FROM wheel_movements prev_wm
                 WHERE prev_wm.wheel_id = w.id AND prev_wm.timestamp < %s
-            ), 0) AS initial_qty_before_period,
-            w.id AS wheel_id
-        FROM wheels w 
-        INNER JOIN wheel_movements wm ON wm.wheel_id = w.id AND wm.timestamp BETWEEN %s AND %s 
-        WHERE w.is_deleted = FALSE 
-        GROUP BY w.id, w.brand, w.model, w.diameter, w.pcd, w.width
-        HAVING SUM(CASE WHEN wm.timestamp BETWEEN %s AND %s THEN wm.quantity_change ELSE 0 END) > 0 
+            ), 0) AS initial_qty_before_period
+        FROM wheels w  
+        INNER JOIN wheel_movements wm ON wm.wheel_id = w.id AND wm.timestamp BETWEEN %s AND %s  
+        WHERE w.is_deleted = FALSE  
+        GROUP BY w.id, w.brand, w.model, w.diameter, w.pcd, w.width, w.et, w.color 
+        HAVING SUM(CASE WHEN wm.timestamp BETWEEN %s AND %s THEN wm.quantity_change ELSE 0 END) > 0  
         ORDER BY w.brand, w.model, w.diameter;
     """
     # Corrected parameter list based on 9 bindings required
@@ -2071,6 +2081,8 @@ def summary_stock_report():
             'diameter': row['diameter'],
             'pcd': row['pcd'],
             'width': row['width'],
+            'et': row['et'],       
+            'color': row['color'], 
             'initial_quantity': initial_qty,
             'IN': in_qty,
             'OUT': out_qty,
@@ -2150,7 +2162,7 @@ def summary_stock_report():
                            wheels_by_brand_for_summary_report=wheels_by_brand_for_summary_report,
                            tire_brand_totals_for_summary_report=tire_brand_totals_for_summary_report,
                            wheel_brand_totals_for_summary_report=wheel_brand_totals_for_summary_report,
-                           current_user=current_user # Pass current_user to template
+                           current_user=current_user 
                           )
 
 
@@ -2528,7 +2540,7 @@ def import_wheels_action():
                             cursor.execute("SELECT id, brand, model, diameter, pcd, width, quantity FROM wheels WHERE brand = %s AND model = %s AND diameter = %s AND pcd = %s AND width = %s", 
                                         (brand, model, diameter, pcd, width))
                         else:
-                            cursor.execute("SELECT id, brand, model, diameter, pcd, width, quantity FROM wheels WHERE brand = ? AND model = ? AND diameter = ? AND pcd = ? AND width = ?", 
+                            cursor.execute("SELECT id, brand, model, diameter = ? AND pcd = ? AND width = ?", 
                                         (brand, model, diameter, pcd, width))
                         
                         found_wheel_data = cursor.fetchone()
