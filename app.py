@@ -1420,6 +1420,7 @@ def daily_stock_report():
         report_datetime_obj = get_bkk_time().replace(hour=0, minute=0, second=0, microsecond=0)
         display_date_str = report_datetime_obj.strftime('%d %b %Y')
     
+    # แก้ไข: ใช้ชื่อตัวแปรที่ถูกต้อง 'start_of_report_day_iso'
     start_of_report_day_iso = report_datetime_obj.isoformat()    
 
     report_date = report_datetime_obj.date()
@@ -1524,7 +1525,7 @@ def daily_stock_report():
             detailed_tire_report[key]['IN'] += movement['quantity_change']
             detailed_tire_report[key]['remaining_quantity'] += movement['quantity_change']
         elif movement['type'] == 'OUT':
-            detailed_tire_report[key]['OUT'] -= movement['quantity_change']
+            detailed_tire_report[key]['OUT'] += movement['quantity_change'] # แก้ไข: เปลี่ยนจาก -= เป็น += เพื่อสะสมยอดจ่ายออก
             detailed_tire_report[key]['remaining_quantity'] -= movement['quantity_change']
     
     for tire_id, qty in tire_quantities_before_report.items():
@@ -1680,7 +1681,7 @@ def daily_stock_report():
             detailed_wheel_report[key]['IN'] += movement['quantity_change']
             detailed_wheel_report[key]['remaining_quantity'] += movement['quantity_change']
         elif movement['type'] == 'OUT':
-            detailed_wheel_report[key]['OUT'] -= movement['quantity_change']
+            detailed_wheel_report[key]['OUT'] += movement['quantity_change'] # แก้ไข: เปลี่ยนจาก -= เป็น +=
             detailed_wheel_report[key]['remaining_quantity'] -= movement['quantity_change']
     
     for wheel_id, qty in wheel_quantities_before_report.items():
@@ -1751,11 +1752,11 @@ def daily_stock_report():
     """
     if is_psycopg2_conn:
         cursor = conn.cursor() # New cursor
-        cursor.execute(query_total_before_tires, (start_of_report_day_iso,))
+        cursor.execute(query_total_before_tires, (start_of_report_day_iso,)) # แก้ไข: ใช้ start_of_report_day_iso
         initial_total_tires = cursor.fetchone()[0] or 0 
         cursor.close() # Close cursor
     else:
-        query_result_obj = conn.execute(query_total_before_tires.replace('%s', '?'), (start_of_report_day_iso,))
+        query_result_obj = conn.execute(query_total_before_tires.replace('%s', '?'), (start_of_report_day_iso,)) # แก้ไข: ใช้ start_of_report_day_iso
         initial_total_tires = query_result_obj.fetchone()[0] or 0 
     
     tire_total_remaining_for_report_date = initial_total_tires + tire_total_in - tire_total_out
@@ -1772,11 +1773,11 @@ def daily_stock_report():
     """
     if is_psycopg2_conn:
         cursor = conn.cursor() # New cursor
-        cursor.execute(query_total_before_wheels, (start_of_report_day_iso,))
+        cursor.execute(query_total_before_wheels, (start_of_report_day_iso,)) # แก้ไข: ใช้ start_of_report_day_iso
         initial_total_wheels = cursor.fetchone()[0] or 0 
         cursor.close() # Close cursor
     else:
-        query_result_obj = conn.execute(query_total_before_wheels.replace('%s', '?'), (start_of_report_day_iso,))
+        query_result_obj = conn.execute(query_total_before_wheels.replace('%s', '?'), (start_of_report_day_iso,)) # แก้ไข: ใช้ start_of_report_day_iso
         initial_total_wheels = query_result_obj.fetchone()[0] or 0 
     
     wheel_total_remaining_for_report_date = initial_total_wheels + wheel_total_in - wheel_total_out
