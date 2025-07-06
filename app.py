@@ -1870,324 +1870,340 @@ def summary_stock_report():
     # Conditional casting for PostgreSQL timestamps in queries
     timestamp_cast = "::timestamptz" if is_psycopg2_conn else ""
 
-    # --- Tire Movements by Brand (สำหรับสรุปยอดรวมใหญ่) ---
-    tire_movements_query_sql = f"""
-        SELECT t.brand, tm.type, SUM(tm.quantity_change) AS total_quantity
-        FROM tire_movements tm
-        JOIN tires t ON tm.tire_id = t.id
-        WHERE tm.timestamp BETWEEN %s{timestamp_cast} AND %s{timestamp_cast}
-        GROUP BY t.brand, tm.type
-        ORDER BY t.brand, tm.type;
-    """
-    if is_psycopg2_conn:
-        cursor = conn.cursor()
-        cursor.execute(tire_movements_query_sql, (start_of_period_iso, end_of_period_iso))
-        tire_movements_by_brand_raw = cursor.fetchall()
-        cursor.close() # Close cursor
-    else: # SQLite
-        query_result_obj = conn.execute(tire_movements_query_sql.replace('%s', '?'), (start_of_period_iso, end_of_period_iso))
-        tire_movements_by_brand_raw = query_result_obj.fetchall()
-    
-    print(f"DEBUG: tire_detailed_movements_raw (raw from DB): {tire_detailed_movements_raw}") # This will still show Decimal as it's raw data
+    # Initialize variables to prevent UnboundLocalError
+    tire_movements_by_brand_raw = []
+    wheel_movements_by_brand_raw = []
+    tire_detailed_movements_raw = []
+    wheels_detailed_movements_raw = []
+    overall_tire_initial = 0
+    overall_wheel_initial = 0
+    overall_tire_in_period = 0
+    overall_tire_out_period = 0
+    overall_wheel_in_period = 0
+    overall_wheel_out_period = 0
 
-    tire_movements_by_brand = defaultdict(lambda: {'IN': 0, 'OUT': 0})
-    for movement_row in tire_movements_by_brand_raw: 
-        row_data = dict(movement_row) 
-        brand = row_data['brand']
-        move_type = row_data['type']
-        # Explicitly convert to int here - CONFIRMED: This conversion is present.
-        total_qty = int(row_data['total_quantity']) 
-        tire_movements_by_brand[brand][move_type] = total_qty
+    try:
+        # --- Tire Movements by Brand (สำหรับสรุปยอดรวมใหญ่) ---
+        tire_movements_query_sql = f"""
+            SELECT t.brand, tm.type, SUM(tm.quantity_change) AS total_quantity
+            FROM tire_movements tm
+            JOIN tires t ON tm.tire_id = t.id
+            WHERE tm.timestamp BETWEEN %s{timestamp_cast} AND %s{timestamp_cast}
+            GROUP BY t.brand, tm.type
+            ORDER BY t.brand, tm.type;
+        """
+        if is_psycopg2_conn:
+            cursor = conn.cursor()
+            cursor.execute(tire_movements_query_sql, (start_of_period_iso, end_of_period_iso))
+            tire_movements_by_brand_raw = cursor.fetchall()
+            cursor.close() # Close cursor
+        else: # SQLite
+            query_result_obj = conn.execute(tire_movements_query_sql.replace('%s', '?'), (start_of_period_iso, end_of_period_iso))
+            tire_movements_by_brand_raw = query_result_obj.fetchall()
+        
+        print(f"DEBUG: tire_movements_by_brand_raw (raw from DB): {tire_movements_by_brand_raw}")
 
-    # --- Wheel Movements by Brand (สำหรับสรุปยอดรวมใหญ่) ---
-    wheel_movements_query_sql = f"""
-        SELECT w.brand, wm.type, SUM(wm.quantity_change) AS total_quantity
-        FROM wheel_movements wm
-        JOIN wheels w ON wm.wheel_id = w.id
-        WHERE wm.timestamp BETWEEN %s{timestamp_cast} AND %s{timestamp_cast}
-        GROUP BY w.brand, wm.type
-        ORDER BY w.brand, wm.type;
-    """
-    if is_psycopg2_conn:
-        cursor = conn.cursor() # New cursor
-        cursor.execute(wheel_movements_query_sql, (start_of_period_iso, end_of_period_iso))
-        wheel_movements_by_brand_raw = cursor.fetchall()
-        cursor.close() # Close cursor
-    else: # SQLite
-        query_result_obj = conn.execute(wheel_movements_query_sql.replace('%s', '?'), (start_of_period_iso, end_of_period_iso))
-        wheel_movements_by_brand_raw = query_result_obj.fetchall()
-    
-    print(f"DEBUG: wheel_detailed_movements_raw (raw from DB): {wheel_movements_by_brand_raw}") # This will still show Decimal as it's raw data
+        tire_movements_by_brand = defaultdict(lambda: {'IN': 0, 'OUT': 0})
+        for movement_row in tire_movements_by_brand_raw: 
+            row_data = dict(movement_row) 
+            brand = row_data['brand']
+            move_type = row_data['type']
+            total_qty = int(row_data['total_quantity']) 
+            tire_movements_by_brand[brand][move_type] = total_qty
+    except Exception as e:
+        print(f"ERROR: Failed to fetch tire movements by brand: {e}")
+        tire_movements_by_brand = defaultdict(lambda: {'IN': 0, 'OUT': 0}) # Ensure it's still a defaultdict
 
-    wheel_movements_by_brand = defaultdict(lambda: {'IN': 0, 'OUT': 0})
-    for row in wheel_movements_by_brand_raw: 
-        row_data = dict(row) 
-        brand = row_data['brand']
-        move_type = row_data['type']
-        # Explicitly convert to int here - CONFIRMED: This conversion is present.
-        total_qty = int(row_data['total_quantity']) 
-        wheel_movements_by_brand[brand][move_type] = total_qty
+    try:
+        # --- Wheel Movements by Brand (สำหรับสรุปยอดรวมใหญ่) ---
+        wheel_movements_query_sql = f"""
+            SELECT w.brand, wm.type, SUM(wm.quantity_change) AS total_quantity
+            FROM wheel_movements wm
+            JOIN wheels w ON wm.wheel_id = w.id
+            WHERE wm.timestamp BETWEEN %s{timestamp_cast} AND %s{timestamp_cast}
+            GROUP BY w.brand, wm.type
+            ORDER BY w.brand, wm.type;
+        """
+        if is_psycopg2_conn:
+            cursor = conn.cursor() # New cursor
+            cursor.execute(wheel_movements_query_sql, (start_of_period_iso, end_of_period_iso))
+            wheel_movements_by_brand_raw = cursor.fetchall()
+            cursor.close() # Close cursor
+        else: # SQLite
+            query_result_obj = conn.execute(wheel_movements_query_sql.replace('%s', '?'), (start_of_period_iso, end_of_period_iso))
+            wheel_movements_by_brand_raw = query_result_obj.fetchall()
+        
+        print(f"DEBUG: wheel_movements_by_brand_raw (raw from DB): {wheel_movements_by_brand_raw}")
+
+        wheel_movements_by_brand = defaultdict(lambda: {'IN': 0, 'OUT': 0})
+        for row in wheel_movements_by_brand_raw: 
+            row_data = dict(row) 
+            brand = row_data['brand']
+            move_type = row_data['type']
+            total_qty = int(row_data['total_quantity']) 
+            wheel_movements_by_brand[brand][move_type] = total_qty
+    except Exception as e:
+        print(f"ERROR: Failed to fetch wheel movements by brand: {e}")
+        wheel_movements_by_brand = defaultdict(lambda: {'IN': 0, 'OUT': 0}) # Ensure it's still a defaultdict
 
     # --- Calculate overall totals for the summary section ---
-    # Explicitly convert to int here - CONFIRMED: These conversions are present.
     overall_tire_in_period = int(sum(data['IN'] for data in tire_movements_by_brand.values()))
     overall_tire_out_period = int(sum(data['OUT'] for data in tire_movements_by_brand.values()))
     overall_wheel_in_period = int(sum(data['IN'] for data in wheel_movements_by_brand.values()))
     overall_wheel_out_period = int(sum(data['OUT'] for data in wheel_movements_by_brand.values()))
 
-    # Total initial stock (sum of all IN - all OUT up to start_of_period_iso)
-    query_overall_initial_tires = f"""
-        SELECT COALESCE(SUM(CASE WHEN type = 'IN' THEN quantity_change ELSE -quantity_change END), 0)
-        FROM tire_movements
-        WHERE timestamp < %s{timestamp_cast};
-    """
-    if is_psycopg2_conn:
-        cursor = conn.cursor() # New cursor
-        cursor.execute(query_overall_initial_tires, (start_of_period_iso,))
-        # Explicitly convert to int here - CONFIRMED: This conversion is present.
-        overall_tire_initial = int(cursor.fetchone()[0] or 0) 
-        cursor.close() # Close cursor
-    else:
-        query_result_obj = conn.execute(query_overall_initial_tires.replace('%s', '?'), (start_of_period_iso,))
-        # Explicitly convert to int here - CONFIRMED: This conversion is present.
-        overall_tire_initial = int(query_result_obj.fetchone()[0] or 0) 
+    try:
+        # Total initial stock (sum of all IN - all OUT up to start_of_period_iso)
+        query_overall_initial_tires = f"""
+            SELECT COALESCE(SUM(CASE WHEN type = 'IN' THEN quantity_change ELSE -quantity_change END), 0)
+            FROM tire_movements
+            WHERE timestamp < %s{timestamp_cast};
+        """
+        if is_psycopg2_conn:
+            cursor = conn.cursor() # New cursor
+            cursor.execute(query_overall_initial_tires, (start_of_period_iso,))
+            overall_tire_initial = int(cursor.fetchone()[0] or 0) 
+            cursor.close() # Close cursor
+        else:
+            query_result_obj = conn.execute(query_overall_initial_tires.replace('%s', '?'), (start_of_period_iso,))
+            overall_tire_initial = int(query_result_obj.fetchone()[0] or 0) 
+    except Exception as e:
+        print(f"ERROR: Failed to fetch overall initial tire stock: {e}")
+        overall_tire_initial = 0
 
-    query_overall_initial_wheels = f"""
-        SELECT COALESCE(SUM(CASE WHEN type = 'IN' THEN quantity_change ELSE -quantity_change END), 0)
-        FROM wheel_movements
-        WHERE timestamp < %s{timestamp_cast};
-    """
-    if is_psycopg2_conn:
-        cursor = conn.cursor() # New cursor
-        cursor.execute(query_overall_initial_wheels, (start_of_period_iso,))
-        # Explicitly convert to int here - CONFIRMED: This conversion is present.
-        overall_wheel_initial = int(cursor.fetchone()[0] or 0)
-        cursor.close() # Close cursor
-    else:
-        query_result_obj = conn.execute(query_overall_initial_wheels.replace('%s', '?'), (start_of_period_iso,))
-        # Explicitly convert to int here - CONFIRMED: This conversion is present.
-        overall_wheel_initial = int(query_result_obj.fetchone()[0] or 0)
+    try:
+        query_overall_initial_wheels = f"""
+            SELECT COALESCE(SUM(CASE WHEN type = 'IN' THEN quantity_change ELSE -quantity_change END), 0)
+            FROM wheel_movements
+            WHERE timestamp < %s{timestamp_cast};
+        """
+        if is_psycopg2_conn:
+            cursor = conn.cursor() # New cursor
+            cursor.execute(query_overall_initial_wheels, (start_of_period_iso,))
+            overall_wheel_initial = int(cursor.fetchone()[0] or 0)
+            cursor.close() # Close cursor
+        else:
+            query_result_obj = conn.execute(query_overall_initial_wheels.replace('%s', '?'), (start_of_period_iso,))
+            overall_wheel_initial = int(query_result_obj.fetchone()[0] or 0)
+    except Exception as e:
+        print(f"ERROR: Failed to fetch overall initial wheel stock: {e}")
+        overall_wheel_initial = 0
 
     # Total final stock (initial + movements within period)
     overall_tire_final = overall_tire_initial + overall_tire_in_period - overall_tire_out_period
     overall_wheel_final = overall_wheel_initial + overall_wheel_in_period - overall_wheel_out_period
 
-    # --- NEW: สำหรับรายงานการเคลื่อนไหวสต็อกยางตามยี่ห้อและขนาด (tires_by_brand_for_summary_report) ---
-    # Binding parameters for tire_detailed_movements_query:
-    # 1. IN_qty: (%s, %s) -> start_of_period_iso, end_of_period_iso (x2 for IN, OUT)
-    # 2. initial_qty_before_period: (%s) -> start_of_period_iso
-    # 3. INNER JOIN: (%s, %s) -> start_of_period_iso, end_of_period_iso
-    # 4. HAVING part 1 (IN): (%s, %s) -> start_of_period_iso, end_of_period_iso
-    # 5. HAVING part 2 (OUT): (%s, %s) -> start_of_period_iso, end_of_period_iso
-    # Total: 2 + 2 + 1 + 2 + 2 + 2 = 11 bindings.
-    # The ::NUMERIC cast is applied conditionally for psycopg2 connections.
-    tire_detailed_movements_query = f"""
-        SELECT
-            t.id AS tire_id,
-            t.brand,
-            t.model, 
-            t.size,
-            COALESCE(SUM(CASE WHEN LOWER(tm.type) = 'in' AND tm.timestamp BETWEEN %s{timestamp_cast} AND %s{timestamp_cast} THEN tm.quantity_change{"::NUMERIC" if is_psycopg2_conn else ""} ELSE 0 END), 0) AS IN_qty,  
-            COALESCE(SUM(CASE WHEN LOWER(tm.type) = 'out' AND tm.timestamp BETWEEN %s{timestamp_cast} AND %s{timestamp_cast} THEN tm.quantity_change{"::NUMERIC" if is_psycopg2_conn else ""} ELSE 0 END), 0) AS OUT_qty, 
-            COALESCE((  
-                SELECT SUM(CASE WHEN LOWER(prev_tm.type) = 'in' THEN prev_tm.quantity_change{"::NUMERIC" if is_psycopg2_conn else ""} ELSE -prev_tm.quantity_change{"::NUMERIC" if is_psycopg2_conn else ""} END)
-                FROM tire_movements prev_tm
-                WHERE prev_tm.tire_id = t.id AND prev_tm.timestamp < %s{timestamp_cast}
-            ), 0) AS initial_qty_before_period
-        FROM tires t  
-        INNER JOIN tire_movements tm ON tm.tire_id = t.id AND tm.timestamp BETWEEN %s{timestamp_cast} AND %s{timestamp_cast}  
-        WHERE t.is_deleted = FALSE  
-        GROUP BY t.id, t.brand, t.model, t.size  
-        HAVING COALESCE(SUM(CASE WHEN LOWER(tm.type) = 'in' AND tm.timestamp BETWEEN %s{timestamp_cast} AND %s{timestamp_cast} THEN tm.quantity_change{"::NUMERIC" if is_psycopg2_conn else ""} ELSE 0 END), 0) > 0 
-        OR COALESCE(SUM(CASE WHEN LOWER(tm.type) = 'out' AND tm.timestamp BETWEEN %s{timestamp_cast} AND %s{timestamp_cast} THEN tm.quantity_change{"::NUMERIC" if is_psycopg2_conn else ""} ELSE 0 END), 0) > 0  
-        ORDER BY t.brand, t.model, t.size;
-    """
+    try:
+        # --- NEW: สำหรับรายงานการเคลื่อนไหวสต็อกยางตามยี่ห้อและขนาด (tires_by_brand_for_summary_report) ---
+        tire_detailed_movements_query = f"""
+            SELECT
+                t.id AS tire_id,
+                t.brand,
+                t.model, 
+                t.size,
+                COALESCE(SUM(CASE WHEN LOWER(tm.type) = 'in' AND tm.timestamp BETWEEN %s{timestamp_cast} AND %s{timestamp_cast} THEN tm.quantity_change{"::NUMERIC" if is_psycopg2_conn else ""} ELSE 0 END), 0) AS IN_qty,  
+                COALESCE(SUM(CASE WHEN LOWER(tm.type) = 'out' AND tm.timestamp BETWEEN %s{timestamp_cast} AND %s{timestamp_cast} THEN tm.quantity_change{"::NUMERIC" if is_psycopg2_conn else ""} ELSE 0 END), 0) AS OUT_qty, 
+                COALESCE((  
+                    SELECT SUM(CASE WHEN LOWER(prev_tm.type) = 'in' THEN prev_tm.quantity_change{"::NUMERIC" if is_psycopg2_conn else ""} ELSE -prev_tm.quantity_change{"::NUMERIC" if is_psycopg2_conn else ""} END)
+                    FROM tire_movements prev_tm
+                    WHERE prev_tm.tire_id = t.id AND prev_tm.timestamp < %s{timestamp_cast}
+                ), 0) AS initial_qty_before_period
+            FROM tires t  
+            INNER JOIN tire_movements tm ON tm.tire_id = t.id AND tm.timestamp BETWEEN %s{timestamp_cast} AND %s{timestamp_cast}  
+            WHERE t.is_deleted = FALSE  
+            GROUP BY t.id, t.brand, t.model, t.size  
+            HAVING COALESCE(SUM(CASE WHEN LOWER(tm.type) = 'in' AND tm.timestamp BETWEEN %s{timestamp_cast} AND %s{timestamp_cast} THEN tm.quantity_change{"::NUMERIC" if is_psycopg2_conn else ""} ELSE 0 END), 0) > 0 
+            OR COALESCE(SUM(CASE WHEN LOWER(tm.type) = 'out' AND tm.timestamp BETWEEN %s{timestamp_cast} AND %s{timestamp_cast} THEN tm.quantity_change{"::NUMERIC" if is_psycopg2_conn else ""} ELSE 0 END), 0) > 0  
+            ORDER BY t.brand, t.model, t.size;
+        """
+        
+        tire_params = (
+            start_of_period_iso, end_of_period_iso, # for IN_qty SUM
+            start_of_period_iso, end_of_period_iso, # for OUT_qty SUM
+            start_of_period_iso, # for initial_qty_before_period subquery
+            start_of_period_iso, end_of_period_iso, # for INNER JOIN ON clause
+            start_of_period_iso, end_of_period_iso, # for HAVING part 1 (IN)
+            start_of_period_iso, end_of_period_iso  # for HAVING part 2 (OUT)
+        )
+
+        if is_psycopg2_conn:
+            cursor = conn.cursor() # New cursor
+            cursor.execute(tire_detailed_movements_query, tire_params)
+            tire_detailed_movements_raw = cursor.fetchall()
+            cursor.close() # Close cursor
+        else:
+            query_result_obj = conn.execute(tire_detailed_movements_query.replace('%s', '?'), tire_params)
+            tire_detailed_movements_raw = query_result_obj.fetchall()
+
+        print(f"DEBUG: tire_detailed_movements_raw (raw from DB): {tire_detailed_movements_raw}")
+
+        # Process data for tires_by_brand_for_summary_report
+        tires_by_brand_for_summary_report = OrderedDict()
+        for row_data_raw in tire_detailed_movements_raw: 
+            row = dict(row_data_raw) 
+            brand = row['brand']
+            if brand not in tires_by_brand_for_summary_report:
+                tires_by_brand_for_summary_report[brand] = []
+            
+            initial_qty = int(row.get('initial_qty_before_period', 0)) 
+            in_qty = int(row.get('IN_qty', 0)) 
+            out_qty = int(row.get('OUT_qty', 0)) 
+            
+            final_qty = initial_qty + in_qty - out_qty 
+
+            tires_by_brand_for_summary_report[brand].append({
+                'model': row['model'],
+                'size': row['size'],
+                'initial_quantity': initial_qty,
+                'IN': in_qty,
+                'OUT': out_qty,
+                'final_quantity': final_qty,
+            })
+        print(f"DEBUG: tires_by_brand_for_summary_report (after int conversion): {tires_by_brand_for_summary_report}")
+    except Exception as e:
+        print(f"ERROR: Failed to fetch detailed tire movements: {e}")
+        tires_by_brand_for_summary_report = OrderedDict() # Ensure it's still an OrderedDict
     
-    # Corrected parameter list based on 11 bindings required
-    tire_params = (
-        start_of_period_iso, end_of_period_iso, # for IN_qty SUM
-        start_of_period_iso, end_of_period_iso, # for OUT_qty SUM
-        start_of_period_iso, # for initial_qty_before_period subquery
-        start_of_period_iso, end_of_period_iso, # for INNER JOIN ON clause
-        start_of_period_iso, end_of_period_iso, # for HAVING part 1 (IN)
-        start_of_period_iso, end_of_period_iso  # for HAVING part 2 (OUT)
-    )
+    try:
+        # --- NEW: สำหรับรายงานการเคลื่อนไหวสต็อกล้อแม็กตามยี่ห้อและขนาด (wheels_by_brand_for_summary_report) ---
+        wheel_detailed_movements_query = f"""
+            SELECT
+                w.id AS wheel_id,
+                w.brand, w.model, w.diameter, w.pcd, w.width,
+                w.et, 
+                w.color, 
+                COALESCE(SUM(CASE WHEN LOWER(wm.type) = 'in' AND wm.timestamp BETWEEN %s{timestamp_cast} AND %s{timestamp_cast} THEN wm.quantity_change{"::NUMERIC" if is_psycopg2_conn else ""} ELSE 0 END), 0) AS IN_qty,  
+                COALESCE(SUM(CASE WHEN LOWER(wm.type) = 'out' AND wm.timestamp BETWEEN %s{timestamp_cast} AND %s{timestamp_cast} THEN wm.quantity_change{"::NUMERIC" if is_psycopg2_conn else ""} ELSE 0 END), 0) AS OUT_qty, 
+                COALESCE((  
+                    SELECT SUM(CASE WHEN LOWER(prev_wm.type) = 'in' THEN prev_wm.quantity_change{"::NUMERIC" if is_psycopg2_conn else ""} ELSE -prev_wm.quantity_change{"::NUMERIC" if is_psycopg2_conn else ""} END)
+                    FROM wheel_movements prev_wm
+                    WHERE prev_wm.wheel_id = w.id AND prev_wm.timestamp < %s{timestamp_cast}
+                ), 0) AS initial_qty_before_period
+            FROM wheels w  
+            INNER JOIN wheel_movements wm ON wm.wheel_id = w.id AND wm.timestamp BETWEEN %s{timestamp_cast} AND %s{timestamp_cast}  
+            WHERE w.is_deleted = FALSE  
+            GROUP BY w.id, w.brand, w.model, w.diameter, w.pcd, w.width, w.et, w.color 
+            HAVING COALESCE(SUM(CASE WHEN LOWER(wm.type) = 'in' AND wm.timestamp BETWEEN %s{timestamp_cast} AND %s{timestamp_cast} THEN wm.quantity_change{"::NUMERIC" if is_psycopg2_conn else ""} ELSE 0 END), 0) > 0 
+            OR COALESCE(SUM(CASE WHEN LOWER(wm.type) = 'out' AND wm.timestamp BETWEEN %s{timestamp_cast} AND %s{timestamp_cast} THEN wm.quantity_change{"::NUMERIC" if is_psycopg2_conn else ""} ELSE 0 END), 0) > 0  
+            ORDER BY w.brand, w.model, w.diameter;
+        """
+        wheel_params = (
+            start_of_period_iso, end_of_period_iso, # for IN_qty SUM
+            start_of_period_iso, end_of_period_iso, # for OUT_qty SUM
+            start_of_period_iso, # for initial_qty_before_period subquery
+            start_of_period_iso, end_of_period_iso, # for INNER JOIN ON clause
+            start_of_period_iso, end_of_period_iso, # for HAVING part 1 (IN)
+            start_of_period_iso, end_of_period_iso  # for HAVING part 2 (OUT)
+        )
 
-    if is_psycopg2_conn:
-        cursor = conn.cursor() # New cursor
-        cursor.execute(tire_detailed_movements_query, tire_params)
-        tire_detailed_movements_raw = cursor.fetchall()
-        cursor.close() # Close cursor
-    else:
-        query_result_obj = conn.execute(tire_detailed_movements_query.replace('%s', '?'), tire_params)
-        tire_detailed_movements_raw = query_result_obj.fetchall()
+        if is_psycopg2_conn:
+            cursor = conn.cursor() # New cursor
+            cursor.execute(wheel_detailed_movements_query, wheel_params)
+            wheels_detailed_movements_raw = cursor.fetchall()
+            cursor.close() # Close cursor
+        else:
+            query_result_obj = conn.execute(wheel_detailed_movements_query.replace('%s', '?'), wheel_params)
+            wheels_detailed_movements_raw = query_result_obj.fetchall()
 
-    # Process data for tires_by_brand_for_summary_report
-    tires_by_brand_for_summary_report = OrderedDict()
-    for row_data_raw in tire_detailed_movements_raw: 
-        row = dict(row_data_raw) 
-        brand = row['brand']
-        if brand not in tires_by_brand_for_summary_report:
-            tires_by_brand_for_summary_report[brand] = []
-        
-        # Explicitly convert to int here - CONFIRMED: This conversion is present.
-        initial_qty = int(row.get('initial_qty_before_period', 0)) 
-        in_qty = int(row.get('IN_qty', 0)) 
-        out_qty = int(row.get('OUT_qty', 0)) 
-        
-        final_qty = initial_qty + in_qty - out_qty 
+        print(f"DEBUG: wheel_detailed_movements_raw (raw from DB): {wheels_detailed_movements_raw}")
 
-        tires_by_brand_for_summary_report[brand].append({
-            'model': row['model'],
-            'size': row['size'],
-            'initial_quantity': initial_qty,
-            'IN': in_qty,
-            'OUT': out_qty,
-            'final_quantity': final_qty,
-        })
-    print(f"DEBUG: tires_by_brand_for_summary_report (after int conversion): {tires_by_brand_for_summary_report}") # NEW DEBUG LINE
-    
-    # --- NEW: สำหรับรายงานการเคลื่อนไหวสต็อกล้อแม็กตามยี่ห้อและขนาด (wheels_by_brand_for_summary_report) ---
-    # Binding parameters for wheel_detailed_movements_query:
-    # 1. IN_qty: (%s, %s) -> start_of_period_iso, end_of_period_iso (x2 for IN, OUT)
-    # 2. initial_qty_before_period: (%s) -> start_of_period_iso
-    # 3. INNER JOIN: (%s, %s) -> start_of_period_iso, end_of_period_iso
-    # 4. HAVING part 1 (IN): (%s, %s) -> start_of_period_iso, end_of_period_iso
-    # 5. HAVING part 2 (OUT): (%s, %s) -> start_of_period_iso, end_of_period_iso
-    # Total: 2 + 2 + 1 + 2 + 2 + 2 = 11 bindings.
-    # The ::NUMERIC cast is applied conditionally for psycopg2 connections.
-    wheel_detailed_movements_query = f"""
-        SELECT
-            w.id AS wheel_id,
-            w.brand, w.model, w.diameter, w.pcd, w.width,
-            w.et, 
-            w.color, 
-            COALESCE(SUM(CASE WHEN LOWER(wm.type) = 'in' AND wm.timestamp BETWEEN %s{timestamp_cast} AND %s{timestamp_cast} THEN wm.quantity_change{"::NUMERIC" if is_psycopg2_conn else ""} ELSE 0 END), 0) AS IN_qty,  
-            COALESCE(SUM(CASE WHEN LOWER(wm.type) = 'out' AND wm.timestamp BETWEEN %s{timestamp_cast} AND %s{timestamp_cast} THEN wm.quantity_change{"::NUMERIC" if is_psycopg2_conn else ""} ELSE 0 END), 0) AS OUT_qty, 
-            COALESCE((  
-                SELECT SUM(CASE WHEN LOWER(prev_wm.type) = 'in' THEN prev_wm.quantity_change{"::NUMERIC" if is_psycopg2_conn else ""} ELSE -prev_wm.quantity_change{"::NUMERIC" if is_psycopg2_conn else ""} END)
-                FROM wheel_movements prev_wm
-                WHERE prev_wm.wheel_id = w.id AND prev_wm.timestamp < %s{timestamp_cast}
-            ), 0) AS initial_qty_before_period
-        FROM wheels w  
-        INNER JOIN wheel_movements wm ON wm.wheel_id = w.id AND wm.timestamp BETWEEN %s{timestamp_cast} AND %s{timestamp_cast}  
-        WHERE w.is_deleted = FALSE  
-        GROUP BY w.id, w.brand, w.model, w.diameter, w.pcd, w.width, w.et, w.color 
-        HAVING COALESCE(SUM(CASE WHEN LOWER(wm.type) = 'in' AND wm.timestamp BETWEEN %s{timestamp_cast} AND %s{timestamp_cast} THEN wm.quantity_change{"::NUMERIC" if is_psycopg2_conn else ""} ELSE 0 END), 0) > 0 
-        OR COALESCE(SUM(CASE WHEN LOWER(wm.type) = 'out' AND wm.timestamp BETWEEN %s{timestamp_cast} AND %s{timestamp_cast} THEN wm.quantity_change{"::NUMERIC" if is_psycopg2_conn else ""} ELSE 0 END), 0) > 0  
-        ORDER BY w.brand, w.model, w.diameter;
-    """
-    # Corrected parameter list based on 11 bindings required
-    wheel_params = (
-        start_of_period_iso, end_of_period_iso, # for IN_qty SUM
-        start_of_period_iso, end_of_period_iso, # for OUT_qty SUM
-        start_of_period_iso, # for initial_qty_before_period subquery
-        start_of_period_iso, end_of_period_iso, # for INNER JOIN ON clause
-        start_of_period_iso, end_of_period_iso, # for HAVING part 1 (IN)
-        start_of_period_iso, end_of_period_iso  # for HAVING part 2 (OUT)
-    )
+        # Process data for wheels_by_brand_for_summary_report
+        wheels_by_brand_for_summary_report = OrderedDict()
+        for row_data_raw in wheels_detailed_movements_raw: 
+            row = dict(row_data_raw) 
+            brand = row['brand']
+            if brand not in wheels_by_brand_for_summary_report:
+                wheels_by_brand_for_summary_report[brand] = []
+            
+            initial_qty = int(row.get('initial_qty_before_period', 0)) 
+            in_qty = int(row.get('IN_qty', 0)) 
+            out_qty = int(row.get('OUT_qty', 0)) 
+            
+            final_qty = initial_qty + in_qty - out_qty 
 
-    if is_psycopg2_conn:
-        cursor = conn.cursor() # New cursor
-        cursor.execute(wheel_detailed_movements_query, wheel_params)
-        wheel_detailed_movements_raw = cursor.fetchall()
-        cursor.close() # Close cursor
-    else:
-        query_result_obj = conn.execute(wheel_detailed_movements_query.replace('%s', '?'), wheel_params)
-        wheel_detailed_movements_raw = query_result_obj.fetchall()
-
-    # Process data for wheels_by_brand_for_summary_report
-    wheels_by_brand_for_summary_report = OrderedDict()
-    for row_data_raw in wheel_detailed_movements_raw: 
-        row = dict(row_data_raw) 
-        brand = row['brand']
-        if brand not in wheels_by_brand_for_summary_report:
-            wheels_by_brand_for_summary_report[brand] = []
-        
-        # Explicitly convert to int here - CONFIRMED: This conversion is present.
-        initial_qty = int(row.get('initial_qty_before_period', 0)) 
-        in_qty = int(row.get('IN_qty', 0)) 
-        out_qty = int(row.get('OUT_qty', 0)) 
-        
-        final_qty = initial_qty + in_qty - out_qty 
-
-        wheels_by_brand_for_summary_report[brand].append({
-            'model': row['model'],
-            'diameter': row['diameter'],
-            'pcd': row['pcd'],
-            'width': row['width'],
-            'et': row['et'],       
-            'color': row['color'], 
-            'initial_quantity': initial_qty,
-            'IN': in_qty,
-            'OUT': out_qty,
-            'final_quantity': final_qty,
-        })
-    print(f"DEBUG: wheels_by_brand_for_summary_report (after int conversion): {wheels_by_brand_for_summary_report}") # NEW DEBUG LINE
+            wheels_by_brand_for_summary_report[brand].append({
+                'model': row['model'],
+                'diameter': row['diameter'],
+                'pcd': row['pcd'],
+                'width': row['width'],
+                'et': row['et'],       
+                'color': row['color'], 
+                'initial_quantity': initial_qty,
+                'IN': in_qty,
+                'OUT': out_qty,
+                'final_quantity': final_qty,
+            })
+        print(f"DEBUG: wheels_by_brand_for_summary_report (after int conversion): {wheels_by_brand_for_summary_report}")
+    except Exception as e:
+        print(f"ERROR: Failed to fetch detailed wheel movements: {e}")
+        wheels_by_brand_for_summary_report = OrderedDict() # Ensure it's still an OrderedDict
 
     # --- For summary totals by tire brand (tire_brand_totals_for_summary_report) ---
     tire_brand_totals_for_summary_report = OrderedDict()
-    for brand, data in tire_movements_by_brand.items():
-        query_brand_initial_tire = f"""
-            SELECT COALESCE(SUM(CASE WHEN type = 'IN' THEN quantity_change ELSE -quantity_change END), 0)
-            FROM tire_movements tm
-            JOIN tires t ON tm.tire_id = t.id
-            WHERE t.brand = %s AND tm.timestamp < %s{timestamp_cast};
-        """
-        if is_psycopg2_conn:
-            cursor = conn.cursor() # New cursor
-            cursor.execute(query_brand_initial_tire, (brand, start_of_period_iso))
-            # Explicitly convert to int here - CONFIRMED: This conversion is present.
-            brand_initial_qty = int(cursor.fetchone()[0] or 0)
-            cursor.close() # Close cursor
-        else:
-            query_result_obj = conn.execute(query_brand_initial_tire.replace('%s', '?'), (brand, start_of_period_iso))
-            # Explicitly convert to int here - CONFIRMED: This conversion is present.
-            brand_initial_qty = int(query_result_obj.fetchone()[0] or 0)
+    try:
+        for brand, data in tire_movements_by_brand.items():
+            query_brand_initial_tire = f"""
+                SELECT COALESCE(SUM(CASE WHEN type = 'IN' THEN quantity_change ELSE -quantity_change END), 0)
+                FROM tire_movements tm
+                JOIN tires t ON tm.tire_id = t.id
+                WHERE t.brand = %s AND tm.timestamp < %s{timestamp_cast};
+            """
+            if is_psycopg2_conn:
+                cursor = conn.cursor() # New cursor
+                cursor.execute(query_brand_initial_tire, (brand, start_of_period_iso))
+                brand_initial_qty = int(cursor.fetchone()[0] or 0)
+                cursor.close() # Close cursor
+            else:
+                query_result_obj = conn.execute(query_brand_initial_tire.replace('%s', '?'), (brand, start_of_period_iso))
+                brand_initial_qty = int(query_result_obj.fetchone()[0] or 0)
 
-        # Explicitly convert to int here - CONFIRMED: These conversions are present.
-        total_in_brand = int(data.get('IN', 0))
-        total_out_brand = int(data.get('OUT', 0))
-        final_qty_brand = brand_initial_qty + total_in_brand - total_out_brand
+            total_in_brand = int(data.get('IN', 0))
+            total_out_brand = int(data.get('OUT', 0))
+            final_qty_brand = brand_initial_qty + total_in_brand - total_out_brand
 
-        tire_brand_totals_for_summary_report[brand] = {
-            'IN': total_in_brand,
-            'OUT': total_out_brand,
-            'final_quantity_sum': final_qty_brand,
-        }
-    print(f"DEBUG: tire_brand_totals_for_summary_report (after int conversion): {tire_brand_totals_for_summary_report}") # NEW DEBUG LINE
+            tire_brand_totals_for_summary_report[brand] = {
+                'IN': total_in_brand,
+                'OUT': total_out_brand,
+                'final_quantity_sum': final_qty_brand,
+            }
+        print(f"DEBUG: tire_brand_totals_for_summary_report (after int conversion): {tire_brand_totals_for_summary_report}")
+    except Exception as e:
+        print(f"ERROR: Failed to calculate tire brand totals: {e}")
+        tire_brand_totals_for_summary_report = OrderedDict() # Ensure it's still an OrderedDict
 
     # --- For summary totals by wheel brand (wheel_brand_totals_for_summary_report) ---
     wheel_brand_totals_for_summary_report = OrderedDict()
-    for brand, data in wheel_movements_by_brand.items():
-        query_brand_initial_wheel = f"""
-            SELECT COALESCE(SUM(CASE WHEN type = 'IN' THEN quantity_change ELSE -quantity_change END), 0)
-            FROM wheel_movements wm
-            JOIN wheels w ON wm.wheel_id = w.id
-            WHERE w.brand = %s AND wm.timestamp < %s{timestamp_cast};
-        """
-        if is_psycopg2_conn:
-            cursor = conn.cursor() # New cursor
-            cursor.execute(query_brand_initial_wheel, (brand, start_of_period_iso))
-            # Explicitly convert to int here - CONFIRMED: This conversion is present.
-            brand_initial_qty = int(cursor.fetchone()[0] or 0)
-            cursor.close() # Close cursor
-        else:
-            query_result_obj = conn.execute(query_brand_initial_wheel.replace('%s', '?'), (brand, start_of_period_iso))
-            # Explicitly convert to int here - CONFIRMED: This conversion is present.
-            brand_initial_qty = int(query_result_obj.fetchone()[0] or 0)
+    try:
+        for brand, data in wheel_movements_by_brand.items():
+            query_brand_initial_wheel = f"""
+                SELECT COALESCE(SUM(CASE WHEN type = 'IN' THEN quantity_change ELSE -quantity_change END), 0)
+                FROM wheel_movements wm
+                JOIN wheels w ON wm.wheel_id = w.id
+                WHERE w.brand = %s AND wm.timestamp < %s{timestamp_cast};
+            """
+            if is_psycopg2_conn:
+                cursor = conn.cursor() # New cursor
+                cursor.execute(query_brand_initial_wheel, (brand, start_of_period_iso))
+                brand_initial_qty = int(cursor.fetchone()[0] or 0)
+                cursor.close() # Close cursor
+            else:
+                query_result_obj = conn.execute(query_brand_initial_wheel.replace('%s', '?'), (brand, start_of_period_iso))
+                brand_initial_qty = int(query_result_obj.fetchone()[0] or 0)
 
-        # Explicitly convert to int here - CONFIRMED: These conversions are present.
-        total_in_brand = int(data.get('IN', 0))
-        total_out_brand = int(data.get('OUT', 0))
-        final_qty_brand = brand_initial_qty + total_in_brand - total_out_brand
-        
-        wheel_brand_totals_for_summary_report[brand] = {
-            'IN': total_in_brand,
-            'OUT': total_out_brand,
-            'final_quantity_sum': final_qty_brand,
-        }
-    print(f"DEBUG: wheel_brand_totals_for_summary_report (after int conversion): {wheel_brand_totals_for_summary_report}") # NEW DEBUG LINE
+            total_in_brand = int(data.get('IN', 0))
+            total_out_brand = int(data.get('OUT', 0))
+            final_qty_brand = brand_initial_qty + total_in_brand - total_out_brand
+            
+            wheel_brand_totals_for_summary_report[brand] = {
+                'IN': total_in_brand,
+                'OUT': total_out_brand,
+                'final_quantity_sum': final_qty_brand,
+            }
+        print(f"DEBUG: wheel_brand_totals_for_summary_report (after int conversion): {wheel_brand_totals_for_summary_report}")
+    except Exception as e:
+        print(f"ERROR: Failed to calculate wheel brand totals: {e}")
+        wheel_brand_totals_for_summary_report = OrderedDict() # Ensure it's still an OrderedDict
+
 
     return render_template('summary_stock_report.html',
                            start_date_param=start_date_obj.strftime('%Y-%m-%d'),
@@ -2209,7 +2225,6 @@ def summary_stock_report():
                            wheel_brand_totals_for_summary_report=wheel_brand_totals_for_summary_report,
                            current_user=current_user 
                           )
-
 
 # --- Import/Export Routes ---
 @app.route('/export_import', methods=('GET', 'POST'))
