@@ -1999,31 +1999,41 @@ def summary_stock_report():
             SELECT
                 t.id AS tire_id,
                 t.brand,
-                t.model, 
+                t.model,
                 t.size,
-                COALESCE(SUM(CASE WHEN LOWER(tm.type) = 'in' AND tm.timestamp BETWEEN %s{timestamp_cast} AND %s{timestamp_cast} THEN tm.quantity_change{"::NUMERIC" if is_psycopg2_conn else ""} ELSE 0 END), 0) AS IN_qty,  
-                COALESCE(SUM(CASE WHEN LOWER(tm.type) = 'out' AND tm.timestamp BETWEEN %s{timestamp_cast} AND %s{timestamp_cast} THEN tm.quantity_change{"::NUMERIC" if is_psycopg2_conn else ""} ELSE 0 END), 0) AS OUT_qty, 
-                COALESCE((  
-                    SELECT SUM(CASE WHEN LOWER(prev_tm.type) = 'in' THEN prev_tm.quantity_change{"::NUMERIC" if is_psycopg2_conn else ""} ELSE -prev_tm.quantity_change{"::NUMERIC" if is_psycopg2_conn else ""} END)
-                    FROM tire_movements prev_tm
-                    WHERE prev_tm.tire_id = t.id AND prev_tm.timestamp < %s{timestamp_cast}
-                ), 0) AS initial_qty_before_period
-            FROM tires t  
-            INNER JOIN tire_movements tm ON tm.tire_id = t.id AND tm.timestamp BETWEEN %s{timestamp_cast} AND %s{timestamp_cast}  
-            WHERE t.is_deleted = FALSE  
-            GROUP BY t.id, t.brand, t.model, t.size  
-            HAVING COALESCE(SUM(CASE WHEN LOWER(tm.type) = 'in' AND tm.timestamp BETWEEN %s{timestamp_cast} AND %s{timestamp_cast} THEN tm.quantity_change{"::NUMERIC" if is_psycopg2_conn else ""} ELSE 0 END), 0) > 0 
-            OR COALESCE(SUM(CASE WHEN LOWER(tm.type) = 'out' AND tm.timestamp BETWEEN %s{timestamp_cast} AND %s{timestamp_cast} THEN tm.quantity_change{"::NUMERIC" if is_psycopg2_conn else ""} ELSE 0 END), 0) > 0  
+                COALESCE(initial_stock.initial_qty, 0) AS initial_quantity,
+                COALESCE(period_movements.in_qty_in_period, 0) AS IN_qty,
+                COALESCE(period_movements.out_qty_in_period, 0) AS OUT_qty,
+                (COALESCE(initial_stock.initial_qty, 0) + COALESCE(period_movements.in_qty_in_period, 0) - COALESCE(period_movements.out_qty_in_period, 0)) AS final_quantity_calculated
+            FROM tires t
+            LEFT JOIN (
+                SELECT
+                    tm.tire_id,
+                    SUM(CASE WHEN LOWER(tm.type) = 'in' THEN tm.quantity_change{"::NUMERIC" if is_psycopg2_conn else ""} ELSE -tm.quantity_change{"::NUMERIC" if is_psycopg2_conn else ""} END) AS initial_qty
+                FROM tire_movements tm
+                WHERE tm.timestamp < %s{timestamp_cast}
+                GROUP BY tm.tire_id
+            ) AS initial_stock ON t.id = initial_stock.tire_id
+            LEFT JOIN (
+                SELECT
+                    tm.tire_id,
+                    SUM(CASE WHEN LOWER(tm.type) = 'in' THEN tm.quantity_change{"::NUMERIC" if is_psycopg2_conn else ""} ELSE 0 END) AS in_qty_in_period,
+                    SUM(CASE WHEN LOWER(tm.type) = 'out' THEN tm.quantity_change{"::NUMERIC" if is_psycopg2_conn else ""} ELSE 0 END) AS out_qty_in_period
+                FROM tire_movements tm
+                WHERE tm.timestamp BETWEEN %s{timestamp_cast} AND %s{timestamp_cast}
+                GROUP BY tm.tire_id
+            ) AS period_movements ON t.id = period_movements.tire_id
+            WHERE t.is_deleted = FALSE
+            -- Filter to show only items with movements (IN or OUT) within the selected period
+            HAVING
+                COALESCE(period_movements.in_qty_in_period, 0) != 0 OR
+                COALESCE(period_movements.out_qty_in_period, 0) != 0
             ORDER BY t.brand, t.model, t.size;
         """
         
         tire_params = (
-            start_of_period_iso, end_of_period_iso, # for IN_qty SUM
-            start_of_period_iso, end_of_period_iso, # for OUT_qty SUM
-            start_of_period_iso, # for initial_qty_before_period subquery
-            start_of_period_iso, end_of_period_iso, # for INNER JOIN ON clause
-            start_of_period_iso, end_of_period_iso, # for HAVING part 1 (IN)
-            start_of_period_iso, end_of_period_iso  # for HAVING part 2 (OUT)
+            start_of_period_iso, # for initial_stock subquery
+            start_of_period_iso, end_of_period_iso, # for period_movements subquery
         )
 
         if is_psycopg2_conn:
@@ -2045,7 +2055,7 @@ def summary_stock_report():
             if brand not in tires_by_brand_for_summary_report:
                 tires_by_brand_for_summary_report[brand] = []
             
-            initial_qty = int(row.get('initial_qty_before_period', 0)) 
+            initial_qty = int(row.get('initial_quantity', 0)) # Use 'initial_quantity' alias
             in_qty = int(row.get('IN_qty', 0)) 
             out_qty = int(row.get('OUT_qty', 0)) 
             
@@ -2072,28 +2082,38 @@ def summary_stock_report():
                 w.brand, w.model, w.diameter, w.pcd, w.width,
                 w.et, 
                 w.color, 
-                COALESCE(SUM(CASE WHEN LOWER(wm.type) = 'in' AND wm.timestamp BETWEEN %s{timestamp_cast} AND %s{timestamp_cast} THEN wm.quantity_change{"::NUMERIC" if is_psycopg2_conn else ""} ELSE 0 END), 0) AS IN_qty,  
-                COALESCE(SUM(CASE WHEN LOWER(wm.type) = 'out' AND wm.timestamp BETWEEN %s{timestamp_cast} AND %s{timestamp_cast} THEN wm.quantity_change{"::NUMERIC" if is_psycopg2_conn else ""} ELSE 0 END), 0) AS OUT_qty, 
-                COALESCE((  
-                    SELECT SUM(CASE WHEN LOWER(prev_wm.type) = 'in' THEN prev_wm.quantity_change{"::NUMERIC" if is_psycopg2_conn else ""} ELSE -prev_wm.quantity_change{"::NUMERIC" if is_psycopg2_conn else ""} END)
-                    FROM wheel_movements prev_wm
-                    WHERE prev_wm.wheel_id = w.id AND prev_wm.timestamp < %s{timestamp_cast}
-                ), 0) AS initial_qty_before_period
-            FROM wheels w  
-            INNER JOIN wheel_movements wm ON wm.wheel_id = w.id AND wm.timestamp BETWEEN %s{timestamp_cast} AND %s{timestamp_cast}  
-            WHERE w.is_deleted = FALSE  
-            GROUP BY w.id, w.brand, w.model, w.diameter, w.pcd, w.width, w.et, w.color 
-            HAVING COALESCE(SUM(CASE WHEN LOWER(wm.type) = 'in' AND wm.timestamp BETWEEN %s{timestamp_cast} AND %s{timestamp_cast} THEN wm.quantity_change{"::NUMERIC" if is_psycopg2_conn else ""} ELSE 0 END), 0) > 0 
-            OR COALESCE(SUM(CASE WHEN LOWER(wm.type) = 'out' AND wm.timestamp BETWEEN %s{timestamp_cast} AND %s{timestamp_cast} THEN wm.quantity_change{"::NUMERIC" if is_psycopg2_conn else ""} ELSE 0 END), 0) > 0  
+                COALESCE(initial_stock.initial_qty, 0) AS initial_quantity,
+                COALESCE(period_movements.in_qty_in_period, 0) AS IN_qty,
+                COALESCE(period_movements.out_qty_in_period, 0) AS OUT_qty,
+                (COALESCE(initial_stock.initial_qty, 0) + COALESCE(period_movements.in_qty_in_period, 0) - COALESCE(period_movements.out_qty_in_period, 0)) AS final_quantity_calculated
+            FROM wheels w
+            LEFT JOIN (
+                SELECT
+                    wm.wheel_id,
+                    SUM(CASE WHEN LOWER(wm.type) = 'in' THEN wm.quantity_change{"::NUMERIC" if is_psycopg2_conn else ""} ELSE -wm.quantity_change{"::NUMERIC" if is_psycopg2_conn else ""} END) AS initial_qty
+                FROM wheel_movements wm
+                WHERE wm.timestamp < %s{timestamp_cast}
+                GROUP BY wm.wheel_id
+            ) AS initial_stock ON w.id = initial_stock.wheel_id
+            LEFT JOIN (
+                SELECT
+                    wm.wheel_id,
+                    SUM(CASE WHEN LOWER(wm.type) = 'in' THEN wm.quantity_change{"::NUMERIC" if is_psycopg2_conn else ""} ELSE 0 END) AS in_qty_in_period,
+                    SUM(CASE WHEN LOWER(wm.type) = 'out' THEN wm.quantity_change{"::NUMERIC" if is_psycopg2_conn else ""} ELSE 0 END) AS out_qty_in_period
+                FROM wheel_movements wm
+                WHERE wm.timestamp BETWEEN %s{timestamp_cast} AND %s{timestamp_cast}
+                GROUP BY wm.wheel_id
+            ) AS period_movements ON w.id = period_movements.wheel_id
+            WHERE w.is_deleted = FALSE
+            -- Filter to show only items with movements (IN or OUT) within the selected period
+            HAVING
+                COALESCE(period_movements.in_qty_in_period, 0) != 0 OR
+                COALESCE(period_movements.out_qty_in_period, 0) != 0
             ORDER BY w.brand, w.model, w.diameter;
         """
         wheel_params = (
-            start_of_period_iso, end_of_period_iso, # for IN_qty SUM
-            start_of_period_iso, end_of_period_iso, # for OUT_qty SUM
-            start_of_period_iso, # for initial_qty_before_period subquery
-            start_of_period_iso, end_of_period_iso, # for INNER JOIN ON clause
-            start_of_period_iso, end_of_period_iso, # for HAVING part 1 (IN)
-            start_of_period_iso, end_of_period_iso  # for HAVING part 2 (OUT)
+            start_of_period_iso, # for initial_stock subquery
+            start_of_period_iso, end_of_period_iso, # for period_movements subquery
         )
 
         if is_psycopg2_conn:
@@ -2115,7 +2135,7 @@ def summary_stock_report():
             if brand not in wheels_by_brand_for_summary_report:
                 wheels_by_brand_for_summary_report[brand] = []
             
-            initial_qty = int(row.get('initial_qty_before_period', 0)) 
+            initial_qty = int(row.get('initial_quantity', 0)) # Use 'initial_quantity' alias
             in_qty = int(row.get('IN_qty', 0)) 
             out_qty = int(row.get('OUT_qty', 0)) 
             
@@ -2204,6 +2224,8 @@ def summary_stock_report():
         print(f"ERROR: Failed to calculate wheel brand totals: {e}")
         wheel_brand_totals_for_summary_report = OrderedDict() # Ensure it's still an OrderedDict
 
+    # Add a test value to ensure Jinja2 can render integers
+    test_value = 12345
 
     return render_template('summary_stock_report.html',
                            start_date_param=start_date_obj.strftime('%Y-%m-%d'),
@@ -2223,7 +2245,8 @@ def summary_stock_report():
                            wheels_by_brand_for_summary_report=wheels_by_brand_for_summary_report,
                            tire_brand_totals_for_summary_report=tire_brand_totals_for_summary_report,
                            wheel_brand_totals_for_summary_report=wheel_brand_totals_for_summary_report,
-                           current_user=current_user 
+                           current_user=current_user,
+                           test_value=test_value # Pass the test value to the template
                           )
 
 # --- Import/Export Routes ---
