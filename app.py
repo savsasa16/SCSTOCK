@@ -1,4 +1,3 @@
-# app.py
 import sqlite3
 from datetime import datetime, timedelta
 import pytz
@@ -39,7 +38,7 @@ ALLOWED_IMAGE_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif'}
 # Define Bangkok timezone
 BKK_TZ = pytz.timezone('Asia/Bangkok')
 
-# --- Helper Functions ---
+# --- Helper Functions (assuming these are already in your app.py) ---
 def allowed_excel_file(filename):
     return '.' in filename and \
            filename.rsplit('.', 1)[1].lower() in ALLOWED_EXCEL_EXTENSIONS
@@ -91,7 +90,7 @@ def convert_to_bkk_time(timestamp_obj):
 def inject_global_data():
     return dict(get_bkk_time=get_bkk_time)
 
-# --- Flask-Login Setup ---
+# --- Flask-Login Setup (assuming these are already in your app.py) ---
 login_manager = LoginManager()
 login_manager.init_app(app)
 login_manager.login_view = 'login'
@@ -174,7 +173,7 @@ def load_user(user_id):
     conn = get_db()
     return User.get(conn, user_id)
 
-# --- Login/Logout Routes ---
+# --- Login/Logout Routes (assuming these are already in your app.py) ---
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if current_user.is_authenticated:
@@ -420,7 +419,7 @@ def index():
                            current_user=current_user # Pass current_user to template
                           )
 
-# --- Promotions Routes ---
+# --- Promotions Routes (assuming these are already in your app.py) ---
 @app.route('/promotions')
 @login_required
 def promotions():
@@ -549,7 +548,7 @@ def delete_promotion(promo_id):
     return redirect(url_for('promotions'))
 
 
-# --- Item Management Routes (Add/Edit/Delete) ---
+# --- Item Management Routes (Add/Edit/Delete) (assuming these are already in your app.py) ---
 @app.route('/add_item', methods=('GET', 'POST'))
 @login_required
 def add_item():
@@ -893,7 +892,7 @@ def delete_tire(tire_id):
     
     return redirect(url_for('index', tab='tires'))
 
-# --- Wheel Routes (Main item editing) ---
+# --- Wheel Routes (Main item editing) (assuming these are already in your app.py) ---
 @app.route('/wheel_detail/<int:wheel_id>')
 @login_required
 def wheel_detail(wheel_id):
@@ -1110,7 +1109,7 @@ def delete_fitment(fitment_id, wheel_id):
     return redirect(url_for('wheel_detail', wheel_id=wheel_id))
 
 
-# --- Stock Movement Routes (Movement editing) ---
+# --- Stock Movement Routes (Movement editing) (assuming these are already in your app.py) ---
 @app.route('/stock_movement', methods=('GET', 'POST'))
 @login_required
 def stock_movement():
@@ -1394,7 +1393,7 @@ def edit_wheel_movement(movement_id):
 
     return render_template('edit_wheel_movement.html', movement=movement_data, current_user=current_user)
 
-# --- daily_stock_report ---
+# --- daily_stock_report (assuming this is already in your app.py) ---
 @app.route('/daily_stock_report')
 @login_required
 def daily_stock_report():
@@ -1999,42 +1998,31 @@ def summary_stock_report():
             SELECT
                 t.id AS tire_id,
                 t.brand,
-                t.model,
+                t.model, 
                 t.size,
-                COALESCE(initial_stock.initial_qty, 0) AS initial_quantity,
-                COALESCE(period_movements.in_qty_in_period, 0) AS IN_qty,
-                COALESCE(period_movements.out_qty_in_period, 0) AS OUT_qty,
-                (COALESCE(initial_stock.initial_qty, 0) + COALESCE(period_movements.in_qty_in_period, 0) - COALESCE(period_movements.out_qty_in_period, 0)) AS final_quantity_calculated
-            FROM tires t
-            LEFT JOIN (
-                SELECT
-                    tm.tire_id,
-                    SUM(CASE WHEN LOWER(tm.type) = 'in' THEN tm.quantity_change{"::NUMERIC" if is_psycopg2_conn else ""} ELSE -tm.quantity_change{"::NUMERIC" if is_psycopg2_conn else ""} END) AS initial_qty
-                FROM tire_movements tm
-                WHERE tm.timestamp < %s{timestamp_cast}
-                GROUP BY tm.tire_id
-            ) AS initial_stock ON t.id = initial_stock.tire_id
-            LEFT JOIN (
-                SELECT
-                    tm.tire_id,
-                    SUM(CASE WHEN LOWER(tm.type) = 'in' THEN tm.quantity_change{"::NUMERIC" if is_psycopg2_conn else ""} ELSE 0 END) AS in_qty_in_period,
-                    SUM(CASE WHEN LOWER(tm.type) = 'out' THEN tm.quantity_change{"::NUMERIC" if is_psycopg2_conn else ""} ELSE 0 END) AS out_qty_in_period
-                FROM tire_movements tm
-                WHERE tm.timestamp BETWEEN %s{timestamp_cast} AND %s{timestamp_cast}
-                GROUP BY tm.tire_id
-            ) AS period_movements ON t.id = period_movements.tire_id
-            WHERE t.is_deleted = FALSE
-            -- Filter to show only items with movements (IN or OUT) within the selected period
-            GROUP BY t.id, t.brand, t.model, t.size, initial_stock.initial_qty, period_movements.in_qty_in_period, period_movements.out_qty_in_period -- Moved GROUP BY before HAVING
-            HAVING
-                COALESCE(period_movements.in_qty_in_period, 0) != 0 OR
-                COALESCE(period_movements.out_qty_in_period, 0) != 0
+                COALESCE(SUM(CASE WHEN LOWER(tm.type) = 'in' AND tm.timestamp BETWEEN %s{timestamp_cast} AND %s{timestamp_cast} THEN tm.quantity_change{"::NUMERIC" if is_psycopg2_conn else ""} ELSE 0 END), 0) AS IN_qty,  
+                COALESCE(SUM(CASE WHEN LOWER(tm.type) = 'out' AND tm.timestamp BETWEEN %s{timestamp_cast} AND %s{timestamp_cast} THEN tm.quantity_change{"::NUMERIC" if is_psycopg2_conn else ""} ELSE 0 END), 0) AS OUT_qty, 
+                COALESCE((  
+                    SELECT SUM(CASE WHEN LOWER(prev_tm.type) = 'in' THEN prev_tm.quantity_change{"::NUMERIC" if is_psycopg2_conn else ""} ELSE -prev_tm.quantity_change{"::NUMERIC" if is_psycopg2_conn else ""} END)
+                    FROM tire_movements prev_tm
+                    WHERE prev_tm.tire_id = t.id AND prev_tm.timestamp < %s{timestamp_cast}
+                ), 0) AS initial_qty_before_period
+            FROM tires t  
+            INNER JOIN tire_movements tm ON tm.tire_id = t.id AND tm.timestamp BETWEEN %s{timestamp_cast} AND %s{timestamp_cast}  
+            WHERE t.is_deleted = FALSE  
+            GROUP BY t.id, t.brand, t.model, t.size  
+            HAVING COALESCE(SUM(CASE WHEN LOWER(tm.type) = 'in' AND tm.timestamp BETWEEN %s{timestamp_cast} AND %s{timestamp_cast} THEN tm.quantity_change{"::NUMERIC" if is_psycopg2_conn else ""} ELSE 0 END), 0) > 0 
+            OR COALESCE(SUM(CASE WHEN LOWER(tm.type) = 'out' AND tm.timestamp BETWEEN %s{timestamp_cast} AND %s{timestamp_cast} THEN tm.quantity_change{"::NUMERIC" if is_psycopg2_conn else ""} ELSE 0 END), 0) > 0  
             ORDER BY t.brand, t.model, t.size;
         """
         
         tire_params = (
-            start_of_period_iso, # for initial_stock subquery
-            start_of_period_iso, end_of_period_iso, # for period_movements subquery
+            start_of_period_iso, end_of_period_iso, # for IN_qty SUM
+            start_of_period_iso, end_of_period_iso, # for OUT_qty SUM
+            start_of_period_iso, # for initial_qty_before_period subquery
+            start_of_period_iso, end_of_period_iso, # for INNER JOIN ON clause
+            start_of_period_iso, end_of_period_iso, # for HAVING part 1 (IN)
+            start_of_period_iso, end_of_period_iso  # for HAVING part 2 (OUT)
         )
 
         if is_psycopg2_conn:
@@ -2051,37 +2039,24 @@ def summary_stock_report():
         # Process data for tires_by_brand_for_summary_report
         tires_by_brand_for_summary_report = OrderedDict()
         for row_data_raw in tire_detailed_movements_raw: 
-            print(f"DEBUG: Processing tire row_data_raw: {row_data_raw}, Type: {type(row_data_raw)}") # Debug print
-            row = dict(row_data_raw) # Explicitly convert DictRow to dict
-            print(f"DEBUG:   Converted row: {row}") # Debug print
-            print(f"DEBUG:   Row keys: {row.keys()}") # Debug print
-            print(f"DEBUG:   Row values: {row.values()}") # Debug print
+            row = dict(row_data_raw) 
+            # แปลงคีย์ทั้งหมดเป็นตัวพิมพ์เล็กเพื่อให้เข้าถึงได้สอดคล้องกัน
+            normalized_row = {k.lower(): v for k, v in row.items()}
 
-            brand = row['brand']
+            brand = normalized_row['brand']
             if brand not in tires_by_brand_for_summary_report:
                 tires_by_brand_for_summary_report[brand] = []
             
-            initial_qty_raw = row.get('initial_quantity', 0)
-            in_qty_raw = row.get('IN_qty', 0)
-            out_qty_raw = row.get('OUT_qty', 0)
+            # เข้าถึงค่าโดยใช้คีย์ที่เป็นตัวพิมพ์เล็ก
+            initial_qty = int(normalized_row.get('initial_qty_before_period', 0)) 
+            in_qty = int(normalized_row.get('in_qty', 0)) 
+            out_qty = int(normalized_row.get('out_qty', 0)) 
             
-            print(f"DEBUG:   initial_quantity raw: {initial_qty_raw}, Type: {type(initial_qty_raw)}") # Debug print
-            print(f"DEBUG:   IN_qty raw: {in_qty_raw}, Type: {type(in_qty_raw)}") # Debug print
-            print(f"DEBUG:   OUT_qty raw: {out_qty_raw}, Type: {type(out_qty_raw)}") # Debug print
-
-            initial_qty = int(initial_qty_raw)
-            in_qty = int(in_qty_raw) 
-            out_qty = int(out_qty_raw) 
-            
-            print(f"DEBUG:   initial_quantity after int conversion: {initial_qty}, Type: {type(initial_qty)}") # Debug print
-            print(f"DEBUG:   IN_qty after int conversion: {in_qty}, Type: {type(in_qty)}") # Debug print
-            print(f"DEBUG:   OUT_qty after int conversion: {out_qty}, Type: {type(out_qty)}") # Debug print
-
             final_qty = initial_qty + in_qty - out_qty 
 
             tires_by_brand_for_summary_report[brand].append({
-                'model': row['model'],
-                'size': row['size'],
+                'model': normalized_row['model'],
+                'size': normalized_row['size'],
                 'initial_quantity': initial_qty,
                 'IN': in_qty,
                 'OUT': out_qty,
@@ -2100,39 +2075,28 @@ def summary_stock_report():
                 w.brand, w.model, w.diameter, w.pcd, w.width,
                 w.et, 
                 w.color, 
-                COALESCE(initial_stock.initial_qty, 0) AS initial_quantity,
-                COALESCE(period_movements.in_qty_in_period, 0) AS IN_qty,
-                COALESCE(period_movements.out_qty_in_period, 0) AS OUT_qty,
-                (COALESCE(initial_stock.initial_qty, 0) + COALESCE(period_movements.in_qty_in_period, 0) - COALESCE(period_movements.out_qty_in_period, 0)) AS final_quantity_calculated
-            FROM wheels w
-            LEFT JOIN (
-                SELECT
-                    wm.wheel_id,
-                    SUM(CASE WHEN LOWER(wm.type) = 'in' THEN wm.quantity_change{"::NUMERIC" if is_psycopg2_conn else ""} ELSE -wm.quantity_change{"::NUMERIC" if is_psycopg2_conn else ""} END) AS initial_qty
-                FROM wheel_movements wm
-                WHERE wm.timestamp < %s{timestamp_cast}
-                GROUP BY wm.wheel_id
-            ) AS initial_stock ON w.id = initial_stock.wheel_id
-            LEFT JOIN (
-                SELECT
-                    wm.wheel_id,
-                    SUM(CASE WHEN LOWER(wm.type) = 'in' THEN wm.quantity_change{"::NUMERIC" if is_psycopg2_conn else ""} ELSE 0 END) AS in_qty_in_period,
-                    SUM(CASE WHEN LOWER(wm.type) = 'out' THEN wm.quantity_change{"::NUMERIC" if is_psycopg2_conn else ""} ELSE 0 END) AS out_qty_in_period
-                FROM wheel_movements wm
-                WHERE wm.timestamp BETWEEN %s{timestamp_cast} AND %s{timestamp_cast}
-                GROUP BY wm.wheel_id
-            ) AS period_movements ON w.id = period_movements.wheel_id
-            WHERE w.is_deleted = FALSE
-            -- Filter to show only items with movements (IN or OUT) within the selected period
-            GROUP BY w.id, w.brand, w.model, w.diameter, w.pcd, w.width, w.et, w.color, initial_stock.initial_qty, period_movements.in_qty_in_period, period_movements.out_qty_in_period -- Moved GROUP BY before HAVING
-            HAVING
-                COALESCE(period_movements.in_qty_in_period, 0) != 0 OR
-                COALESCE(period_movements.out_qty_in_period, 0) != 0
+                COALESCE(SUM(CASE WHEN LOWER(wm.type) = 'in' AND wm.timestamp BETWEEN %s{timestamp_cast} AND %s{timestamp_cast} THEN wm.quantity_change{"::NUMERIC" if is_psycopg2_conn else ""} ELSE 0 END), 0) AS IN_qty,  
+                COALESCE(SUM(CASE WHEN LOWER(wm.type) = 'out' AND wm.timestamp BETWEEN %s{timestamp_cast} AND %s{timestamp_cast} THEN wm.quantity_change{"::NUMERIC" if is_psycopg2_conn else ""} ELSE 0 END), 0) AS OUT_qty, 
+                COALESCE((  
+                    SELECT SUM(CASE WHEN LOWER(prev_wm.type) = 'in' THEN prev_wm.quantity_change{"::NUMERIC" if is_psycopg2_conn else ""} ELSE -prev_wm.quantity_change{"::NUMERIC" if is_psycopg2_conn else ""} END)
+                    FROM wheel_movements prev_wm
+                    WHERE prev_wm.wheel_id = w.id AND prev_wm.timestamp < %s{timestamp_cast}
+                ), 0) AS initial_qty_before_period
+            FROM wheels w  
+            INNER JOIN wheel_movements wm ON wm.wheel_id = w.id AND wm.timestamp BETWEEN %s{timestamp_cast} AND %s{timestamp_cast}  
+            WHERE w.is_deleted = FALSE  
+            GROUP BY w.id, w.brand, w.model, w.diameter, w.pcd, w.width, w.et, w.color 
+            HAVING COALESCE(SUM(CASE WHEN LOWER(wm.type) = 'in' AND wm.timestamp BETWEEN %s{timestamp_cast} AND %s{timestamp_cast} THEN wm.quantity_change{"::NUMERIC" if is_psycopg2_conn else ""} ELSE 0 END), 0) > 0 
+            OR COALESCE(SUM(CASE WHEN LOWER(wm.type) = 'out' AND wm.timestamp BETWEEN %s{timestamp_cast} AND %s{timestamp_cast} THEN wm.quantity_change{"::NUMERIC" if is_psycopg2_conn else ""} ELSE 0 END), 0) > 0  
             ORDER BY w.brand, w.model, w.diameter;
         """
         wheel_params = (
-            start_of_period_iso, # for initial_stock subquery
-            start_of_period_iso, end_of_period_iso, # for period_movements subquery
+            start_of_period_iso, end_of_period_iso, # for IN_qty SUM
+            start_of_period_iso, end_of_period_iso, # for OUT_qty SUM
+            start_of_period_iso, # for initial_qty_before_period subquery
+            start_of_period_iso, end_of_period_iso, # for INNER JOIN ON clause
+            start_of_period_iso, end_of_period_iso, # for HAVING part 1 (IN)
+            start_of_period_iso, end_of_period_iso  # for HAVING part 2 (OUT)
         )
 
         if is_psycopg2_conn:
@@ -2149,41 +2113,28 @@ def summary_stock_report():
         # Process data for wheels_by_brand_for_summary_report
         wheels_by_brand_for_summary_report = OrderedDict()
         for row_data_raw in wheels_detailed_movements_raw: 
-            print(f"DEBUG: Processing wheel row_data_raw: {row_data_raw}, Type: {type(row_data_raw)}") # Debug print
-            row = dict(row_data_raw) # Explicitly convert DictRow to dict
-            print(f"DEBUG:   Converted row: {row}") # Debug print
-            print(f"DEBUG:   Row keys: {row.keys()}") # Debug print
-            print(f"DEBUG:   Row values: {row.values()}") # Debug print
+            row = dict(row_data_raw) 
+            # แปลงคีย์ทั้งหมดเป็นตัวพิมพ์เล็กเพื่อให้เข้าถึงได้สอดคล้องกัน
+            normalized_row = {k.lower(): v for k, v in row.items()}
 
-            brand = row['brand']
+            brand = normalized_row['brand']
             if brand not in wheels_by_brand_for_summary_report:
                 wheels_by_brand_for_summary_report[brand] = []
             
-            initial_qty_raw = row.get('initial_quantity', 0)
-            in_qty_raw = row.get('IN_qty', 0)
-            out_qty_raw = row.get('OUT_qty', 0)
+            # เข้าถึงค่าโดยใช้คีย์ที่เป็นตัวพิมพ์เล็ก
+            initial_qty = int(normalized_row.get('initial_qty_before_period', 0)) 
+            in_qty = int(normalized_row.get('in_qty', 0)) 
+            out_qty = int(normalized_row.get('out_qty', 0)) 
             
-            print(f"DEBUG:   initial_quantity raw: {initial_qty_raw}, Type: {type(initial_qty_raw)}") # Debug print
-            print(f"DEBUG:   IN_qty raw: {in_qty_raw}, Type: {type(in_qty_raw)}") # Debug print
-            print(f"DEBUG:   OUT_qty raw: {out_qty_raw}, Type: {type(out_qty_raw)}") # Debug print
-
-            initial_qty = int(initial_qty_raw)
-            in_qty = int(in_qty_raw) 
-            out_qty = int(out_qty_raw) 
-            
-            print(f"DEBUG:   initial_quantity after int conversion: {initial_qty}, Type: {type(initial_qty)}") # Debug print
-            print(f"DEBUG:   IN_qty after int conversion: {in_qty}, Type: {type(in_qty)}") # Debug print
-            print(f"DEBUG:   OUT_qty after int conversion: {out_qty}, Type: {type(out_qty)}") # Debug print
-
             final_qty = initial_qty + in_qty - out_qty 
 
             wheels_by_brand_for_summary_report[brand].append({
-                'model': row['model'],
-                'diameter': row['diameter'],
-                'pcd': row['pcd'],
-                'width': row['width'],
-                'et': row['et'],       
-                'color': row['color'], 
+                'model': normalized_row['model'],
+                'diameter': normalized_row['diameter'],
+                'pcd': normalized_row['pcd'],
+                'width': normalized_row['width'],
+                'et': normalized_row['et'],       
+                'color': normalized_row['color'], 
                 'initial_quantity': initial_qty,
                 'IN': in_qty,
                 'OUT': out_qty,
@@ -2260,8 +2211,6 @@ def summary_stock_report():
         print(f"ERROR: Failed to calculate wheel brand totals: {e}")
         wheel_brand_totals_for_summary_report = OrderedDict() # Ensure it's still an OrderedDict
 
-    # Add a test value to ensure Jinja2 can render integers
-    test_value = 12345
 
     return render_template('summary_stock_report.html',
                            start_date_param=start_date_obj.strftime('%Y-%m-%d'),
@@ -2281,10 +2230,10 @@ def summary_stock_report():
                            wheels_by_brand_for_summary_report=wheels_by_brand_for_summary_report,
                            tire_brand_totals_for_summary_report=tire_brand_totals_for_summary_report,
                            wheel_brand_totals_for_summary_report=wheel_brand_totals_for_summary_report,
-                           current_user=current_user,
-                           test_value=test_value # Pass the test value to the template
+                           current_user=current_user 
                           )
-# --- Import/Export Routes ---
+
+# --- Import/Export Routes (assuming these are already in your app.py) ---
 @app.route('/export_import', methods=('GET', 'POST'))
 @login_required
 def export_import():
@@ -2710,7 +2659,7 @@ def import_wheels_action():
         return redirect(url_for('export_import', tab='wheels_excel'))
 
 
-# --- User management routes ---
+# --- User management routes (assuming these are already in your app.py) ---
 @app.route('/manage_users')
 @login_required
 def manage_users():
@@ -2793,7 +2742,7 @@ def delete_user(user_id):
         flash('ลบผู้ใช้สำเร็จ!', 'success')
     return redirect(url_for('manage_users'))
 
-# --- Admin Dashboard routes ---
+# --- Admin Dashboard routes (assuming these are already in your app.py) ---
 @app.route('/admin_dashboard')
 @login_required
 def admin_dashboard():
