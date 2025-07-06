@@ -2051,20 +2051,24 @@ def summary_stock_report():
         # Process data for tires_by_brand_for_summary_report
         tires_by_brand_for_summary_report = OrderedDict()
         for row_data_raw in tire_detailed_movements_raw: 
-            row = dict(row_data_raw) 
-            brand = row['brand']
+            print(f"DEBUG: Processing tire row: {row_data_raw}, Type: {type(row_data_raw)}") # Debug print
+            # No longer convert to dict explicitly, use DictRow directly
+            brand = row_data_raw['brand']
             if brand not in tires_by_brand_for_summary_report:
                 tires_by_brand_for_summary_report[brand] = []
             
-            initial_qty = int(row.get('initial_quantity', 0)) # Use 'initial_quantity' alias
-            in_qty = int(row.get('IN_qty', 0)) 
-            out_qty = int(row.get('OUT_qty', 0)) 
+            initial_qty = int(row_data_raw.get('initial_quantity', 0)) # Use 'initial_quantity' alias
+            in_qty = int(row_data_raw.get('IN_qty', 0)) 
+            out_qty = int(row_data_raw.get('OUT_qty', 0)) 
             
+            print(f"DEBUG:   IN_qty before int conversion: {row_data_raw.get('IN_qty', 0)}, Type: {type(row_data_raw.get('IN_qty', 0))}") # Debug print
+            print(f"DEBUG:   IN_qty after int conversion: {in_qty}, Type: {type(in_qty)}") # Debug print
+
             final_qty = initial_qty + in_qty - out_qty 
 
             tires_by_brand_for_summary_report[brand].append({
-                'model': row['model'],
-                'size': row['size'],
+                'model': row_data_raw['model'],
+                'size': row_data_raw['size'],
                 'initial_quantity': initial_qty,
                 'IN': in_qty,
                 'OUT': out_qty,
@@ -2132,24 +2136,28 @@ def summary_stock_report():
         # Process data for wheels_by_brand_for_summary_report
         wheels_by_brand_for_summary_report = OrderedDict()
         for row_data_raw in wheels_detailed_movements_raw: 
-            row = dict(row_data_raw) 
-            brand = row['brand']
+            print(f"DEBUG: Processing wheel row: {row_data_raw}, Type: {type(row_data_raw)}") # Debug print
+            # No longer convert to dict explicitly, use DictRow directly
+            brand = row_data_raw['brand']
             if brand not in wheels_by_brand_for_summary_report:
                 wheels_by_brand_for_summary_report[brand] = []
             
-            initial_qty = int(row.get('initial_quantity', 0)) # Use 'initial_quantity' alias
-            in_qty = int(row.get('IN_qty', 0)) 
-            out_qty = int(row.get('OUT_qty', 0)) 
+            initial_qty = int(row_data_raw.get('initial_quantity', 0)) # Use 'initial_quantity' alias
+            in_qty = int(row_data_raw.get('IN_qty', 0)) 
+            out_qty = int(row_data_raw.get('OUT_qty', 0)) 
             
+            print(f"DEBUG:   IN_qty before int conversion: {row_data_raw.get('IN_qty', 0)}, Type: {type(row_data_raw.get('IN_qty', 0))}") # Debug print
+            print(f"DEBUG:   IN_qty after int conversion: {in_qty}, Type: {type(in_qty)}") # Debug print
+
             final_qty = initial_qty + in_qty - out_qty 
 
             wheels_by_brand_for_summary_report[brand].append({
-                'model': row['model'],
-                'diameter': row['diameter'],
-                'pcd': row['pcd'],
-                'width': row['width'],
-                'et': row['et'],       
-                'color': row['color'], 
+                'model': row_data_raw['model'],
+                'diameter': row_data_raw['diameter'],
+                'pcd': row_data_raw['pcd'],
+                'width': row_data_raw['width'],
+                'et': row_data_raw['et'],       
+                'color': row_data_raw['color'], 
                 'initial_quantity': initial_qty,
                 'IN': in_qty,
                 'OUT': out_qty,
@@ -2250,7 +2258,6 @@ def summary_stock_report():
                            current_user=current_user,
                            test_value=test_value # Pass the test value to the template
                           )
-
 # --- Import/Export Routes ---
 @app.route('/export_import', methods=('GET', 'POST'))
 @login_required
