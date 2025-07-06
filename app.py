@@ -2051,24 +2051,37 @@ def summary_stock_report():
         # Process data for tires_by_brand_for_summary_report
         tires_by_brand_for_summary_report = OrderedDict()
         for row_data_raw in tire_detailed_movements_raw: 
-            print(f"DEBUG: Processing tire row: {row_data_raw}, Type: {type(row_data_raw)}") # Debug print
-            # No longer convert to dict explicitly, use DictRow directly
-            brand = row_data_raw['brand']
+            print(f"DEBUG: Processing tire row_data_raw: {row_data_raw}, Type: {type(row_data_raw)}") # Debug print
+            row = dict(row_data_raw) # Explicitly convert DictRow to dict
+            print(f"DEBUG:   Converted row: {row}") # Debug print
+            print(f"DEBUG:   Row keys: {row.keys()}") # Debug print
+            print(f"DEBUG:   Row values: {row.values()}") # Debug print
+
+            brand = row['brand']
             if brand not in tires_by_brand_for_summary_report:
                 tires_by_brand_for_summary_report[brand] = []
             
-            initial_qty = int(row_data_raw.get('initial_quantity', 0)) # Use 'initial_quantity' alias
-            in_qty = int(row_data_raw.get('IN_qty', 0)) 
-            out_qty = int(row_data_raw.get('OUT_qty', 0)) 
+            initial_qty_raw = row.get('initial_quantity', 0)
+            in_qty_raw = row.get('IN_qty', 0)
+            out_qty_raw = row.get('OUT_qty', 0)
             
-            print(f"DEBUG:   IN_qty before int conversion: {row_data_raw.get('IN_qty', 0)}, Type: {type(row_data_raw.get('IN_qty', 0))}") # Debug print
+            print(f"DEBUG:   initial_quantity raw: {initial_qty_raw}, Type: {type(initial_qty_raw)}") # Debug print
+            print(f"DEBUG:   IN_qty raw: {in_qty_raw}, Type: {type(in_qty_raw)}") # Debug print
+            print(f"DEBUG:   OUT_qty raw: {out_qty_raw}, Type: {type(out_qty_raw)}") # Debug print
+
+            initial_qty = int(initial_qty_raw)
+            in_qty = int(in_qty_raw) 
+            out_qty = int(out_qty_raw) 
+            
+            print(f"DEBUG:   initial_quantity after int conversion: {initial_qty}, Type: {type(initial_qty)}") # Debug print
             print(f"DEBUG:   IN_qty after int conversion: {in_qty}, Type: {type(in_qty)}") # Debug print
+            print(f"DEBUG:   OUT_qty after int conversion: {out_qty}, Type: {type(out_qty)}") # Debug print
 
             final_qty = initial_qty + in_qty - out_qty 
 
             tires_by_brand_for_summary_report[brand].append({
-                'model': row_data_raw['model'],
-                'size': row_data_raw['size'],
+                'model': row['model'],
+                'size': row['size'],
                 'initial_quantity': initial_qty,
                 'IN': in_qty,
                 'OUT': out_qty,
@@ -2136,28 +2149,41 @@ def summary_stock_report():
         # Process data for wheels_by_brand_for_summary_report
         wheels_by_brand_for_summary_report = OrderedDict()
         for row_data_raw in wheels_detailed_movements_raw: 
-            print(f"DEBUG: Processing wheel row: {row_data_raw}, Type: {type(row_data_raw)}") # Debug print
-            # No longer convert to dict explicitly, use DictRow directly
-            brand = row_data_raw['brand']
+            print(f"DEBUG: Processing wheel row_data_raw: {row_data_raw}, Type: {type(row_data_raw)}") # Debug print
+            row = dict(row_data_raw) # Explicitly convert DictRow to dict
+            print(f"DEBUG:   Converted row: {row}") # Debug print
+            print(f"DEBUG:   Row keys: {row.keys()}") # Debug print
+            print(f"DEBUG:   Row values: {row.values()}") # Debug print
+
+            brand = row['brand']
             if brand not in wheels_by_brand_for_summary_report:
                 wheels_by_brand_for_summary_report[brand] = []
             
-            initial_qty = int(row_data_raw.get('initial_quantity', 0)) # Use 'initial_quantity' alias
-            in_qty = int(row_data_raw.get('IN_qty', 0)) 
-            out_qty = int(row_data_raw.get('OUT_qty', 0)) 
+            initial_qty_raw = row.get('initial_quantity', 0)
+            in_qty_raw = row.get('IN_qty', 0)
+            out_qty_raw = row.get('OUT_qty', 0)
             
-            print(f"DEBUG:   IN_qty before int conversion: {row_data_raw.get('IN_qty', 0)}, Type: {type(row_data_raw.get('IN_qty', 0))}") # Debug print
+            print(f"DEBUG:   initial_quantity raw: {initial_qty_raw}, Type: {type(initial_qty_raw)}") # Debug print
+            print(f"DEBUG:   IN_qty raw: {in_qty_raw}, Type: {type(in_qty_raw)}") # Debug print
+            print(f"DEBUG:   OUT_qty raw: {out_qty_raw}, Type: {type(out_qty_raw)}") # Debug print
+
+            initial_qty = int(initial_qty_raw)
+            in_qty = int(in_qty_raw) 
+            out_qty = int(out_qty_raw) 
+            
+            print(f"DEBUG:   initial_quantity after int conversion: {initial_qty}, Type: {type(initial_qty)}") # Debug print
             print(f"DEBUG:   IN_qty after int conversion: {in_qty}, Type: {type(in_qty)}") # Debug print
+            print(f"DEBUG:   OUT_qty after int conversion: {out_qty}, Type: {type(out_qty)}") # Debug print
 
             final_qty = initial_qty + in_qty - out_qty 
 
             wheels_by_brand_for_summary_report[brand].append({
-                'model': row_data_raw['model'],
-                'diameter': row_data_raw['diameter'],
-                'pcd': row_data_raw['pcd'],
-                'width': row_data_raw['width'],
-                'et': row_data_raw['et'],       
-                'color': row_data_raw['color'], 
+                'model': row['model'],
+                'diameter': row['diameter'],
+                'pcd': row['pcd'],
+                'width': row['width'],
+                'et': row['et'],       
+                'color': row['color'], 
                 'initial_quantity': initial_qty,
                 'IN': in_qty,
                 'OUT': out_qty,
