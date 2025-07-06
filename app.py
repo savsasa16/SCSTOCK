@@ -1948,23 +1948,23 @@ def summary_stock_report():
 
     # --- NEW: สำหรับรายงานการเคลื่อนไหวสต็อกยางตามยี่ห้อและขนาด (tires_by_brand_for_summary_report) ---
     # Binding parameters for tire_detailed_movements_query:
-    # 1. IN_qty: (%s, %s) -> start_of_period_iso, end_of_period_iso
-    # 2. OUT_qty: (%s, %s) -> start_of_period_iso, end_of_period_iso
-    # 3. initial_qty_before_period: (%s) -> start_of_period_iso
-    # 4. INNER JOIN: (%s, %s) -> start_of_period_iso, end_of_period_iso
-    # 5. HAVING part 1 (IN): (%s, %s) -> start_of_period_iso, end_of_period_iso
-    # 6. HAVING part 2 (OUT): (%s, %s) -> start_of_period_iso, end_of_period_iso
+    # 1. IN_qty: (%s, %s) -> start_of_period_iso, end_of_period_iso (x2 for IN, OUT)
+    # 2. initial_qty_before_period: (%s) -> start_of_period_iso
+    # 3. INNER JOIN: (%s, %s) -> start_of_period_iso, end_of_period_iso
+    # 4. HAVING part 1 (IN): (%s, %s) -> start_of_period_iso, end_of_period_iso
+    # 5. HAVING part 2 (OUT): (%s, %s) -> start_of_period_iso, end_of_period_iso
     # Total: 2 + 2 + 1 + 2 + 2 + 2 = 11 bindings.
+    # The ::INTEGER cast is applied conditionally for psycopg2 connections.
     tire_detailed_movements_query = f"""
         SELECT
             t.id AS tire_id,
             t.brand,
             t.model, 
             t.size,
-            COALESCE(SUM(CASE WHEN LOWER(tm.type) = 'in' AND tm.timestamp BETWEEN %s AND %s THEN tm.quantity_change{"::INTEGER" if is_psycopg2_conn else ""} ELSE 0 END), 0) AS IN_qty,  
-            COALESCE(SUM(CASE WHEN LOWER(tm.type) = 'out' AND tm.timestamp BETWEEN %s AND %s THEN tm.quantity_change{"::INTEGER" if is_psycopg2_conn else ""} ELSE 0 END), 0) AS OUT_qty, 
+            COALESCE(SUM(CASE WHEN LOWER(tm.type) = 'in' AND tm.timestamp BETWEEN %s AND %s THEN tm.quantity_change{"::NUMERIC" if is_psycopg2_conn else ""} ELSE 0 END), 0) AS IN_qty,  
+            COALESCE(SUM(CASE WHEN LOWER(tm.type) = 'out' AND tm.timestamp BETWEEN %s AND %s THEN tm.quantity_change{"::NUMERIC" if is_psycopg2_conn else ""} ELSE 0 END), 0) AS OUT_qty, 
             COALESCE((  
-                SELECT SUM(CASE WHEN LOWER(prev_tm.type) = 'in' THEN prev_tm.quantity_change{"::INTEGER" if is_psycopg2_conn else ""} ELSE -prev_tm.quantity_change{"::INTEGER" if is_psycopg2_conn else ""} END)
+                SELECT SUM(CASE WHEN LOWER(prev_tm.type) = 'in' THEN prev_tm.quantity_change{"::NUMERIC" if is_psycopg2_conn else ""} ELSE -prev_tm.quantity_change{"::NUMERIC" if is_psycopg2_conn else ""} END)
                 FROM tire_movements prev_tm
                 WHERE prev_tm.tire_id = t.id AND prev_tm.timestamp < %s
             ), 0) AS initial_qty_before_period
@@ -1972,8 +1972,8 @@ def summary_stock_report():
         INNER JOIN tire_movements tm ON tm.tire_id = t.id AND tm.timestamp BETWEEN %s AND %s  
         WHERE t.is_deleted = FALSE  
         GROUP BY t.id, t.brand, t.model, t.size  
-        HAVING COALESCE(SUM(CASE WHEN LOWER(tm.type) = 'in' AND tm.timestamp BETWEEN %s AND %s THEN tm.quantity_change{"::INTEGER" if is_psycopg2_conn else ""} ELSE 0 END), 0) > 0 
-        OR COALESCE(SUM(CASE WHEN LOWER(tm.type) = 'out' AND tm.timestamp BETWEEN %s AND %s THEN tm.quantity_change{"::INTEGER" if is_psycopg2_conn else ""} ELSE 0 END), 0) > 0  
+        HAVING COALESCE(SUM(CASE WHEN LOWER(tm.type) = 'in' AND tm.timestamp BETWEEN %s AND %s THEN tm.quantity_change{"::NUMERIC" if is_psycopg2_conn else ""} ELSE 0 END), 0) > 0 
+        OR COALESCE(SUM(CASE WHEN LOWER(tm.type) = 'out' AND tm.timestamp BETWEEN %s AND %s THEN tm.quantity_change{"::NUMERIC" if is_psycopg2_conn else ""} ELSE 0 END), 0) > 0  
         ORDER BY t.brand, t.model, t.size;
     """
     
@@ -2021,23 +2021,23 @@ def summary_stock_report():
     
     # --- NEW: สำหรับรายงานการเคลื่อนไหวสต็อกล้อแม็กตามยี่ห้อและขนาด (wheels_by_brand_for_summary_report) ---
     # Binding parameters for wheel_detailed_movements_query:
-    # 1. IN_qty: (%s, %s) -> start_of_period_iso, end_of_period_iso
-    # 2. OUT_qty: (%s, %s) -> start_of_period_iso, end_of_period_iso
-    # 3. initial_qty_before_period: (%s) -> start_of_period_iso
-    # 4. INNER JOIN: (%s, %s) -> start_of_period_iso, end_of_period_iso
-    # 5. HAVING part 1 (IN): (%s, %s) -> start_of_period_iso, end_of_period_iso
-    # 6. HAVING part 2 (OUT): (%s, %s) -> start_of_period_iso, end_of_period_iso
+    # 1. IN_qty: (%s, %s) -> start_of_period_iso, end_of_period_iso (x2 for IN, OUT)
+    # 2. initial_qty_before_period: (%s) -> start_of_period_iso
+    # 3. INNER JOIN: (%s, %s) -> start_of_period_iso, end_of_period_iso
+    # 4. HAVING part 1 (IN): (%s, %s) -> start_of_period_iso, end_of_period_iso
+    # 5. HAVING part 2 (OUT): (%s, %s) -> start_of_period_iso, end_of_period_iso
     # Total: 2 + 2 + 1 + 2 + 2 + 2 = 11 bindings.
+    # The ::INTEGER cast is applied conditionally for psycopg2 connections.
     wheel_detailed_movements_query = f"""
         SELECT
             w.id AS wheel_id,
             w.brand, w.model, w.diameter, w.pcd, w.width,
             w.et, 
             w.color, 
-            COALESCE(SUM(CASE WHEN LOWER(wm.type) = 'in' AND wm.timestamp BETWEEN %s AND %s THEN wm.quantity_change{"::INTEGER" if is_psycopg2_conn else ""} ELSE 0 END), 0) AS IN_qty,  
-            COALESCE(SUM(CASE WHEN LOWER(wm.type) = 'out' AND wm.timestamp BETWEEN %s AND %s THEN wm.quantity_change{"::INTEGER" if is_psycopg2_conn else ""} ELSE 0 END), 0) AS OUT_qty, 
+            COALESCE(SUM(CASE WHEN LOWER(wm.type) = 'in' AND wm.timestamp BETWEEN %s AND %s THEN wm.quantity_change{"::NUMERIC" if is_psycopg2_conn else ""} ELSE 0 END), 0) AS IN_qty,  
+            COALESCE(SUM(CASE WHEN LOWER(wm.type) = 'out' AND wm.timestamp BETWEEN %s AND %s THEN wm.quantity_change{"::NUMERIC" if is_psycopg2_conn else ""} ELSE 0 END), 0) AS OUT_qty, 
             COALESCE((  
-                SELECT SUM(CASE WHEN LOWER(prev_wm.type) = 'in' THEN prev_wm.quantity_change{"::INTEGER" if is_psycopg2_conn else ""} ELSE -prev_wm.quantity_change{"::INTEGER" if is_psycopg2_conn else ""} END)
+                SELECT SUM(CASE WHEN LOWER(prev_wm.type) = 'in' THEN prev_wm.quantity_change{"::NUMERIC" if is_psycopg2_conn else ""} ELSE -prev_wm.quantity_change{"::NUMERIC" if is_psycopg2_conn else ""} END)
                 FROM wheel_movements prev_wm
                 WHERE prev_wm.wheel_id = w.id AND prev_wm.timestamp < %s
             ), 0) AS initial_qty_before_period
@@ -2045,8 +2045,8 @@ def summary_stock_report():
         INNER JOIN wheel_movements wm ON wm.wheel_id = w.id AND wm.timestamp BETWEEN %s AND %s  
         WHERE w.is_deleted = FALSE  
         GROUP BY w.id, w.brand, w.model, w.diameter, w.pcd, w.width, w.et, w.color 
-        HAVING COALESCE(SUM(CASE WHEN LOWER(wm.type) = 'in' AND wm.timestamp BETWEEN %s AND %s THEN wm.quantity_change{"::INTEGER" if is_psycopg2_conn else ""} ELSE 0 END), 0) > 0 
-        OR COALESCE(SUM(CASE WHEN LOWER(wm.type) = 'out' AND wm.timestamp BETWEEN %s AND %s THEN wm.quantity_change{"::INTEGER" if is_psycopg2_conn else ""} ELSE 0 END), 0) > 0  
+        HAVING COALESCE(SUM(CASE WHEN LOWER(wm.type) = 'in' AND wm.timestamp BETWEEN %s AND %s THEN wm.quantity_change{"::NUMERIC" if is_psycopg2_conn else ""} ELSE 0 END), 0) > 0 
+        OR COALESCE(SUM(CASE WHEN LOWER(wm.type) = 'out' AND wm.timestamp BETWEEN %s AND %s THEN wm.quantity_change{"::NUMERIC" if is_psycopg2_conn else ""} ELSE 0 END), 0) > 0  
         ORDER BY w.brand, w.model, w.diameter;
     """
     # Corrected parameter list based on 11 bindings required
