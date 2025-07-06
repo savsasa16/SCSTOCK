@@ -1851,9 +1851,23 @@ def summary_stock_report():
             end_date_obj = BKK_TZ.localize(datetime(today.year, today.month, today.day, 23, 59, 59, 999999))
             display_range_str = f"จากวันที่ {start_date_obj.strftime('%d %b %Y')} ถึงวันที่ {end_date_obj.strftime('%d %b %Y')}"
 
-    start_of_period_iso = start_date_obj.isoformat()
-    end_of_period_iso = end_date_obj.isoformat()
     is_psycopg2_conn = "psycopg2" in str(type(conn))
+
+    # Convert timezone-aware datetime objects to UTC and then format without timezone info
+    # This is crucial for PostgreSQL TIMESTAMP WITHOUT TIME ZONE columns, which often store UTC implicitly.
+    if is_psycopg2_conn:
+        start_date_utc = start_date_obj.astimezone(pytz.utc)
+        end_date_utc = end_date_obj.astimezone(pytz.utc)
+        start_of_period_iso = start_date_utc.strftime('%Y-%m-%d %H:%M:%S.%f')
+        end_of_period_iso = end_date_utc.strftime('%Y-%m-%d %H:%M:%S.%f')
+    else:
+        # For SQLite, isoformat() works fine with timezone info
+        start_of_period_iso = start_date_obj.isoformat()
+        end_of_period_iso = end_date_obj.isoformat()
+
+    print(f"DEBUG: is_psycopg2_conn: {is_psycopg2_conn}")
+    print(f"DEBUG: start_of_period_iso (sent to DB): {start_of_period_iso}")
+    print(f"DEBUG: end_of_period_iso (sent to DB): {end_of_period_iso}")
 
     # --- Tire Movements by Brand (สำหรับสรุปยอดรวมใหญ่) ---
     tire_movements_query_sql = f"""
@@ -1954,7 +1968,7 @@ def summary_stock_report():
     # 4. HAVING part 1 (IN): (%s, %s) -> start_of_period_iso, end_of_period_iso
     # 5. HAVING part 2 (OUT): (%s, %s) -> start_of_period_iso, end_of_period_iso
     # Total: 2 + 2 + 1 + 2 + 2 + 2 = 11 bindings.
-    # The ::INTEGER cast is applied conditionally for psycopg2 connections.
+    # The ::NUMERIC cast is applied conditionally for psycopg2 connections.
     tire_detailed_movements_query = f"""
         SELECT
             t.id AS tire_id,
@@ -1996,6 +2010,8 @@ def summary_stock_report():
         query_result_obj = conn.execute(tire_detailed_movements_query.replace('%s', '?'), tire_params)
         tire_detailed_movements_raw = query_result_obj.fetchall()
 
+    print(f"DEBUG: tire_detailed_movements_raw: {tire_detailed_movements_raw}")
+
     # Process data for tires_by_brand_for_summary_report
     tires_by_brand_for_summary_report = OrderedDict()
     for row_data_raw in tire_detailed_movements_raw: 
@@ -2027,7 +2043,7 @@ def summary_stock_report():
     # 4. HAVING part 1 (IN): (%s, %s) -> start_of_period_iso, end_of_period_iso
     # 5. HAVING part 2 (OUT): (%s, %s) -> start_of_period_iso, end_of_period_iso
     # Total: 2 + 2 + 1 + 2 + 2 + 2 = 11 bindings.
-    # The ::INTEGER cast is applied conditionally for psycopg2 connections.
+    # The ::NUMERIC cast is applied conditionally for psycopg2 connections.
     wheel_detailed_movements_query = f"""
         SELECT
             w.id AS wheel_id,
@@ -2067,6 +2083,8 @@ def summary_stock_report():
     else:
         query_result_obj = conn.execute(wheel_detailed_movements_query.replace('%s', '?'), wheel_params)
         wheel_detailed_movements_raw = query_result_obj.fetchall()
+
+    print(f"DEBUG: wheel_detailed_movements_raw: {wheel_detailed_movements_raw}")
 
     # Process data for wheels_by_brand_for_summary_report
     wheels_by_brand_for_summary_report = OrderedDict()
