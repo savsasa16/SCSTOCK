@@ -1960,10 +1960,10 @@ def summary_stock_report():
             t.brand,
             t.model, 
             t.size,
-            COALESCE(SUM(CASE WHEN tm.type = 'IN' AND tm.timestamp BETWEEN %s AND %s THEN tm.quantity_change ELSE 0 END), 0) AS IN_qty,  
-            COALESCE(SUM(CASE WHEN tm.type = 'OUT' AND tm.timestamp BETWEEN %s AND %s THEN tm.quantity_change ELSE 0 END), 0) AS OUT_qty, 
+            COALESCE(SUM(CASE WHEN LOWER(tm.type) = 'in' AND tm.timestamp BETWEEN %s AND %s THEN tm.quantity_change ELSE 0 END), 0) AS IN_qty,  
+            COALESCE(SUM(CASE WHEN LOWER(tm.type) = 'out' AND tm.timestamp BETWEEN %s AND %s THEN tm.quantity_change ELSE 0 END), 0) AS OUT_qty, 
             COALESCE((  
-                SELECT SUM(CASE WHEN prev_tm.type = 'IN' THEN prev_tm.quantity_change ELSE -prev_tm.quantity_change END)
+                SELECT SUM(CASE WHEN LOWER(prev_tm.type) = 'in' THEN prev_tm.quantity_change ELSE -prev_tm.quantity_change END)
                 FROM tire_movements prev_tm
                 WHERE prev_tm.tire_id = t.id AND prev_tm.timestamp < %s
             ), 0) AS initial_qty_before_period
@@ -2030,10 +2030,10 @@ def summary_stock_report():
             w.brand, w.model, w.diameter, w.pcd, w.width,
             w.et, 
             w.color, 
-            COALESCE(SUM(CASE WHEN wm.type = 'IN' AND wm.timestamp BETWEEN %s AND %s THEN wm.quantity_change ELSE 0 END), 0) AS IN_qty,  
-            COALESCE(SUM(CASE WHEN wm.type = 'OUT' AND wm.timestamp BETWEEN %s AND %s THEN wm.quantity_change ELSE 0 END), 0) AS OUT_qty, 
+            COALESCE(SUM(CASE WHEN LOWER(wm.type) = 'in' AND wm.timestamp BETWEEN %s AND %s THEN wm.quantity_change ELSE 0 END), 0) AS IN_qty,  
+            COALESCE(SUM(CASE WHEN LOWER(wm.type) = 'out' AND wm.timestamp BETWEEN %s AND %s THEN wm.quantity_change ELSE 0 END), 0) AS OUT_qty, 
             COALESCE((  
-                SELECT SUM(CASE WHEN prev_wm.type = 'IN' THEN prev_wm.quantity_change ELSE -prev_wm.quantity_change END)
+                SELECT SUM(CASE WHEN LOWER(prev_wm.type) = 'in' THEN prev_wm.quantity_change ELSE -prev_wm.quantity_change END)
                 FROM wheel_movements prev_wm
                 WHERE prev_wm.wheel_id = w.id AND prev_wm.timestamp < %s
             ), 0) AS initial_qty_before_period
