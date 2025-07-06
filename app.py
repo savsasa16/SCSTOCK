@@ -1823,23 +1823,28 @@ def summary_stock_report():
     start_date_str = request.args.get('start_date')
     end_date_str = request.args.get('end_date')
 
+    # Define BKK timezone
+    bkk_tz = pytz.timezone('Asia/Bangkok')
+
     if not start_date_str or not end_date_str:
         today = get_bkk_time().date()
         first_day_of_month = today.replace(day=1)
-        start_date_obj = BKK_TZ.localize(datetime(first_day_of_month.year, first_day_of_month.month, first_day_of_month.day, 0, 0, 0))
-        end_date_obj = BKK_TZ.localize(datetime(today.year, today.month, today.day, 23, 59, 59, 999999))
+        # Ensure start_date_obj and end_date_obj are timezone-aware (BKK)
+        start_date_obj = bkk_tz.localize(datetime(first_day_of_month.year, first_day_of_month.month, first_day_of_month.day, 0, 0, 0))
+        end_date_obj = bkk_tz.localize(datetime(today.year, today.month, today.day, 23, 59, 59, 999999))
         display_range_str = f"จากวันที่ {start_date_obj.strftime('%d %b %Y')} ถึงวันที่ {end_date_obj.strftime('%d %b %Y')}"
     else:
         try:
-            start_date_obj = BKK_TZ.localize(datetime.strptime(start_date_str, '%Y-%m-%d')).replace(hour=0, minute=0, second=0, microsecond=0)
-            end_date_obj = BKK_TZ.localize(datetime.strptime(end_date_str, '%Y-%m-%d')).replace(hour=23, minute=59, second=59, microsecond=999999)
+            # Ensure start_date_obj and end_date_obj are timezone-aware (BKK)
+            start_date_obj = bkk_tz.localize(datetime.strptime(start_date_str, '%Y-%m-%d')).replace(hour=0, minute=0, second=0, microsecond=0)
+            end_date_obj = bkk_tz.localize(datetime.strptime(end_date_str, '%Y-%m-%d')).replace(hour=23, minute=59, second=59, microsecond=999999)
             
             if start_date_obj > end_date_obj:
                 flash("วันที่เริ่มต้นต้องไม่เกินวันที่สิ้นสุด", "danger")
                 today = get_bkk_time().date()
                 first_day_of_month = today.replace(day=1)
-                start_date_obj = BKK_TZ.localize(datetime(first_day_of_month.year, first_day_of_month.month, first_day_of_month.day, 0, 0, 0))
-                end_date_obj = BKK_TZ.localize(datetime(today.year, today.month, today.day, 23, 59, 59, 999999))
+                start_date_obj = bkk_tz.localize(datetime(first_day_of_month.year, first_day_of_month.month, first_day_of_month.day, 0, 0, 0))
+                end_date_obj = bkk_tz.localize(datetime(today.year, today.month, today.day, 23, 59, 59, 999999))
                 display_range_str = f"จากวันที่ {start_date_obj.strftime('%d %b %Y')} ถึงวันที่ {end_date_obj.strftime('%d %b %Y')}"
             else:
                 display_range_str = f"จากวันที่ {start_date_obj.strftime('%d %b %Y')} ถึงวันที่ {end_date_obj.strftime('%d %b %Y')}"
@@ -1847,34 +1852,30 @@ def summary_stock_report():
             flash("รูปแบบวันที่ไม่ถูกต้อง กรุณาใช้YYYY-MM-DD", "danger")
             today = get_bkk_time().date()
             first_day_of_month = today.replace(day=1)
-            start_date_obj = BKK_TZ.localize(datetime(first_day_of_month.year, first_day_of_month.month, first_day_of_month.day, 0, 0, 0))
-            end_date_obj = BKK_TZ.localize(datetime(today.year, today.month, today.day, 23, 59, 59, 999999))
+            start_date_obj = bkk_tz.localize(datetime(first_day_of_month.year, first_day_of_month.month, first_day_of_month.day, 0, 0, 0))
+            end_date_obj = bkk_tz.localize(datetime(today.year, today.month, today.day, 23, 59, 59, 999999))
             display_range_str = f"จากวันที่ {start_date_obj.strftime('%d %b %Y')} ถึงวันที่ {end_date_obj.strftime('%d %b %Y')}"
 
     is_psycopg2_conn = "psycopg2" in str(type(conn))
 
-    # Convert timezone-aware datetime objects to UTC and then format without timezone info
-    # This is crucial for PostgreSQL TIMESTAMP WITHOUT TIME ZONE columns, which often store UTC implicitly.
-    if is_psycopg2_conn:
-        start_date_utc = start_date_obj.astimezone(pytz.utc)
-        end_date_utc = end_date_obj.astimezone(pytz.utc)
-        start_of_period_iso = start_date_utc.strftime('%Y-%m-%d %H:%M:%S.%f')
-        end_of_period_iso = end_date_utc.strftime('%Y-%m-%d %H:%M:%S.%f')
-    else:
-        # For SQLite, isoformat() works fine with timezone info
-        start_of_period_iso = start_date_obj.isoformat()
-        end_of_period_iso = end_date_obj.isoformat()
+    # For PostgreSQL, use isoformat() which includes timezone offset, and cast in SQL
+    # For SQLite, isoformat() works fine.
+    start_of_period_iso = start_date_obj.isoformat()
+    end_of_period_iso = end_date_obj.isoformat()
 
     print(f"DEBUG: is_psycopg2_conn: {is_psycopg2_conn}")
     print(f"DEBUG: start_of_period_iso (sent to DB): {start_of_period_iso}")
     print(f"DEBUG: end_of_period_iso (sent to DB): {end_of_period_iso}")
+
+    # Conditional casting for PostgreSQL timestamps in queries
+    timestamp_cast = "::timestamptz" if is_psycopg2_conn else ""
 
     # --- Tire Movements by Brand (สำหรับสรุปยอดรวมใหญ่) ---
     tire_movements_query_sql = f"""
         SELECT t.brand, tm.type, SUM(tm.quantity_change) AS total_quantity
         FROM tire_movements tm
         JOIN tires t ON tm.tire_id = t.id
-        WHERE tm.timestamp BETWEEN %s AND %s
+        WHERE tm.timestamp BETWEEN %s{timestamp_cast} AND %s{timestamp_cast}
         GROUP BY t.brand, tm.type
         ORDER BY t.brand, tm.type;
     """
@@ -1892,7 +1893,8 @@ def summary_stock_report():
         row_data = dict(movement_row) 
         brand = row_data['brand']
         move_type = row_data['type']
-        total_qty = row_data['total_quantity']
+        # Explicitly convert to int here
+        total_qty = int(row_data['total_quantity']) 
         tire_movements_by_brand[brand][move_type] = total_qty
 
     # --- Wheel Movements by Brand (สำหรับสรุปยอดรวมใหญ่) ---
@@ -1900,7 +1902,7 @@ def summary_stock_report():
         SELECT w.brand, wm.type, SUM(wm.quantity_change) AS total_quantity
         FROM wheel_movements wm
         JOIN wheels w ON wm.wheel_id = w.id
-        WHERE wm.timestamp BETWEEN %s AND %s
+        WHERE wm.timestamp BETWEEN %s{timestamp_cast} AND %s{timestamp_cast}
         GROUP BY w.brand, wm.type
         ORDER BY w.brand, wm.type;
     """
@@ -1918,43 +1920,49 @@ def summary_stock_report():
         row_data = dict(row) 
         brand = row_data['brand']
         move_type = row_data['type']
-        total_qty = row_data['total_quantity']
+        # Explicitly convert to int here
+        total_qty = int(row_data['total_quantity']) 
         wheel_movements_by_brand[brand][move_type] = total_qty
 
     # --- Calculate overall totals for the summary section ---
-    overall_tire_in_period = sum(data['IN'] for data in tire_movements_by_brand.values())
-    overall_tire_out_period = sum(data['OUT'] for data in tire_movements_by_brand.values())
-    overall_wheel_in_period = sum(data['IN'] for data in wheel_movements_by_brand.values())
-    overall_wheel_out_period = sum(data['OUT'] for data in wheel_movements_by_brand.values())
+    # Explicitly convert to int here
+    overall_tire_in_period = int(sum(data['IN'] for data in tire_movements_by_brand.values()))
+    overall_tire_out_period = int(sum(data['OUT'] for data in tire_movements_by_brand.values()))
+    overall_wheel_in_period = int(sum(data['IN'] for data in wheel_movements_by_brand.values()))
+    overall_wheel_out_period = int(sum(data['OUT'] for data in wheel_movements_by_brand.values()))
 
     # Total initial stock (sum of all IN - all OUT up to start_of_period_iso)
     query_overall_initial_tires = f"""
         SELECT COALESCE(SUM(CASE WHEN type = 'IN' THEN quantity_change ELSE -quantity_change END), 0)
         FROM tire_movements
-        WHERE timestamp < %s;
+        WHERE timestamp < %s{timestamp_cast};
     """
     if is_psycopg2_conn:
         cursor = conn.cursor() # New cursor
         cursor.execute(query_overall_initial_tires, (start_of_period_iso,))
-        overall_tire_initial = cursor.fetchone()[0] or 0 
+        # Explicitly convert to int here
+        overall_tire_initial = int(cursor.fetchone()[0] or 0) 
         cursor.close() # Close cursor
     else:
         query_result_obj = conn.execute(query_overall_initial_tires.replace('%s', '?'), (start_of_period_iso,))
-        overall_tire_initial = query_result_obj.fetchone()[0] or 0 
+        # Explicitly convert to int here
+        overall_tire_initial = int(query_result_obj.fetchone()[0] or 0) 
 
     query_overall_initial_wheels = f"""
         SELECT COALESCE(SUM(CASE WHEN type = 'IN' THEN quantity_change ELSE -quantity_change END), 0)
         FROM wheel_movements
-        WHERE timestamp < %s;
+        WHERE timestamp < %s{timestamp_cast};
     """
     if is_psycopg2_conn:
         cursor = conn.cursor() # New cursor
         cursor.execute(query_overall_initial_wheels, (start_of_period_iso,))
-        overall_wheel_initial = cursor.fetchone()[0] or 0
+        # Explicitly convert to int here
+        overall_wheel_initial = int(cursor.fetchone()[0] or 0)
         cursor.close() # Close cursor
     else:
         query_result_obj = conn.execute(query_overall_initial_wheels.replace('%s', '?'), (start_of_period_iso,))
-        overall_wheel_initial = query_result_obj.fetchone()[0] or 0
+        # Explicitly convert to int here
+        overall_wheel_initial = int(query_result_obj.fetchone()[0] or 0)
 
     # Total final stock (initial + movements within period)
     overall_tire_final = overall_tire_initial + overall_tire_in_period - overall_tire_out_period
@@ -1975,19 +1983,19 @@ def summary_stock_report():
             t.brand,
             t.model, 
             t.size,
-            COALESCE(SUM(CASE WHEN LOWER(tm.type) = 'in' AND tm.timestamp BETWEEN %s AND %s THEN tm.quantity_change{"::NUMERIC" if is_psycopg2_conn else ""} ELSE 0 END), 0) AS IN_qty,  
-            COALESCE(SUM(CASE WHEN LOWER(tm.type) = 'out' AND tm.timestamp BETWEEN %s AND %s THEN tm.quantity_change{"::NUMERIC" if is_psycopg2_conn else ""} ELSE 0 END), 0) AS OUT_qty, 
+            COALESCE(SUM(CASE WHEN LOWER(tm.type) = 'in' AND tm.timestamp BETWEEN %s{timestamp_cast} AND %s{timestamp_cast} THEN tm.quantity_change{"::NUMERIC" if is_psycopg2_conn else ""} ELSE 0 END), 0) AS IN_qty,  
+            COALESCE(SUM(CASE WHEN LOWER(tm.type) = 'out' AND tm.timestamp BETWEEN %s{timestamp_cast} AND %s{timestamp_cast} THEN tm.quantity_change{"::NUMERIC" if is_psycopg2_conn else ""} ELSE 0 END), 0) AS OUT_qty, 
             COALESCE((  
                 SELECT SUM(CASE WHEN LOWER(prev_tm.type) = 'in' THEN prev_tm.quantity_change{"::NUMERIC" if is_psycopg2_conn else ""} ELSE -prev_tm.quantity_change{"::NUMERIC" if is_psycopg2_conn else ""} END)
                 FROM tire_movements prev_tm
-                WHERE prev_tm.tire_id = t.id AND prev_tm.timestamp < %s
+                WHERE prev_tm.tire_id = t.id AND prev_tm.timestamp < %s{timestamp_cast}
             ), 0) AS initial_qty_before_period
         FROM tires t  
-        INNER JOIN tire_movements tm ON tm.tire_id = t.id AND tm.timestamp BETWEEN %s AND %s  
+        INNER JOIN tire_movements tm ON tm.tire_id = t.id AND tm.timestamp BETWEEN %s{timestamp_cast} AND %s{timestamp_cast}  
         WHERE t.is_deleted = FALSE  
         GROUP BY t.id, t.brand, t.model, t.size  
-        HAVING COALESCE(SUM(CASE WHEN LOWER(tm.type) = 'in' AND tm.timestamp BETWEEN %s AND %s THEN tm.quantity_change{"::NUMERIC" if is_psycopg2_conn else ""} ELSE 0 END), 0) > 0 
-        OR COALESCE(SUM(CASE WHEN LOWER(tm.type) = 'out' AND tm.timestamp BETWEEN %s AND %s THEN tm.quantity_change{"::NUMERIC" if is_psycopg2_conn else ""} ELSE 0 END), 0) > 0  
+        HAVING COALESCE(SUM(CASE WHEN LOWER(tm.type) = 'in' AND tm.timestamp BETWEEN %s{timestamp_cast} AND %s{timestamp_cast} THEN tm.quantity_change{"::NUMERIC" if is_psycopg2_conn else ""} ELSE 0 END), 0) > 0 
+        OR COALESCE(SUM(CASE WHEN LOWER(tm.type) = 'out' AND tm.timestamp BETWEEN %s{timestamp_cast} AND %s{timestamp_cast} THEN tm.quantity_change{"::NUMERIC" if is_psycopg2_conn else ""} ELSE 0 END), 0) > 0  
         ORDER BY t.brand, t.model, t.size;
     """
     
@@ -2020,6 +2028,7 @@ def summary_stock_report():
         if brand not in tires_by_brand_for_summary_report:
             tires_by_brand_for_summary_report[brand] = []
         
+        # Explicitly convert to int here
         initial_qty = int(row.get('initial_qty_before_period', 0)) 
         in_qty = int(row.get('IN_qty', 0)) 
         out_qty = int(row.get('OUT_qty', 0)) 
@@ -2050,19 +2059,19 @@ def summary_stock_report():
             w.brand, w.model, w.diameter, w.pcd, w.width,
             w.et, 
             w.color, 
-            COALESCE(SUM(CASE WHEN LOWER(wm.type) = 'in' AND wm.timestamp BETWEEN %s AND %s THEN wm.quantity_change{"::NUMERIC" if is_psycopg2_conn else ""} ELSE 0 END), 0) AS IN_qty,  
-            COALESCE(SUM(CASE WHEN LOWER(wm.type) = 'out' AND wm.timestamp BETWEEN %s AND %s THEN wm.quantity_change{"::NUMERIC" if is_psycopg2_conn else ""} ELSE 0 END), 0) AS OUT_qty, 
+            COALESCE(SUM(CASE WHEN LOWER(wm.type) = 'in' AND wm.timestamp BETWEEN %s{timestamp_cast} AND %s{timestamp_cast} THEN wm.quantity_change{"::NUMERIC" if is_psycopg2_conn else ""} ELSE 0 END), 0) AS IN_qty,  
+            COALESCE(SUM(CASE WHEN LOWER(wm.type) = 'out' AND wm.timestamp BETWEEN %s{timestamp_cast} AND %s{timestamp_cast} THEN wm.quantity_change{"::NUMERIC" if is_psycopg2_conn else ""} ELSE 0 END), 0) AS OUT_qty, 
             COALESCE((  
                 SELECT SUM(CASE WHEN LOWER(prev_wm.type) = 'in' THEN prev_wm.quantity_change{"::NUMERIC" if is_psycopg2_conn else ""} ELSE -prev_wm.quantity_change{"::NUMERIC" if is_psycopg2_conn else ""} END)
                 FROM wheel_movements prev_wm
-                WHERE prev_wm.wheel_id = w.id AND prev_wm.timestamp < %s
+                WHERE prev_wm.wheel_id = w.id AND prev_wm.timestamp < %s{timestamp_cast}
             ), 0) AS initial_qty_before_period
         FROM wheels w  
-        INNER JOIN wheel_movements wm ON wm.wheel_id = w.id AND wm.timestamp BETWEEN %s AND %s  
+        INNER JOIN wheel_movements wm ON wm.wheel_id = w.id AND wm.timestamp BETWEEN %s{timestamp_cast} AND %s{timestamp_cast}  
         WHERE w.is_deleted = FALSE  
         GROUP BY w.id, w.brand, w.model, w.diameter, w.pcd, w.width, w.et, w.color 
-        HAVING COALESCE(SUM(CASE WHEN LOWER(wm.type) = 'in' AND wm.timestamp BETWEEN %s AND %s THEN wm.quantity_change{"::NUMERIC" if is_psycopg2_conn else ""} ELSE 0 END), 0) > 0 
-        OR COALESCE(SUM(CASE WHEN LOWER(wm.type) = 'out' AND wm.timestamp BETWEEN %s AND %s THEN wm.quantity_change{"::NUMERIC" if is_psycopg2_conn else ""} ELSE 0 END), 0) > 0  
+        HAVING COALESCE(SUM(CASE WHEN LOWER(wm.type) = 'in' AND wm.timestamp BETWEEN %s{timestamp_cast} AND %s{timestamp_cast} THEN wm.quantity_change{"::NUMERIC" if is_psycopg2_conn else ""} ELSE 0 END), 0) > 0 
+        OR COALESCE(SUM(CASE WHEN LOWER(wm.type) = 'out' AND wm.timestamp BETWEEN %s{timestamp_cast} AND %s{timestamp_cast} THEN wm.quantity_change{"::NUMERIC" if is_psycopg2_conn else ""} ELSE 0 END), 0) > 0  
         ORDER BY w.brand, w.model, w.diameter;
     """
     # Corrected parameter list based on 11 bindings required
@@ -2094,6 +2103,7 @@ def summary_stock_report():
         if brand not in wheels_by_brand_for_summary_report:
             wheels_by_brand_for_summary_report[brand] = []
         
+        # Explicitly convert to int here
         initial_qty = int(row.get('initial_qty_before_period', 0)) 
         in_qty = int(row.get('IN_qty', 0)) 
         out_qty = int(row.get('OUT_qty', 0)) 
@@ -2119,19 +2129,22 @@ def summary_stock_report():
             SELECT COALESCE(SUM(CASE WHEN type = 'IN' THEN quantity_change ELSE -quantity_change END), 0)
             FROM tire_movements tm
             JOIN tires t ON tm.tire_id = t.id
-            WHERE t.brand = %s AND tm.timestamp < %s;
+            WHERE t.brand = %s AND tm.timestamp < %s{timestamp_cast};
         """
         if is_psycopg2_conn:
             cursor = conn.cursor() # New cursor
             cursor.execute(query_brand_initial_tire, (brand, start_of_period_iso))
-            brand_initial_qty = cursor.fetchone()[0] or 0
+            # Explicitly convert to int here
+            brand_initial_qty = int(cursor.fetchone()[0] or 0)
             cursor.close() # Close cursor
         else:
             query_result_obj = conn.execute(query_brand_initial_tire.replace('%s', '?'), (brand, start_of_period_iso))
-            brand_initial_qty = query_result_obj.fetchone()[0] or 0
+            # Explicitly convert to int here
+            brand_initial_qty = int(query_result_obj.fetchone()[0] or 0)
 
-        total_in_brand = data.get('IN', 0)
-        total_out_brand = data.get('OUT', 0)
+        # Explicitly convert to int here
+        total_in_brand = int(data.get('IN', 0))
+        total_out_brand = int(data.get('OUT', 0))
         final_qty_brand = brand_initial_qty + total_in_brand - total_out_brand
 
         tire_brand_totals_for_summary_report[brand] = {
@@ -2147,19 +2160,22 @@ def summary_stock_report():
             SELECT COALESCE(SUM(CASE WHEN type = 'IN' THEN quantity_change ELSE -quantity_change END), 0)
             FROM wheel_movements wm
             JOIN wheels w ON wm.wheel_id = w.id
-            WHERE w.brand = %s AND wm.timestamp < %s;
+            WHERE w.brand = %s AND wm.timestamp < %s{timestamp_cast};
         """
         if is_psycopg2_conn:
             cursor = conn.cursor() # New cursor
             cursor.execute(query_brand_initial_wheel, (brand, start_of_period_iso))
-            brand_initial_qty = cursor.fetchone()[0] or 0
+            # Explicitly convert to int here
+            brand_initial_qty = int(cursor.fetchone()[0] or 0)
             cursor.close() # Close cursor
         else:
             query_result_obj = conn.execute(query_brand_initial_wheel.replace('%s', '?'), (brand, start_of_period_iso))
-            brand_initial_qty = query_result_obj.fetchone()[0] or 0
+            # Explicitly convert to int here
+            brand_initial_qty = int(query_result_obj.fetchone()[0] or 0)
 
-        total_in_brand = data.get('IN', 0)
-        total_out_brand = data.get('OUT', 0)
+        # Explicitly convert to int here
+        total_in_brand = int(data.get('IN', 0))
+        total_out_brand = int(data.get('OUT', 0))
         final_qty_brand = brand_initial_qty + total_in_brand - total_out_brand
         
         wheel_brand_totals_for_summary_report[brand] = {
