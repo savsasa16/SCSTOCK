@@ -1,4 +1,3 @@
-# database.py
 import sqlite3
 from datetime import datetime
 import pytz
@@ -690,6 +689,9 @@ def add_tire_import(conn, brand, model, size, quantity, cost_sc, cost_dunlop, co
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
         """, (brand, model, size, quantity, cost_sc, cost_dunlop, cost_online, wholesale_price1, wholesale_price2, price_per_item, promotion_id, year_of_manufacture))
         tire_id = cursor.lastrowid
+    
+    add_tire_movement(conn, tire_id, 'IN', quantity, quantity, 'เพิ่มยางใหม่เข้าสต็อก', None, user_id=user_id)
+    
     conn.commit()
     return tire_id
 
@@ -921,37 +923,356 @@ def get_wheel_movement(conn, movement_id):
         movement_data = dict(movement_data)
     return movement_data
 
-def update_wheel_movement(conn, movement_id, new_notes, new_image_filename=None):
+def update_wheel_movement(conn, movement_id, new_notes, new_image_filename, new_type, new_quantity_change):
+    """
+    อัปเดตข้อมูลการเคลื่อนไหวสต็อกแม็กและปรับยอดคงเหลือของแม็กหลัก
+    """
     cursor = conn.cursor()
+    
+    # 1. ดึงข้อมูลการเคลื่อนไหวเดิม
+    if "psycopg2" in str(type(conn)):
+        cursor.execute("SELECT wheel_id, type, quantity_change FROM wheel_movements WHERE id = %s", (movement_id,))
+    else:
+        cursor.execute("SELECT wheel_id, type, quantity_change FROM wheel_movements WHERE id = ?", (movement_id,))
+    
+    old_movement = cursor.fetchone()
+    if not old_movement:
+        raise ValueError("ไม่พบข้อมูลการเคลื่อนไหวแม็กที่ระบุ")
+    
+    old_wheel_id = old_movement['wheel_id']
+    old_type = old_movement['type']
+    old_quantity_change = old_movement['quantity_change']
+
+    # 2. ปรับยอดสต็อกของแม็กหลักกลับไปก่อนการเคลื่อนไหวเดิม
+    current_wheel = get_wheel(conn, old_wheel_id)
+    if not current_wheel:
+        raise ValueError("ไม่พบแม็กหลักที่เกี่ยวข้องกับการเคลื่อนไหวนี้")
+    
+    current_quantity_in_stock = current_wheel['quantity']
+
+    if old_type == 'IN':
+        # ถ้าเดิมเป็นรับเข้า ให้ลบออกจากสต็อก
+        current_quantity_in_stock -= old_quantity_change
+    elif old_type == 'OUT':
+        # ถ้าเดิมเป็นจ่ายออก ให้บวกกลับเข้าสต็อก
+        current_quantity_in_stock += old_quantity_change
+
+    # 3. อัปเดตข้อมูลการเคลื่อนไหวในตาราง wheel_movements
     if "psycopg2" in str(type(conn)):
         cursor.execute("""
             UPDATE wheel_movements
-            SET notes = %s, image_filename = %s
+            SET notes = %s, image_filename = %s, type = %s, quantity_change = %s
             WHERE id = %s
-        """, (new_notes, new_image_filename, movement_id))
+        """, (new_notes, new_image_filename, new_type, new_quantity_change, movement_id))
     else:
         cursor.execute("""
             UPDATE wheel_movements
-            SET notes = ?, image_filename = ?
+            SET notes = ?, image_filename = ?, type = ?, quantity_change = ?
             WHERE id = ?
-        """, (new_notes, new_image_filename, movement_id))
+        """, (new_notes, new_image_filename, new_type, new_quantity_change, movement_id))
+    
+    # 4. ปรับยอดสต็อกของแม็กหลักตามการเคลื่อนไหวใหม่
+    if new_type == 'IN':
+        current_quantity_in_stock += new_quantity_change
+    elif new_type == 'OUT':
+        current_quantity_in_stock -= new_quantity_change
+    
+    # 5. อัปเดตยอดคงเหลือในตาราง wheels
+    update_wheel_quantity(conn, old_wheel_id, current_quantity_in_stock)
+
+    # 6. อัปเดต remaining_quantity ในรายการ movement ที่แก้ไขและรายการหลังจากนั้น
+    # ดึงรายการ movement ทั้งหมดสำหรับ wheel_id นั้นๆ ที่ timestamp มากกว่าหรือเท่ากับรายการที่แก้ไข
+    is_postgres = "psycopg2" in str(type(conn))
+    if is_postgres:
+        cursor.execute("SELECT id, type, quantity_change, timestamp FROM wheel_movements WHERE wheel_id = %s AND timestamp >= (SELECT timestamp FROM wheel_movements WHERE id = %s) ORDER BY timestamp ASC, id ASC", (old_wheel_id, movement_id))
+    else:
+        cursor.execute("SELECT id, type, quantity_change, timestamp FROM wheel_movements WHERE wheel_id = ? AND timestamp >= (SELECT timestamp FROM wheel_movements WHERE id = ?) ORDER BY timestamp ASC, id ASC", (old_wheel_id, movement_id))
+    
+    subsequent_movements = cursor.fetchall()
+
+    # คำนวณยอดคงเหลือใหม่สำหรับรายการที่แก้ไข
+    # ยอดคงเหลือเริ่มต้นก่อนรายการที่แก้ไข
+    if is_postgres:
+        cursor.execute("SELECT COALESCE(SUM(CASE WHEN type = 'IN' THEN quantity_change ELSE -quantity_change END), 0) FROM wheel_movements WHERE wheel_id = %s AND timestamp < (SELECT timestamp FROM wheel_movements WHERE id = %s)", (old_wheel_id, movement_id))
+    else:
+        cursor.execute("SELECT COALESCE(SUM(CASE WHEN type = 'IN' THEN quantity_change ELSE -quantity_change END), 0) FROM wheel_movements WHERE wheel_id = ? AND timestamp < (SELECT timestamp FROM wheel_movements WHERE id = ?)", (old_wheel_id, movement_id))
+    
+    initial_qty_before_edited_movement = cursor.fetchone()[0] or 0
+
+    new_remaining_qty = initial_qty_before_edited_movement
+    for sub_move in subsequent_movements:
+        if sub_move['id'] == movement_id:
+            # ใช้ค่าใหม่ที่แก้ไข
+            if new_type == 'IN':
+                new_remaining_qty += new_quantity_change
+            else: # new_type == 'OUT'
+                new_remaining_qty -= new_quantity_change
+        else:
+            # ใช้ค่าเดิมของ movement ที่ตามมา
+            if sub_move['type'] == 'IN':
+                new_remaining_qty += sub_move['quantity_change']
+            else: # sub_move['type'] == 'OUT'
+                new_remaining_qty -= sub_move['quantity_change']
+        
+        # อัปเดต remaining_quantity ในฐานข้อมูล
+        if is_postgres:
+            cursor.execute("UPDATE wheel_movements SET remaining_quantity = %s WHERE id = %s", (new_remaining_qty, sub_move['id']))
+        else:
+            cursor.execute("UPDATE wheel_movements SET remaining_quantity = ? WHERE id = ?", (new_remaining_qty, sub_move['id']))
+
     conn.commit()
 
-def update_tire_movement(conn, movement_id, new_notes, new_image_filename=None):
+
+def update_tire_movement(conn, movement_id, new_notes, new_image_filename, new_type, new_quantity_change):
+    """
+    อัปเดตข้อมูลการเคลื่อนไหวสต็อกยางและปรับยอดคงเหลือของยางหลัก
+    """
     cursor = conn.cursor()
+
+    # 1. ดึงข้อมูลการเคลื่อนไหวเดิม
+    if "psycopg2" in str(type(conn)):
+        cursor.execute("SELECT tire_id, type, quantity_change FROM tire_movements WHERE id = %s", (movement_id,))
+    else:
+        cursor.execute("SELECT tire_id, type, quantity_change FROM tire_movements WHERE id = ?", (movement_id,))
+    
+    old_movement = cursor.fetchone()
+    if not old_movement:
+        raise ValueError("ไม่พบข้อมูลการเคลื่อนไหวสต็อกยางที่ระบุ")
+    
+    old_tire_id = old_movement['tire_id']
+    old_type = old_movement['type']
+    old_quantity_change = old_movement['quantity_change']
+
+    # 2. ปรับยอดสต็อกของยางหลักกลับไปก่อนการเคลื่อนไหวเดิม
+    current_tire = get_tire(conn, old_tire_id)
+    if not current_tire:
+        raise ValueError("ไม่พบยางหลักที่เกี่ยวข้องกับการเคลื่อนไหวนี้")
+    
+    current_quantity_in_stock = current_tire['quantity']
+
+    if old_type == 'IN':
+        # ถ้าเดิมเป็นรับเข้า ให้ลบออกจากสต็อก
+        current_quantity_in_stock -= old_quantity_change
+    elif old_type == 'OUT':
+        # ถ้าเดิมเป็นจ่ายออก ให้บวกกลับเข้าสต็อก
+        current_quantity_in_stock += old_quantity_change
+
+    # 3. อัปเดตข้อมูลการเคลื่อนไหวในตาราง tire_movements
     if "psycopg2" in str(type(conn)):
         cursor.execute("""
             UPDATE tire_movements
-            SET notes = %s, image_filename = %s
+            SET notes = %s, image_filename = %s, type = %s, quantity_change = %s
             WHERE id = %s
-        """, (new_notes, new_image_filename, movement_id))
+        """, (new_notes, new_image_filename, new_type, new_quantity_change, movement_id))
     else:
         cursor.execute("""
             UPDATE tire_movements
-            SET notes = ?, image_filename = ?
+            SET notes = ?, image_filename = ?, type = ?, quantity_change = ?
             WHERE id = ?
-        """, (new_notes, new_image_filename, movement_id))
+        """, (new_notes, new_image_filename, new_type, new_quantity_change, movement_id))
+    
+    # 4. ปรับยอดสต็อกของยางหลักตามการเคลื่อนไหวใหม่
+    if new_type == 'IN':
+        current_quantity_in_stock += new_quantity_change
+    elif new_type == 'OUT':
+        current_quantity_in_stock -= new_quantity_change
+    
+    # 5. อัปเดตยอดคงเหลือในตาราง tires
+    update_tire_quantity(conn, old_tire_id, current_quantity_in_stock)
+
+    # 6. อัปเดต remaining_quantity ในรายการ movement ที่แก้ไขและรายการหลังจากนั้น
+    # ดึงรายการ movement ทั้งหมดสำหรับ tire_id นั้นๆ ที่ timestamp มากกว่าหรือเท่ากับรายการที่แก้ไข
+    is_postgres = "psycopg2" in str(type(conn))
+    if is_postgres:
+        cursor.execute("SELECT id, type, quantity_change, timestamp FROM tire_movements WHERE tire_id = %s AND timestamp >= (SELECT timestamp FROM tire_movements WHERE id = %s) ORDER BY timestamp ASC, id ASC", (old_tire_id, movement_id))
+    else:
+        cursor.execute("SELECT id, type, quantity_change, timestamp FROM tire_movements WHERE tire_id = ? AND timestamp >= (SELECT timestamp FROM tire_movements WHERE id = ?) ORDER BY timestamp ASC, id ASC", (old_tire_id, movement_id))
+    
+    subsequent_movements = cursor.fetchall()
+
+    # คำนวณยอดคงเหลือใหม่สำหรับรายการที่แก้ไข
+    # ยอดคงเหลือเริ่มต้นก่อนรายการที่แก้ไข
+    if is_postgres:
+        cursor.execute("SELECT COALESCE(SUM(CASE WHEN type = 'IN' THEN quantity_change ELSE -quantity_change END), 0) FROM tire_movements WHERE tire_id = %s AND timestamp < (SELECT timestamp FROM tire_movements WHERE id = %s)", (old_tire_id, movement_id))
+    else:
+        cursor.execute("SELECT COALESCE(SUM(CASE WHEN type = 'IN' THEN quantity_change ELSE -quantity_change END), 0) FROM tire_movements WHERE tire_id = ? AND timestamp < (SELECT timestamp FROM tire_movements WHERE id = ?)", (old_tire_id, movement_id))
+    
+    initial_qty_before_edited_movement = cursor.fetchone()[0] or 0
+
+    new_remaining_qty = initial_qty_before_edited_movement
+    for sub_move in subsequent_movements:
+        if sub_move['id'] == movement_id:
+            # ใช้ค่าใหม่ที่แก้ไข
+            if new_type == 'IN':
+                new_remaining_qty += new_quantity_change
+            else: # new_type == 'OUT'
+                new_remaining_qty -= new_quantity_change
+        else:
+            # ใช้ค่าเดิมของ movement ที่ตามมา
+            if sub_move['type'] == 'IN':
+                new_remaining_qty += sub_move['quantity_change']
+            else: # sub_move['type'] == 'OUT'
+                new_remaining_qty -= sub_move['quantity_change']
+        
+        # อัปเดต remaining_quantity ในฐานข้อมูล
+        if is_postgres:
+            cursor.execute("UPDATE tire_movements SET remaining_quantity = %s WHERE id = %s", (new_remaining_qty, sub_move['id']))
+        else:
+            cursor.execute("UPDATE tire_movements SET remaining_quantity = ? WHERE id = ?", (new_remaining_qty, sub_move['id']))
+
     conn.commit()
+
+
+def delete_tire_movement(conn, movement_id):
+    """
+    ลบข้อมูลการเคลื่อนไหวสต็อกยางและปรับยอดคงเหลือของยางหลักให้ถูกต้อง
+    """
+    cursor = conn.cursor()
+    is_postgres = "psycopg2" in str(type(conn))
+
+    # 1. ดึงข้อมูลการเคลื่อนไหวที่จะลบ
+    if is_postgres:
+        cursor.execute("SELECT tire_id, type, quantity_change, timestamp FROM tire_movements WHERE id = %s", (movement_id,))
+    else:
+        cursor.execute("SELECT tire_id, type, quantity_change, timestamp FROM tire_movements WHERE id = ?", (movement_id,))
+    
+    movement_to_delete = cursor.fetchone()
+    if not movement_to_delete:
+        raise ValueError("ไม่พบข้อมูลการเคลื่อนไหวสต็อกยางที่ระบุ")
+    
+    tire_id = movement_to_delete['tire_id']
+    move_type = movement_to_delete['type']
+    quantity_change = movement_to_delete['quantity_change']
+    movement_timestamp = movement_to_delete['timestamp']
+
+    # 2. ปรับยอดสต็อกของยางหลัก
+    current_tire = get_tire(conn, tire_id)
+    if not current_tire:
+        raise ValueError("ไม่พบยางหลักที่เกี่ยวข้องกับการเคลื่อนไหวนี้")
+    
+    new_quantity_for_main_item = current_tire['quantity']
+    if move_type == 'IN':
+        # ถ้าเป็นการรับเข้า ให้ลบออกจากยอดปัจจุบัน
+        new_quantity_for_main_item -= quantity_change
+    elif move_type == 'OUT':
+        # ถ้าเป็นการจ่ายออก ให้บวกกลับเข้ายอดปัจจุบัน
+        new_quantity_for_main_item += quantity_change
+    
+    update_tire_quantity(conn, tire_id, new_quantity_for_main_item)
+
+    # 3. ลบรายการเคลื่อนไหว
+    if is_postgres:
+        cursor.execute("DELETE FROM tire_movements WHERE id = %s", (movement_id,))
+    else:
+        cursor.execute("DELETE FROM tire_movements WHERE id = ?", (movement_id,))
+
+    # 4. อัปเดต remaining_quantity สำหรับรายการ movement ที่เกิดขึ้นหลังจากรายการที่ถูกลบ
+    # ดึงรายการ movement ทั้งหมดสำหรับ tire_id นั้นๆ ที่ timestamp มากกว่าหรือเท่ากับรายการที่ถูกลบ
+    if is_postgres:
+        cursor.execute("SELECT id, type, quantity_change, timestamp FROM tire_movements WHERE tire_id = %s AND timestamp >= %s ORDER BY timestamp ASC, id ASC", (tire_id, movement_timestamp))
+    else:
+        # สำหรับ SQLite, timestamp เป็น TEXT ต้องแปลงให้ถูกต้องในการเปรียบเทียบ
+        cursor.execute("SELECT id, type, quantity_change, timestamp FROM tire_movements WHERE tire_id = ? AND timestamp >= ? ORDER BY timestamp ASC, id ASC", (tire_id, movement_timestamp))
+    
+    subsequent_movements = cursor.fetchall()
+
+    # คำนวณยอดคงเหลือเริ่มต้นก่อนรายการแรกใน subsequent_movements
+    if is_postgres:
+        cursor.execute("SELECT COALESCE(SUM(CASE WHEN type = 'IN' THEN quantity_change ELSE -quantity_change END), 0) FROM tire_movements WHERE tire_id = %s AND timestamp < %s", (tire_id, movement_timestamp))
+    else:
+        cursor.execute("SELECT COALESCE(SUM(CASE WHEN type = 'IN' THEN quantity_change ELSE -quantity_change END), 0) FROM tire_movements WHERE tire_id = ? AND timestamp < ?", (tire_id, movement_timestamp))
+    
+    current_remaining_qty = cursor.fetchone()[0] or 0
+
+    for sub_move in subsequent_movements:
+        if sub_move['type'] == 'IN':
+            current_remaining_qty += sub_move['quantity_change']
+        else: # sub_move['type'] == 'OUT'
+            current_remaining_qty -= sub_move['quantity_change']
+        
+        # อัปเดต remaining_quantity ในฐานข้อมูล
+        if is_postgres:
+            cursor.execute("UPDATE tire_movements SET remaining_quantity = %s WHERE id = %s", (current_remaining_qty, sub_move['id']))
+        else:
+            cursor.execute("UPDATE tire_movements SET remaining_quantity = ? WHERE id = ?", (current_remaining_qty, sub_move['id']))
+
+    conn.commit()
+
+
+def delete_wheel_movement(conn, movement_id):
+    """
+    ลบข้อมูลการเคลื่อนไหวสต็อกแม็กและปรับยอดคงเหลือของแม็กหลักให้ถูกต้อง
+    """
+    cursor = conn.cursor()
+    is_postgres = "psycopg2" in str(type(conn))
+
+    # 1. ดึงข้อมูลการเคลื่อนไหวที่จะลบ
+    if is_postgres:
+        cursor.execute("SELECT wheel_id, type, quantity_change, timestamp FROM wheel_movements WHERE id = %s", (movement_id,))
+    else:
+        cursor.execute("SELECT wheel_id, type, quantity_change, timestamp FROM wheel_movements WHERE id = ?", (movement_id,))
+    
+    movement_to_delete = cursor.fetchone()
+    if not movement_to_delete:
+        raise ValueError("ไม่พบข้อมูลการเคลื่อนไหวแม็กที่ระบุ")
+    
+    wheel_id = movement_to_delete['wheel_id']
+    move_type = movement_to_delete['type']
+    quantity_change = movement_to_delete['quantity_change']
+    movement_timestamp = movement_to_delete['timestamp']
+
+    # 2. ปรับยอดสต็อกของแม็กหลัก
+    current_wheel = get_wheel(conn, wheel_id)
+    if not current_wheel:
+        raise ValueError("ไม่พบแม็กหลักที่เกี่ยวข้องกับการเคลื่อนไหวนี้")
+    
+    new_quantity_for_main_item = current_wheel['quantity']
+    if move_type == 'IN':
+        # ถ้าเป็นการรับเข้า ให้ลบออกจากยอดปัจจุบัน
+        new_quantity_for_main_item -= quantity_change
+    elif move_type == 'OUT':
+        # ถ้าเป็นการจ่ายออก ให้บวกกลับเข้ายอดปัจจุบัน
+        new_quantity_for_main_item += quantity_change
+    
+    update_wheel_quantity(conn, wheel_id, new_quantity_for_main_item)
+
+    # 3. ลบรายการเคลื่อนไหว
+    if is_postgres:
+        cursor.execute("DELETE FROM wheel_movements WHERE id = %s", (movement_id,))
+    else:
+        cursor.execute("DELETE FROM wheel_movements WHERE id = ?", (movement_id,))
+
+    # 4. อัปเดต remaining_quantity สำหรับรายการ movement ที่เกิดขึ้นหลังจากรายการที่ถูกลบ
+    # ดึงรายการ movement ทั้งหมดสำหรับ wheel_id นั้นๆ ที่ timestamp มากกว่าหรือเท่ากับรายการที่ถูกลบ
+    if is_postgres:
+        cursor.execute("SELECT id, type, quantity_change, timestamp FROM wheel_movements WHERE wheel_id = %s AND timestamp >= %s ORDER BY timestamp ASC, id ASC", (wheel_id, movement_timestamp))
+    else:
+        cursor.execute("SELECT id, type, quantity_change, timestamp FROM wheel_movements WHERE wheel_id = ? AND timestamp >= ? ORDER BY timestamp ASC, id ASC", (wheel_id, movement_timestamp))
+    
+    subsequent_movements = cursor.fetchall()
+
+    # คำนวณยอดคงเหลือเริ่มต้นก่อนรายการแรกใน subsequent_movements
+    if is_postgres:
+        cursor.execute("SELECT COALESCE(SUM(CASE WHEN type = 'IN' THEN quantity_change ELSE -quantity_change END), 0) FROM wheel_movements WHERE wheel_id = %s AND timestamp < %s", (wheel_id, movement_timestamp))
+    else:
+        cursor.execute("SELECT COALESCE(SUM(CASE WHEN type = 'IN' THEN quantity_change ELSE -quantity_change END), 0) FROM wheel_movements WHERE wheel_id = ? AND timestamp < ?", (wheel_id, movement_timestamp))
+    
+    current_remaining_qty = cursor.fetchone()[0] or 0
+
+    for sub_move in subsequent_movements:
+        if sub_move['type'] == 'IN':
+            current_remaining_qty += sub_move['quantity_change']
+        else: # sub_move['type'] == 'OUT'
+            current_remaining_qty -= sub_move['quantity_change']
+        
+        # อัปเดต remaining_quantity ในฐานข้อมูล
+        if is_postgres:
+            cursor.execute("UPDATE wheel_movements SET remaining_quantity = %s WHERE id = %s", (current_remaining_qty, sub_move['id']))
+        else:
+            cursor.execute("UPDATE wheel_movements SET remaining_quantity = ? WHERE id = ?", (current_remaining_qty, sub_move['id']))
+
+    conn.commit()
+
 
 def update_tire_quantity(conn, tire_id, new_quantity):
     cursor = conn.cursor()

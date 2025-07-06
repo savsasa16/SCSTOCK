@@ -802,8 +802,8 @@ def edit_tire(tire_id):
                 cost_sc = float(cost_sc) if cost_sc and cost_sc.strip() else None
                 cost_dunlop = float(cost_dunlop) if cost_dunlop and cost_dunlop.strip() else None
                 cost_online = float(cost_online) if cost_online and cost_online.strip() else None
-                wholesale_price1 = float(wholesale_price1) if wholesale_price1 and wholesale_price1.strip() else None
-                wholesale_price2 = float(wholesale_price2) if wholesale_price2 and wholesale_price2.strip() else None
+                wholesale_price1 = float(wholesale_price1) if pd.notna(wholesale_price1) and wholesale_price1.strip() else None
+                wholesale_price2 = float(wholesale_price2) if pd.notna(wholesale_price2) and wholesale_price2.strip() else None
                 
                 year_of_manufacture = year_of_manufacture.strip() if year_of_manufacture and year_of_manufacture.strip() else None
 
@@ -1277,8 +1277,8 @@ def stock_movement():
 @app.route('/edit_tire_movement/<int:movement_id>', methods=['GET', 'POST'])
 @login_required
 def edit_tire_movement(movement_id):
-    # Check permission directly inside the route function
-    if not current_user.is_admin(): # Only Admin can edit movement history
+    # ตรวจสอบสิทธิ์: เฉพาะ Admin เท่านั้นที่แก้ไขประวัติการเคลื่อนไหวได้
+    if not current_user.is_admin():
         flash('คุณไม่มีสิทธิ์ในการแก้ไขข้อมูลการเคลื่อนไหวสต็อกยาง', 'danger')
         return redirect(url_for('daily_stock_report'))
 
@@ -1289,12 +1289,14 @@ def edit_tire_movement(movement_id):
         flash('ไม่พบข้อมูลการเคลื่อนไหวที่ระบุ', 'danger')
         return redirect(url_for('daily_stock_report'))
 
-    movement_data = movement
+    movement_data = dict(movement) # แปลงเป็น dict เพื่อให้แก้ไขได้
     movement_data['timestamp'] = convert_to_bkk_time(movement_data['timestamp'])
 
 
     if request.method == 'POST':
         new_notes = request.form.get('notes', '').strip()
+        new_type = request.form['type'] # รับค่าประเภทใหม่ (IN/OUT)
+        new_quantity_change = int(request.form['quantity_change']) # รับค่าจำนวนใหม่
         bill_image_file = request.files.get('bill_image')
         delete_existing_image = request.form.get('delete_existing_image') == 'on'
 
@@ -1326,9 +1328,12 @@ def edit_tire_movement(movement_id):
                 return render_template('edit_tire_movement.html', movement=movement_data, current_user=current_user)
 
         try:
-            database.update_tire_movement(conn, movement_id, new_notes, bill_image_url_to_db)
+            # เรียกใช้ฟังก์ชัน database.update_tire_movement ที่ปรับปรุงแล้ว
+            database.update_tire_movement(conn, movement_id, new_notes, bill_image_url_to_db, new_type, new_quantity_change)
             flash('แก้ไขข้อมูลการเคลื่อนไหวสต็อกยางสำเร็จ!', 'success')
             return redirect(url_for('daily_stock_report'))
+        except ValueError as e:
+            flash(f'ข้อมูลไม่ถูกต้อง: {e}', 'danger')
         except Exception as e:
             flash(f'เกิดข้อผิดพลาดในการแก้ไขข้อมูล: {e}', 'danger')
 
@@ -1337,8 +1342,8 @@ def edit_tire_movement(movement_id):
 @app.route('/edit_wheel_movement/<int:movement_id>', methods=['GET', 'POST'])
 @login_required
 def edit_wheel_movement(movement_id):
-    # Check permission directly inside the route function
-    if not current_user.is_admin(): # Only Admin can edit movement history
+    # ตรวจสอบสิทธิ์: เฉพาะ Admin เท่านั้นที่แก้ไขประวัติการเคลื่อนไหวได้
+    if not current_user.is_admin():
         flash('คุณไม่มีสิทธิ์ในการแก้ไขข้อมูลการเคลื่อนไหวสต็อกแม็ก', 'danger')
         return redirect(url_for('daily_stock_report'))
 
@@ -1349,11 +1354,13 @@ def edit_wheel_movement(movement_id):
         flash('ไม่พบข้อมูลการเคลื่อนไหวที่ระบุ', 'danger')
         return redirect(url_for('daily_stock_report'))
 
-    movement_data = movement
+    movement_data = dict(movement) # แปลงเป็น dict เพื่อให้แก้ไขได้
     movement_data['timestamp'] = convert_to_bkk_time(movement_data['timestamp'])
 
     if request.method == 'POST':
         new_notes = request.form.get('notes', '').strip()
+        new_type = request.form['type'] # รับค่าประเภทใหม่ (IN/OUT)
+        new_quantity_change = int(request.form['quantity_change']) # รับค่าจำนวนใหม่
         bill_image_file = request.files.get('bill_image')
         delete_existing_image = request.form.get('delete_existing_image') == 'on'
 
@@ -1385,13 +1392,55 @@ def edit_wheel_movement(movement_id):
                 return render_template('edit_wheel_movement.html', movement=movement_data, current_user=current_user)
 
         try:
-            database.update_wheel_movement(conn, movement_id, new_notes, bill_image_url_to_db)
+            # เรียกใช้ฟังก์ชัน database.update_wheel_movement ที่ปรับปรุงแล้ว
+            database.update_wheel_movement(conn, movement_id, new_notes, bill_image_url_to_db, new_type, new_quantity_change)
             flash('แก้ไขข้อมูลการเคลื่อนไหวสต็อกแม็กสำเร็จ!', 'success')
             return redirect(url_for('daily_stock_report'))
+        except ValueError as e:
+            flash(f'ข้อมูลไม่ถูกต้อง: {e}', 'danger')
         except Exception as e:
             flash(f'เกิดข้อผิดพลาดในการแก้ไขข้อมูล: {e}', 'danger')
 
     return render_template('edit_wheel_movement.html', movement=movement_data, current_user=current_user)
+    
+@app.route('/delete_tire_movement/<int:movement_id>', methods=['POST'])
+@login_required
+def delete_tire_movement_action(movement_id):
+    # ตรวจสอบสิทธิ์: เฉพาะ Admin เท่านั้นที่ลบประวัติการเคลื่อนไหวได้
+    if not current_user.is_admin():
+        flash('คุณไม่มีสิทธิ์ในการลบข้อมูลการเคลื่อนไหวสต็อกยาง', 'danger')
+        return redirect(url_for('daily_stock_report'))
+    
+    conn = get_db()
+    try:
+        database.delete_tire_movement(conn, movement_id)
+        flash('ลบข้อมูลการเคลื่อนไหวสต็อกยางสำเร็จ และปรับยอดคงเหลือแล้ว!', 'success')
+    except ValueError as e:
+        flash(f'ไม่สามารถลบข้อมูลการเคลื่อนไหวสต็อกยางได้: {e}', 'danger')
+    except Exception as e:
+        flash(f'เกิดข้อผิดพลาดในการลบข้อมูลการเคลื่อนไหวสต็อกยาง: {e}', 'danger')
+    
+    return redirect(url_for('daily_stock_report'))
+
+
+@app.route('/delete_wheel_movement/<int:movement_id>', methods=['POST'])
+@login_required
+def delete_wheel_movement_action(movement_id):
+    # ตรวจสอบสิทธิ์: เฉพาะ Admin เท่านั้นที่ลบประวัติการเคลื่อนไหวได้
+    if not current_user.is_admin():
+        flash('คุณไม่มีสิทธิ์ในการลบข้อมูลการเคลื่อนไหวสต็อกแม็ก', 'danger')
+        return redirect(url_for('daily_stock_report'))
+    
+    conn = get_db()
+    try:
+        database.delete_wheel_movement(conn, movement_id)
+        flash('ลบข้อมูลการเคลื่อนไหวสต็อกแม็กสำเร็จ และปรับยอดคงเหลือแล้ว!', 'success')
+    except ValueError as e:
+        flash(f'ไม่สามารถลบข้อมูลการเคลื่อนไหวสต็อกแม็กได้: {e}', 'danger')
+    except Exception as e:
+        flash(f'เกิดข้อผิดพลาดในการลบข้อมูลการเคลื่อนไหวสต็อกแม็ก: {e}', 'danger')
+    
+    return redirect(url_for('daily_stock_report'))    
 
 # --- daily_stock_report (assuming this is already in your app.py) ---
 @app.route('/daily_stock_report')
@@ -1420,7 +1469,6 @@ def daily_stock_report():
         report_datetime_obj = get_bkk_time().replace(hour=0, minute=0, second=0, microsecond=0)
         display_date_str = report_datetime_obj.strftime('%d %b %Y')
     
-    # แก้ไข: ใช้ชื่อตัวแปรที่ถูกต้อง 'start_of_report_day_iso'
     start_of_report_day_iso = report_datetime_obj.isoformat()    
 
     report_date = report_datetime_obj.date()
@@ -1428,28 +1476,30 @@ def daily_stock_report():
     sql_date_filter_end_of_day = report_datetime_obj.replace(hour=23, minute=59, second=59, microsecond=999999).isoformat()
 
     is_psycopg2_conn = "psycopg2" in str(type(conn)) 
-    # เพิ่มการประกาศตัวแปร timestamp_cast ในฟังก์ชัน daily_stock_report
     timestamp_cast = "::timestamptz" if is_psycopg2_conn else ""
+    # กำหนด placeholder โดยตรงตามประเภทฐานข้อมูล
+    placeholder = "%s" if is_psycopg2_conn else "?"
 
     # --- Tire Report Data ---
     tire_movements_query_today = f"""
         SELECT
-            tm.id, tm.timestamp, tm.type, tm.quantity_change, tm.image_filename, tm.notes,
+            tm.id, tm.timestamp, tm.type, tm.quantity_change, tm.remaining_quantity, tm.image_filename, tm.notes,
             t.id AS tire_main_id, t.brand, t.model, t.size,
             u.username AS user_username
         FROM tire_movements tm
         JOIN tires t ON tm.tire_id = t.id
         LEFT JOIN users u ON tm.user_id = u.id
-        WHERE {database.get_sql_date_format_for_query('tm.timestamp')} = %s
+        WHERE {database.get_sql_date_format_for_query('tm.timestamp')} = {placeholder}
         ORDER BY tm.timestamp DESC
     """ 
     if is_psycopg2_conn:
         cursor = conn.cursor() 
         cursor.execute(tire_movements_query_today, (sql_date_filter,))
         tire_movements_raw_today = cursor.fetchall()
-        cursor.close() # Close cursor
+        cursor.close()
     else:
-        tire_movements_raw_today = conn.execute(tire_movements_query_today.replace('%s', '?'), (sql_date_filter,)).fetchall()
+        # ไม่ต้องใช้ .replace() แล้ว เพราะ placeholder ถูกกำหนดไว้ถูกต้องแล้ว
+        tire_movements_raw_today = conn.execute(tire_movements_query_today, (sql_date_filter,)).fetchall()
 
     processed_tire_movements_raw_today = []
     for movement in tire_movements_raw_today:
@@ -1470,16 +1520,15 @@ def daily_stock_report():
     distinct_tire_ids_query_all_history = f"""
         SELECT DISTINCT tire_id
         FROM tire_movements
-        WHERE timestamp <= %s{timestamp_cast}
+        WHERE timestamp <= {placeholder}{timestamp_cast}
     """
     if is_psycopg2_conn:
         cursor = conn.cursor() # New cursor for this query
         cursor.execute(distinct_tire_ids_query_all_history, (sql_date_filter_end_of_day,))
         rows = cursor.fetchall() 
-        cursor.close() # Close cursor
+        cursor.close()
     else:
-        query_result_obj = conn.execute(distinct_tire_ids_query_all_history.replace('%s', '?'), (sql_date_filter_end_of_day,))
-        rows = query_result_obj.fetchall() 
+        rows = conn.execute(distinct_tire_ids_query_all_history, (sql_date_filter_end_of_day,)).fetchall()
     
     for row in rows:
         tire_ids_involved.add(row['tire_id'])
@@ -1489,17 +1538,16 @@ def daily_stock_report():
         history_query_up_to_day_before = f"""
             SELECT type, quantity_change
             FROM tire_movements
-            WHERE tire_id = %s AND timestamp <= %s{timestamp_cast}
+            WHERE tire_id = {placeholder} AND timestamp <= {placeholder}{timestamp_cast}
             ORDER BY timestamp ASC
         """
         if is_psycopg2_conn:
             cursor = conn.cursor() # New cursor for this query
             cursor.execute(history_query_up_to_day_before, (tire_id, day_before_report_iso))
             moves = cursor.fetchall() 
-            cursor.close() # Close cursor
+            cursor.close()
         else:
-            query_result_obj = conn.execute(history_query_up_to_day_before.replace('%s', '?'), (tire_id, day_before_report_iso,))
-            moves = query_result_obj.fetchall() 
+            moves = conn.execute(history_query_up_to_day_before, (tire_id, day_before_report_iso,)).fetchall()
         
         calculated_qty_before_day = 0
         for move in moves:
@@ -1587,22 +1635,22 @@ def daily_stock_report():
     # --- Wheel Report Data ---
     wheel_movements_query_today = f"""
         SELECT
-            wm.id, wm.timestamp, wm.type, wm.quantity_change, wm.image_filename, wm.notes,
+            wm.id, wm.timestamp, wm.type, wm.quantity_change, wm.remaining_quantity, wm.image_filename, wm.notes,
             w.id AS wheel_main_id, w.brand, w.model, w.diameter, w.pcd, w.width,
             u.username AS user_username
         FROM wheel_movements wm
         JOIN wheels w ON wm.wheel_id = w.id
         LEFT JOIN users u ON wm.user_id = u.id
-        WHERE {database.get_sql_date_format_for_query('wm.timestamp')} = %s
+        WHERE {database.get_sql_date_format_for_query('wm.timestamp')} = {placeholder}
         ORDER BY wm.timestamp DESC
     """ 
     if is_psycopg2_conn:
         cursor_wheel = conn.cursor() 
         cursor_wheel.execute(wheel_movements_query_today, (sql_date_filter,))
         wheel_movements_raw_today = cursor_wheel.fetchall()
-        cursor_wheel.close() # Close cursor
+        cursor_wheel.close()
     else:
-        wheel_movements_raw_today = conn.execute(wheel_movements_query_today.replace('%s', '?'), (sql_date_filter,)).fetchall()
+        wheel_movements_raw_today = conn.execute(wheel_movements_query_today, (sql_date_filter,)).fetchall()
 
     processed_wheel_movements_raw_today = []
     for movement in wheel_movements_raw_today:
@@ -1623,16 +1671,15 @@ def daily_stock_report():
     distinct_wheel_ids_query_all_history = f"""
         SELECT DISTINCT wheel_id
         FROM wheel_movements
-        WHERE timestamp <= %s{timestamp_cast}
+        WHERE timestamp <= {placeholder}{timestamp_cast}
     """
     if is_psycopg2_conn:
-        cursor_wheel = conn.cursor() # New cursor
+        cursor_wheel = conn.cursor() 
         cursor_wheel.execute(distinct_wheel_ids_query_all_history, (sql_date_filter_end_of_day,))
         rows = cursor_wheel.fetchall() 
-        cursor_wheel.close() # Close cursor
+        cursor_wheel.close()
     else:
-        query_result_obj = conn.execute(distinct_wheel_ids_query_all_history.replace('%s', '?'), (sql_date_filter_end_of_day,))
-        rows = query_result_obj.fetchall() 
+        rows = conn.execute(distinct_wheel_ids_query_all_history, (sql_date_filter_end_of_day,)).fetchall()
     
     for row in rows:
         wheel_ids_involved.add(row['wheel_id'])
@@ -1642,17 +1689,16 @@ def daily_stock_report():
         history_query_up_to_day_before = f"""
             SELECT type, quantity_change
             FROM wheel_movements
-            WHERE wheel_id = %s AND timestamp <= %s{timestamp_cast}
+            WHERE wheel_id = {placeholder} AND timestamp <= {placeholder}{timestamp_cast}
             ORDER BY timestamp ASC
         """
         if is_psycopg2_conn:
-            cursor_wheel = conn.cursor() # New cursor
+            cursor_wheel = conn.cursor() 
             cursor_wheel.execute(history_query_up_to_day_before, (wheel_id, day_before_report_iso))
             moves = cursor_wheel.fetchall() 
-            cursor_wheel.close() # Close cursor
+            cursor_wheel.close()
         else:
-            query_result_obj = conn.execute(history_query_up_to_day_before.replace('%s', '?'), (wheel_id, day_before_report_iso,))
-            moves = query_result_obj.fetchall() 
+            moves = conn.execute(history_query_up_to_day_before, (wheel_id, day_before_report_iso,)).fetchall()
         
         calculated_qty_before_day = 0
         for move in moves:
@@ -1750,16 +1796,15 @@ def daily_stock_report():
     query_total_before_tires = f"""
         SELECT COALESCE(SUM(CASE WHEN type = 'IN' THEN quantity_change ELSE -quantity_change END), 0)
         FROM tire_movements
-        WHERE timestamp < %s{timestamp_cast}
+        WHERE timestamp < {placeholder}{timestamp_cast}
     """
     if is_psycopg2_conn:
-        cursor = conn.cursor() # New cursor
-        cursor.execute(query_total_before_tires, (start_of_report_day_iso,)) # แก้ไข: ใช้ start_of_report_day_iso
+        cursor = conn.cursor() 
+        cursor.execute(query_total_before_tires, (start_of_report_day_iso,))
         initial_total_tires = cursor.fetchone()[0] or 0 
-        cursor.close() # Close cursor
+        cursor.close()
     else:
-        query_result_obj = conn.execute(query_total_before_tires.replace('%s', '?'), (start_of_report_day_iso,)) # แก้ไข: ใช้ start_of_report_day_iso
-        initial_total_tires = query_result_obj.fetchone()[0] or 0 
+        initial_total_tires = conn.execute(query_total_before_tires, (start_of_report_day_iso,)).fetchone()[0] or 0 
     
     tire_total_remaining_for_report_date = initial_total_tires + tire_total_in - tire_total_out
 
@@ -1771,16 +1816,15 @@ def daily_stock_report():
     query_total_before_wheels = f"""
         SELECT COALESCE(SUM(CASE WHEN type = 'IN' THEN quantity_change ELSE -quantity_change END), 0)
         FROM wheel_movements
-        WHERE timestamp < %s{timestamp_cast};
+        WHERE timestamp < {placeholder}{timestamp_cast};
     """
     if is_psycopg2_conn:
-        cursor = conn.cursor() # New cursor
-        cursor.execute(query_total_before_wheels, (start_of_report_day_iso,)) # แก้ไข: ใช้ start_of_report_day_iso
+        cursor = conn.cursor() 
+        cursor.execute(query_total_before_wheels, (start_of_report_day_iso,))
         initial_total_wheels = cursor.fetchone()[0] or 0 
-        cursor.close() # Close cursor
+        cursor.close()
     else:
-        query_result_obj = conn.execute(query_total_before_wheels.replace('%s', '?'), (start_of_report_day_iso,)) # แก้ไข: ใช้ start_of_report_day_iso
-        initial_total_wheels = query_result_obj.fetchone()[0] or 0 
+        initial_total_wheels = conn.execute(query_total_before_wheels, (start_of_report_day_iso,)).fetchone()[0] or 0 
     
     wheel_total_remaining_for_report_date = initial_total_wheels + wheel_total_in - wheel_total_out
 
@@ -3032,6 +3076,8 @@ def api_link_barcode_to_item():
     except Exception as e:
         conn.rollback()
         return jsonify({"success": False, "message": f"เกิดข้อผิดพลาดในการเชื่อมโยงบาร์โค้ด: {str(e)}"}), 500
+        
+        
 
 # --- Main entry point ---
 if __name__ == '__main__':

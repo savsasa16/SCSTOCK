@@ -1,400 +1,480 @@
-/* --- Global Styles --- */
-/* กำหนดตัวแปรสีและขนาดต่างๆ เพื่อให้ง่ายต่อการปรับแต่งธีม */
 :root {
-    --primary-color: #3498db; /* Blue: สีหลักสำหรับการเน้น, ปุ่ม, ลิงก์ */
-    --primary-dark: #2980b9;  /* Darker Blue: สำหรับ hover states */
-    --secondary-color: #2ecc71; /* Green: สำหรับปุ่มสำเร็จ, ข้อความ success */
-    --accent-color: #f39c12; /* Orange: สำหรับข้อความ warning, ส่วนที่ต้องการความสนใจ */
-    --danger-color: #e74c3c; /* Red: สำหรับข้อความ error, ปุ่มลบ */
-    --danger-dark: #c0392b; /* Darker Red */
-    --text-dark: #2c3e50;    /* Dark Grey: สำหรับหัวข้อ, ข้อความสำคัญ */
-    --text-light: #555;      /* Medium Grey: สำหรับข้อความทั่วไป */
-    --bg-light: #f9fbfd;     /* Very Light Grey: สีพื้นหลังโดยรวม */
-    --bg-white: #ffffff;     /* White: สำหรับ container, form sections */
-    --border-color: #e0e0e0; /* Light Grey: สำหรับเส้นแบ่ง, borders */
-    --shadow-light: 0 2px 8px rgba(0, 0, 0, 0.08); /* เงาบางๆ */
-    --shadow-medium: 0 5px 15px rgba(0, 0, 0, 0.1); /* เงาปานกลาง */
+    /* Colors */
+    --primary-color: #3498db; /* Blue */
+    --primary-dark: #2980b9;
+
+    --secondary-color: #2ecc71; /* Green: นี่คือสีเขียวที่คุณใช้สำหรับ secondary */
+    --secondary-dark: #27ae60; /* เขียวเข้มสำหรับ Secondary Hover */
+
+    --success-color: #28a745; /* <--- กำหนดสีเขียวที่ชัดเจนสำหรับปุ่มสำเร็จ */
+    --success-dark: #218838;  /* <--- สีเขียวเข้มสำหรับ hover ของปุ่มสำเร็จ */
+
+    --accent-color: #f39c12; /* Orange */
+    
+    --danger-color: #e74c3c; /* Red: สำหรับปุ่มอันตราย หรือข้อความเตือน */
+    --danger-dark: #c0392b;
+
+    --gray-color: #6c757d;    /* <--- เพิ่มสีเทาสำหรับปุ่ม Secondary ถ้าต้องการให้เป็นสีเทา */
+    --gray-dark: #5a6268;     /* <--- เทาเข้มสำหรับ hover ของปุ่ม Secondary */
+
+    --text-dark: #2c3e50;
+    --text-light: #555;
+    --text-white: #ffffff;
+    --text-muted: #7f8c8d;
+
+    --bg-light: #f9fbfd;
+    --bg-white: #ffffff;
+    --bg-hover-light: #eaf2f8;
+    --bg-stripe: #fdfdfd;
+
+    /* Borders & Shadows */
+    --border-color: #e0e0e0; /* Standard border */
+    --border-color-light: #f0f0f0; /* Lighter border for subtle divisions */
+    --shadow-light: 0 2px 8px rgba(0, 0, 0, 0.08);
+    --shadow-medium: 0 5px 15px rgba(0, 0, 0, 0.1);
+    --shadow-strong: 0 8px 25px rgba(0, 0, 0, 0.15);
+
+    /* Spacing */
+    --spacing-xs: 5px;
+    --spacing-sm: 10px;
+    --spacing-md: 15px;
+    --spacing-lg: 20px;
+    --spacing-xl: 30px;
+    --spacing-xxl: 40px;
+
+    /* Border Radii */
+    --border-radius-sm: 4px;
+    --border-radius-md: 16px; /* เปลี่ยนจาก 8px เป็น 16px เพื่อให้โค้งมนมากขึ้น */
+    --border-radius-lg: 12px;
+    --border-radius-xl: 16px;
+
+    /* Transitions */
+    --transition-speed: 0.3s;
+    --transition-ease: ease;
+    --transition-bounce: cubic-bezier(0.68, -0.55, 0.27, 1.55);
+
+    /* Font Sizes (Base & Heading Scale) */
+    --font-size-base: 16px;
+    --font-size-sm: 0.9em;
+    --font-size-lg: 1.15em;
+    --font-size-h1: 2.5em; /* clamp for fluid typography */
+    --font-size-h2: 2.2em;
+    --font-size-h3: 1.8em;
+    --font-size-h4: 1.4em;
+}
+
+/* --- Base Typography & Layout --- */
+html {
+    box-sizing: border-box; /* Ensures padding and border are included in element's total width and height */
+}
+
+*, *::before, *::after {
+    box-sizing: inherit; /* Inherit box-sizing for all elements */
 }
 
 body {
-    font-family: 'Prompt', sans-serif, 'Segoe UI', Tahoma, Geneva, Verdana; /* ใช้ Prompt ถ้ามี, หรือ fallback */
+    font-family: 'Prompt', sans-serif, 'Segoe UI', Tahoma, Geneva, Verdana;
     margin: 0;
     padding: 0;
     background-color: var(--bg-light);
     color: var(--text-light);
-    line-height: 1.7; /* ระยะห่างระหว่างบรรทัด */
-    font-size: 16px;
-    -webkit-font-smoothing: antialiased; /* ทำให้ตัวอักษรดูเรียบเนียนขึ้นบน WebKit browsers */
-    -moz-osx-font-smoothing: grayscale; /* ทำให้ตัวอักษรดูเรียบเนียนขึ้นบน Firefox */
+    line-height: 1.6; /* Slightly tighter line height for better readability */
+    font-size: var(--font-size-base);
+    -webkit-font-smoothing: antialiased; /* Smoother fonts on WebKit */
+    -moz-osx-font-smoothing: grayscale; /* Smoother fonts on Firefox */
 }
 
 .container {
-    max-width: 1280px; /* ความกว้างสูงสุดของเนื้อหาหลัก */
-    margin: 30px auto; /* จัดกึ่งกลางและมีระยะห่างจากขอบบนล่าง */
-    padding: 30px;
+    max-width: 1300px; /* Slightly wider max-width */
+    margin: var(--spacing-xl) auto; /* Top/bottom margin, auto left/right */
+    padding: var(--spacing-xxl); /* Generous padding */
     background-color: var(--bg-white);
-    border-radius: 12px; /* มุมโค้งมน */
+    border-radius: var(--border-radius-lg);
     box-shadow: var(--shadow-medium);
-    transition: all 0.3s ease-in-out; /* ภาพเคลื่อนไหวเมื่อมีการเปลี่ยนแปลง */
+    transition: all var(--transition-speed) var(--transition-ease);
 }
 
 h1, h2, h3, h4 {
     color: var(--text-dark);
-    margin-bottom: 20px;
-    font-weight: 600; /* ตัวหนาปานกลาง */
-    line-height: 1.3;
+    margin-bottom: var(--spacing-lg);
+    font-weight: 600;
+    line-height: 1.2;
 }
 
+h1 { font-size: clamp(2em, 5vw, var(--font-size-h1)); } /* Fluid font size for H1 */
 h2 {
-    font-size: 2.2em; /* ขนาดใหญ่สำหรับหัวข้อหลัก */
-    border-bottom: 2px solid var(--border-color); /* เส้นใต้แบ่งส่วน */
-    padding-bottom: 10px;
-    margin-top: 30px;
+    font-size: clamp(1.8em, 4vw, var(--font-size-h2)); /* Fluid font size for H2 */
+    border-bottom: 2px solid var(--border-color);
+    padding-bottom: var(--spacing-sm);
+    margin-top: var(--spacing-xxl);
+}
+h3 {
+    font-size: clamp(1.5em, 3.5vw, var(--font-size-h3)); /* Fluid font size for H3 */
+    margin-top: var(--spacing-xl);
+    margin-bottom: var(--spacing-md);
+}
+h4 {
+    font-size: clamp(1.2em, 3vw, var(--font-size-h4)); /* Fluid font size for H4 */
+    margin-top: var(--spacing-lg);
+    margin-bottom: var(--spacing-sm);
+    color: var(--primary-dark); /* Highlight brands */
 }
 
-h3 {
-    font-size: 1.8em; /* ขนาดรองลงมา */
-    margin-top: 25px;
-    margin-bottom: 15px;
-}
 
 /* --- Navigation Bar --- */
 .navbar {
-    background-color: var(--text-dark); /* สีพื้นหลังของ Navbar */
-    padding: 15px 30px;
+    background-color: var(--text-dark);
+    padding: var(--spacing-md) var(--spacing-xl);
     box-shadow: var(--shadow-medium);
-    display: flex; /* ใช้ Flexbox เพื่อจัดเรียงลิงก์ */
-    justify-content: space-between; /* จัดให้ช่องว่างระหว่าง brand และ links */
-    align-items: center; /* จัดกึ่งกลางแนวตั้ง */
-}
-
-.navbar a {
-    color: white;
-    text-decoration: none;
-    padding: 10px 18px;
-    border-radius: 6px;
-    transition: background-color 0.3s ease, transform 0.2s ease;
-    font-weight: 500;
-}
-
-.navbar a:hover {
-    background-color: var(--primary-dark);
-    transform: translateY(-2px); /* ยกขึ้นเล็กน้อยเมื่อ hover */
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap; /* Allow wrapping on smaller screens */
+    gap: var(--spacing-md); /* Gap between brand and links */
 }
 
 .navbar-brand a {
-    font-size: 1.4em;
+    color: var(--text-white);
+    text-decoration: none;
+    font-size: 1.5em;
     font-weight: 700;
+    padding: 0; /* Remove default link padding */
+}
+
+.navbar-brand a:hover {
+    background-color: transparent; /* No background change on hover for brand */
+    transform: none; /* No transform on hover for brand */
+    color: var(--primary-color); /* Just color change */
 }
 
 .navbar-links {
     display: flex;
-    gap: 15px; /* ช่องว่างระหว่างลิงก์ */
+    flex-wrap: wrap; /* Allow links to wrap */
+    gap: var(--spacing-sm); /* Gap between links */
+    align-items: center;
+    margin-left: auto; /* Push links to the right */
 }
 
+.navbar-links a {
+    color: var(--text-white);
+    text-decoration: none;
+    padding: var(--spacing-sm) var(--spacing-md);
+    border-radius: var(--border-radius-sm);
+    transition: background-color var(--transition-speed) var(--transition-ease), transform 0.2s var(--transition-ease);
+    font-weight: 500;
+    font-size: var(--font-size-sm); /* Slightly smaller font for more links */
+}
 
-/* --- Flash Messages (ข้อความแจ้งเตือน) --- */
+.navbar-links a:hover {
+    background-color: var(--primary-dark);
+    transform: translateY(-2px);
+}
+
+.navbar-links .user-info {
+    color: rgba(255, 255, 255, 0.8);
+    font-size: var(--font-size-sm);
+    margin-left: var(--spacing-md);
+    white-space: nowrap; /* Prevent username from breaking */
+}
+
+/* --- Flash Messages --- */
 .flash-messages {
-    list-style: none; /* ลบ bullet points */
+    list-style: none;
     padding: 0;
-    margin: 20px 0;
+    margin: var(--spacing-lg) 0;
     width: 100%;
     box-sizing: border-box;
 }
 
 .flash-message {
-    padding: 15px 20px;
-    margin-bottom: 10px;
-    border-radius: 8px;
+    padding: var(--spacing-md) var(--spacing-lg);
+    margin-bottom: var(--spacing-sm);
+    border-radius: var(--border-radius-md);
     font-weight: 500;
-    color: white;
+    color: var(--text-white);
     box-shadow: var(--shadow-light);
-    display: flex; /* ใช้ flex เพื่อจัดเรียงไอคอนกับข้อความ */
+    display: flex;
     align-items: center;
+    opacity: 1; /* Initial opacity for transition */
+    transition: opacity 0.6s ease-out, height 0.6s ease-out, padding 0.6s ease-out, margin-bottom 0.6s ease-out;
 }
 
 .flash-message::before {
-    font-family: 'Font Awesome 5 Free'; /* สำหรับไอคอน Font Awesome */
-    font-weight: 900; /* ต้องใช้ 900 สำหรับ solid icons */
-    margin-right: 10px;
+    font-family: 'Font Awesome 5 Free';
+    font-weight: 900;
+    margin-right: var(--spacing-sm);
     font-size: 1.2em;
+    flex-shrink: 0; /* Prevent icon from shrinking */
 }
 
-.flash-messages .success {
-    background-color: var(--secondary-color); /* Green */
-}
-.flash-messages .success::before { content: '\f00c'; } /* check-circle icon */
+.flash-messages .success { background-color: var(--secondary-color); }
+.flash-messages .success::before { content: '\f00c'; } /* check-circle */
 
+.flash-messages .error, .flash-messages .danger { background-color: var(--danger-color); }
+.flash-messages .error::before, .flash-messages .danger::before { content: '\f06a'; } /* exclamation-circle */
 
-.flash-messages .error,
-.flash-messages .danger {
-    background-color: var(--danger-color); /* Red */
-}
-.flash-messages .error::before,
-.flash-messages .danger::before { content: '\f06a'; } /* exclamation-circle icon */
+.flash-messages .warning { background-color: var(--accent-color); color: var(--text-dark); }
+.flash-messages .warning::before { content: '\f071'; } /* exclamation-triangle */
 
-
-.flash-messages .warning {
-    background-color: var(--accent-color); /* Orange */
-    color: var(--text-dark); /* ใช้สีข้อความเข้มขึ้นเพื่อให้อ่านง่ายบนพื้นหลังสว่าง */
-}
-.flash-messages .warning::before { content: '\f071'; } /* exclamation-triangle icon */
-
-
-.flash-messages .info {
-    background-color: var(--primary-color); /* Blue */
-}
-.flash-messages .info::before { content: '\f05a'; } /* info-circle icon */
+.flash-messages .info { background-color: var(--primary-color); }
+.flash-messages .info::before { content: '\f05a'; } /* info-circle */
 
 
 /* --- Tabs Styling --- */
 .tabs {
     display: flex;
-    margin-bottom: 25px;
+    margin-bottom: var(--spacing-sm);
     border-bottom: 2px solid var(--border-color);
-    overflow-x: auto; /* อนุญาตให้เลื่อนแนวนอนหากมีแท็บเยอะ */
-    -webkit-overflow-scrolling: touch; /* เพื่อการเลื่อนที่ลื่นไหลบน iOS */
+    overflow-x: auto; /* Allow horizontal scroll for many tabs */
+    -webkit-overflow-scrolling: touch;
+    white-space: nowrap; /* Keep tab buttons on one line */
 }
 
 .tab-button {
     background-color: var(--bg-white);
     border: none;
-    padding: 15px 25px;
+    padding: var(--spacing-md) var(--spacing-xl);
     cursor: pointer;
-    font-size: 1.15em;
+    font-size: var(--font-size-lg);
     font-weight: 600;
     color: var(--text-light);
-    border-top-left-radius: 8px;
-    border-top-right-radius: 8px;
-    transition: all 0.3s ease;
+    border-top-left-radius: var(--border-radius-md);
+    border-top-right-radius: var(--border-radius-md);
+    transition: all var(--transition-speed) var(--transition-ease);
     outline: none;
-    flex-shrink: 0; /* ป้องกันไม่ให้แท็บหดตัวเมื่อมีหลายแท็บ */
+    flex-shrink: 0; /* Prevent shrinking when many tabs */
 }
 
 .tab-button:hover {
-    background-color: #eaf2f8; /* สีพื้นหลังอ่อนๆ เมื่อ hover */
+    background-color: var(--bg-hover-light);
     color: var(--primary-color);
 }
 
 .tab-button.active {
     background-color: var(--primary-color);
-    color: white;
-    border-bottom: 2px solid var(--primary-color); /* เน้นแท็บที่ Active */
+    color: var(--text-white);
+    border-bottom: 2px solid var(--primary-color); /* Overlap border */
     box-shadow: var(--shadow-light);
-    transform: translateY(-2px); /* ยกขึ้นเล็กน้อย */
+    transform: translateY(-2px);
 }
 
 .tab-content {
-    display: none; /* ซ่อนแท็บที่ไม่ได้ Active */
-    padding: 25px 0;
+    display: none;
+    padding: var(--spacing-xl) 0;
 }
 
 .tab-content.active {
-    display: block; /* แสดงแท็บที่ Active */
+    display: block;
 }
 
 /* --- Form Styles --- */
 .form-section {
     background-color: var(--bg-white);
-    padding: 30px;
-    border-radius: 10px;
+    padding: var(--spacing-xl);
+    border-radius: var(--border-radius-md);
     box-shadow: var(--shadow-light);
-    margin-bottom: 40px;
+    margin-bottom: var(--spacing-xxl);
     border: 1px solid var(--border-color);
 }
 
 .form-row {
     display: flex;
-    flex-wrap: wrap; /* อนุญาตให้ item ขึ้นบรรทัดใหม่เมื่อหน้าจอเล็ก */
-    gap: 25px; /* ช่องว่างระหว่างกลุ่มฟอร์ม */
-    margin-bottom: 20px;
-    align-items: flex-end; /* จัดให้ label และ input อยู่ในระดับเดียวกัน (ด้านล่าง) */
+    flex-wrap: wrap;
+    gap: var(--spacing-xl); /* Generous gap between form groups */
+    margin-bottom: var(--spacing-lg);
+    align-items: flex-end; /* Align labels and inputs */
 }
 
 .form-group {
-    flex: 1; /* ทำให้กลุ่มฟอร์มขยายและหดได้ */
-    min-width: 250px; /* ความกว้างขั้นต่ำก่อนที่จะขึ้นบรรทัดใหม่ */
-    margin-bottom: 15px; /* ช่องว่างระหว่างแถวของกลุ่มฟอร์ม */
+    flex: 1; /* Allows it to grow and shrink */
+    min-width: 280px; /* Increased min-width for better input display */
+    margin-bottom: var(--spacing-md);
 }
 
 .form-group.half-width {
-    flex-basis: calc(50% - 12.5px); /* 2 คอลัมน์ ปรับตาม gap */
+    flex-basis: calc(50% - (var(--spacing-xl) / 2)); /* Account for gap */
 }
 
 .form-group.quarter-width {
-    flex-basis: calc(25% - 18.75px); /* 4 คอลัมน์ ปรับตาม gap */
+    flex-basis: calc(25% - (var(--spacing-xl) * 3 / 4)); /* Account for gap */
 }
-
-/* full-width group for promo description */
-.form-group.full-width {
-    flex-basis: 100%;
-    min-width: unset;
-}
-
-/* For checkbox groups in forms */
-.form-group.checkbox-group {
-    display: flex;
-    align-items: center;
-    margin-top: 10px; /* Adjust spacing */
-    margin-bottom: 10px;
-}
-
-.form-group.checkbox-group input[type="checkbox"] {
-    width: auto; /* Override default 100% width */
-    margin-right: 10px;
-}
-
 
 label {
     display: block;
-    margin-bottom: 8px;
+    margin-bottom: var(--spacing-xs);
     font-weight: 600;
     color: var(--text-dark);
-    font-size: 0.95em;
+    font-size: var(--font-size-sm);
 }
 
-/* สไตล์สำหรับ input, select, textarea */
 input[type="text"],
 input[type="number"],
 input[type="email"],
 input[type="password"],
 input[type="date"],
-input[type="file"], /* สำหรับ input file */
+input[type="file"],
 select,
 textarea {
     width: 100%;
-    padding: 12px 15px;
+    padding: var(--spacing-sm) var(--spacing-md);
     border: 1px solid var(--border-color);
-    border-radius: 8px;
-    box-sizing: border-box; /* ทำให้ padding และ border ไม่เพิ่มความกว้างของ element */
-    font-size: 1em;
+    border-radius: var(--border-radius-md);
+    box-sizing: border-box; /* Ensure padding and border are included in width */
+    font-size: var(--font-size-base);
     color: var(--text-dark);
-    background-color: #fcfcfc; /* สีพื้นหลังอ่อนๆ */
-    transition: border-color 0.3s ease, box-shadow 0.3s ease;
+    background-color: #fcfcfc;
+    transition: border-color var(--transition-speed) var(--transition-ease), box-shadow var(--transition-speed) var(--transition-ease);
 }
 
-/* สไตล์เมื่อ input/select/textarea ถูกโฟกัส */
-input[type="text"]:focus,
-input[type="number"]:focus,
-input[type="email"]:focus,
-input[type="password"]:focus,
-input[type="date"]:focus,
-input[type="file"]:focus,
-select:focus,
-textarea:focus {
+input[type="text"]:focus, input[type="number"]:focus, input[type="email"]:focus,
+input[type="password"]:focus, input[type="date"]:focus, input[type="file"]:focus,
+select:focus, textarea:focus {
     border-color: var(--primary-color);
-    outline: none; /* ลบ outline เริ่มต้นของเบราว์เซอร์ */
-    box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.2); /* เงารอบ input เมื่อโฟกัส */
+    outline: none; /* Remove default outline */
+    box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.25); /* Custom focus indicator */
 }
 
-/* Required field indicator */
-.required {
-    color: var(--danger-color); /* สีแดงสำหรับ * ของช่องที่จำเป็น */
-    font-weight: normal;
-    margin-left: 2px;
-}
-
-/* Style for disabled promo fields (in add_item.html/edit_tire.html) */
-.promo-disabled {
-    background-color: #e9ecef;
-    cursor: not-allowed;
-    color: #6c757d;
-}
 
 /* --- Buttons --- */
 .btn {
-    display: inline-flex; /* ใช้ flex สำหรับจัดเรียงไอคอนกับข้อความ */
+    display: inline-flex;
     align-items: center;
     justify-content: center;
-    padding: 12px 25px;
+    padding: var(--spacing-sm) var(--spacing-xl);
     border: none;
-    border-radius: 8px;
+    border-radius: var(--border-radius-md);
     cursor: pointer;
-    font-size: 1em;
+    font-size: var(--font-size-base);
     font-weight: 600;
     text-align: center;
     text-decoration: none;
-    transition: all 0.3s ease; /* ภาพเคลื่อนไหวเมื่อ hover */
-    min-width: 120px; /* กำหนดความกว้างขั้นต่ำเพื่อความสม่ำเสมอ */
+    transition: all var(--transition-speed) var(--transition-ease);
+    min-width: 130px; /* Slightly wider minimum width for consistency */
+    white-space: nowrap; /* Prevent button text from breaking */
 }
 
 .btn i {
-    margin-right: 8px; /* ช่องว่างระหว่างไอคอนกับข้อความ */
+    margin-right: var(--spacing-sm);
+    font-size: 1.1em; /* Slightly larger icon */
 }
 
-.btn-primary {
-    background-color: var(--primary-color);
-    color: white;
-}
-
-.btn-primary:hover {
-    background-color: var(--primary-dark);
-    transform: translateY(-2px);
-    box-shadow: var(--shadow-medium);
-}
+.btn-primary { background-color: var(--primary-color); color: var(--text-white); }
+.btn-primary:hover { background-color: var(--primary-dark); transform: translateY(-2px); box-shadow: var(--shadow-medium); }
 
 .btn-danger {
-    background-color: var(--danger-color);
-    color: white;
-}
-
-.btn-danger:hover {
-    background-color: var(--danger-dark);
-    transform: translateY(-2px);
-    box-shadow: var(--shadow-medium);
-}
+	background-color: var(--danger-color); color: var(--text-white); }
+.btn-danger:hover { background-color: var(--danger-dark); transform: translateY(-2px); box-shadow: var(--shadow-medium); }
 
 .btn-success {
-    background-color: var(--secondary-color);
-    color: white;
+	background-color: var(--success-color); /* แก้ไข: ใช้สีเขียวที่ถูกต้อง */
+	color: var(--text-white);
+	border: none;
+}
+
+.btn-secondary {
+    background-color: var(--gray-color); /* <--- ใช้ gray-color ที่ประกาศใน :root เพื่อให้เป็นสีเทา */
+    color: var(--text-white);
+    border: none;
+}
+
+.btn-secondary:hover {
+    background-color: var(--gray-dark);
 }
 
 .btn-success:hover {
-    background-color: #27ae60; /* Darker green */
-    transform: translateY(-2px);
-    box-shadow: var(--shadow-medium);
+	background-color: var(--success-dark);
 }
 
-.btn-outline {
-    background-color: transparent;
-    border: 2px solid var(--primary-color);
-    color: var(--primary-color);
-}
+.btn-outline { background-color: transparent; border: 2px solid var(--primary-color); color: var(--primary-color); }
+.btn-outline:hover { background-color: var(--primary-color); color: var(--text-white); transform: translateY(-2px); box-shadow: var(--shadow-medium); }
 
-.btn-outline:hover {
-    background-color: var(--primary-color);
-    color: white;
-    transform: translateY(-2px);
-    box-shadow: var(--shadow-medium);
-}
-
-/* ปุ่มขนาดเล็ก */
 .btn-sm {
-    padding: 8px 15px; /* ปรับขนาด padding */
-    font-size: 0.9em; /* ลดขนาดฟอนต์ */
-    min-width: unset; /* ลบความกว้างขั้นต่ำ */
+    padding: var(--spacing-xs) var(--spacing-md);
+    font-size: var(--font-size-sm);
+    min-width: unset; /* Remove min-width for small buttons */
 }
+.btn-sm i {
+    margin-right: var(--spacing-xs);
+}
+
+/* --- เพิ่มเติมสำหรับปุ่มแก้ไขและลบในตาราง --- */
+.btn-warning.btn-small { /* ปุ่มแก้ไข */
+    background-color: var(--accent-color); /* สีส้ม */
+    color: var(--text-white); /* เปลี่ยนเป็นสีขาวตามที่ต้องการ */
+    border: 1px solid var(--accent-color);
+    border-radius: var(--border-radius-md); /* ใช้ค่าจาก global variable */
+    padding: 5px 10px;
+    font-size: 0.85em;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 70px; /* กำหนดความกว้างขั้นต่ำเพื่อให้ปุ่มมีขนาดใกล้เคียงกัน */
+    transition: all var(--transition-speed) var(--transition-ease);
+}
+.btn-warning.btn-small:hover {
+    background-color: #e09200; /* ส้มเข้มขึ้นเมื่อ hover */
+    border-color: #e09200;
+    transform: translateY(-1px);
+    box-shadow: var(--shadow-light);
+}
+.btn-warning.btn-small i {
+    margin-right: 5px; /* ระยะห่างระหว่างไอคอนกับข้อความ */
+}
+
+/* .btn-danger-small ถูกกำหนดไว้ใน daily_stock_report.html แล้ว */
+/* แต่เราจะย้ายมาไว้ที่นี่เพื่อให้เป็นส่วนหนึ่งของ style.css หลัก */
+/* และเพิ่มไอคอนให้ด้วย */
+.btn-danger-small {
+    background-color: var(--danger-color); /* สีแดง */
+    color: var(--text-white);
+    padding: 5px 10px;
+    font-size: 0.85em;
+    border: 1px solid var(--danger-color);
+    border-radius: var(--border-radius-md); /* ใช้ค่าจาก global variable */
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 70px; /* กำหนดความกว้างขั้นต่ำเพื่อให้ปุ่มมีขนาดใกล้เคียงกัน */
+    transition: all var(--transition-speed) var(--transition-ease);
+}
+.btn-danger-small:hover {
+    background-color: var(--danger-dark); /* สีแดงเข้มขึ้นเมื่อ hover */
+    border-color: var(--danger-dark);
+    transform: translateY(-1px);
+    box-shadow: var(--shadow-light);
+}
+.btn-danger-small i {
+    margin-right: 5px; /* ระยะห่างระหว่างไอคอนกับข้อความ */
+}
+
 
 /* --- Table Styles --- */
 .table-responsive {
-    overflow-x: auto; /* ทำให้ตารางเลื่อนแนวนอนได้เมื่อหน้าจอเล็ก */
-    margin-top: 30px;
+    overflow-x: auto; /* Enables horizontal scrolling for tables */
+    margin-top: var(--spacing-xl);
     box-shadow: var(--shadow-light);
-    border-radius: 10px;
+    border-radius: var(--border-radius-md);
     background-color: var(--bg-white);
     border: 1px solid var(--border-color);
+    -webkit-overflow-scrolling: touch; /* Smooth scrolling on iOS */
 }
 
 table {
     width: 100%;
-    border-collapse: separate; /* เพื่อให้ border-radius ของ .table-responsive ทำงานได้ */
-    border-spacing: 0; /* เพื่อลบช่องว่างระหว่างเซลล์ */
+    border-collapse: separate;
+    border-spacing: 0;
+    min-width: 900px; /* UPDATED: Increased min-width for tables to ensure content fits */
+    font-size: var(--font-size-sm); /* Slightly smaller font for table data */
 }
 
 th, td {
-    padding: 15px 20px;
+    padding: var(--spacing-md) var(--spacing-lg);
     text-align: left;
-    border-bottom: 1px solid var(--border-color);
+    border-bottom: 1px solid var(--border-color-light); /* Lighter border for rows */
+    white-space: nowrap; /* Ensure text in all cells stays on one line */
+    overflow: hidden; /* Hide overflowing text */
+    text-overflow: ellipsis; /* Add ellipsis for overflowing text */
 }
 
 th {
@@ -402,115 +482,42 @@ th {
     color: var(--text-dark);
     font-weight: 600;
     text-transform: uppercase;
-    font-size: 0.95em;
-    position: sticky; /* ทำให้หัวตารางติดอยู่เมื่อเลื่อน */
+    font-size: 0.9em; /* Slightly smaller font for headers to save space */
+    position: sticky;
     top: 0;
-    z-index: 1; /* ทำให้หัวตารางอยู่ด้านบนเนื้อหาอื่น */
+    z-index: 1;
+    white-space: nowrap; /* FIXED: Prevent header text from breaking */
+    word-break: normal; /* FIXED: Ensure normal word breaking, not character breaking */
 }
 
-tr:nth-child(even) {
-    background-color: #fdfdfd; /* สีพื้นหลังสลับกัน */
-}
+tr:nth-child(even) { background-color: var(--bg-stripe); } /* zebra striping */
+tr:hover { background-color: var(--bg-hover-light); } /* Hover effect */
 
-tr:hover {
-    background-color: #f0f8ff; /* สีฟ้าอ่อนๆ เมื่อวางเมาส์เหนือแถว */
-}
-
-/* สีสำหรับสต็อกเหลือน้อย */
-.text-danger {
-    color: var(--danger-color);
-    font-weight: 600;
-}
-.text-warning {
-    color: var(--accent-color);
-    font-weight: 600;
-}
-
-/* สำหรับราคาโปรโมชันในตาราง */
-.promo-price {
-    color: var(--secondary-color); /* สีเขียวสำหรับราคาโปร */
-    font-weight: 600;
-}
-
-/* สำหรับ badge โปรโมชัน */
-.promo-badge {
-    display: inline-block;
-    padding: 4px 8px;
-    background-color: var(--primary-color);
-    color: white;
-    border-radius: 5px;
-    font-size: 0.8em;
-    font-weight: 500;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    max-width: 100%; /* Ensure it fits in the cell */
-}
-
-/* --- Table Specific Adjustments for content fitting --- */
-/* ป้องกันข้อความในเซลล์ตารางไม่ให้ขึ้นบรรทัดใหม่มากเกินไป */
-table td {
-    white-space: nowrap; /* ป้องกันการขึ้นบรรทัดใหม่ */
-    overflow: hidden;    /* ซ่อนเนื้อหาที่ล้น */
-    text-overflow: ellipsis; /* แสดง ... เมื่อเนื้อหาถูกซ่อน */
-    max-width: 150px; /* ความกว้างสูงสุดเริ่มต้นสำหรับเซลล์ส่วนใหญ่ */
-}
-
-/* ปรับความกว้างสูงสุดสำหรับคอลัมน์เฉพาะ (สำหรับยาง) */
-/* ใช้ ID ของ table ที่เรากำหนดใน index.html (เมื่อ ID ถูกลบไปแล้ว index.html จะต้องปรับ selector) */
-/* เนื่องจากคุณเอา ID ออกจาก HTML แล้ว เราต้องปรับ selector ใน CSS นี้ด้วย */
-/* สมมติว่า tires-table เป็น table แรกใน tabcontent #tires */
-#tires .table-responsive table th:nth-child(1), #tires .table-responsive table td:nth-child(1) { max-width: 150px; } /* รุ่นยาง (อันนี้คือคอลัมน์ที่ 1 หลังจากลบ ID ออก) */
-#tires .table-responsive table th:nth-child(2), #tires .table-responsive table td:nth-child(2) { max-width: 100px; } /* เบอร์ยาง */
-#tires .table-responsive table th:nth-child(3), #tires .table-responsive table td:nth-child(3) { max-width: 80px; }  /* สต็อก */
-#tires .table-responsive table th:nth-child(4), #tires .table-responsive table td:nth-child(4) { max-width: 100px; } /* ราคาต่อเส้น */
-#tires .table-responsive table th:nth-child(5), #tires .table-responsive table td:nth-child(5) { max-width: 120px; } /* โปรโมชัน */
-#tires .table-responsive table th:nth-child(6), #tires .table-responsive table td:nth-child(6) { max-width: 100px; } /* ราคา 4 เส้น */
-#tires .table-responsive table th:nth-child(7), #tires .table-responsive table td:nth-child(7) { max-width: 80px; }  /* ปีผลิต */
-#tires .table-responsive table th:nth-child(8), #tires .table-responsive table td:nth-child(8) { min-width: 120px; max-width: 150px; } /* การดำเนินการ */
-
-
-/* ปรับความกว้างสูงสุดสำหรับคอลัมน์เฉพาะ (สำหรับแม็ก) */
-/* สมมติว่า wheels-table เป็น table แรกใน tabcontent #wheels */
-#wheels .table-responsive table th:nth-child(1), #wheels .table-responsive table td:nth-child(1) { max-width: 150px; } /* ลาย (อันนี้คือคอลัมน์ที่ 1 หลังจากลบ ID ออก) */
-#wheels .table-responsive table th:nth-child(2), #wheels .table-responsive table td:nth-child(2) { max-width: 120px; } /* ขนาด */
-#wheels .table-responsive table th:nth-child(3), #wheels .table-responsive table td:nth-child(3) { max-width: 100px; } /* รู ET */
-#wheels .table-responsive table th:nth-child(4), #wheels .table-responsive table td:nth-child(4) { max-width: 100px; } /* สี */
-#wheels .table-responsive table th:nth-child(5), #wheels .table-responsive table td:nth-child(5) { max-width: 80px; }  /* สต็อก */
-#wheels .table-responsive table th:nth-child(6), #wheels .table-responsive table td:nth-child(6) { max-width: 100px; } /* ทุน */
-#wheels .table-responsive table th:nth-child(7), #wheels .table-responsive table td:nth-child(7) { max-width: 100px; } /* ราคาปลีก */
-#wheels .table-responsive table th:nth-child(8), #wheels .table-responsive table td:nth-child(8) { max-width: 80px; text-align: center; } /* รูปภาพ */
-#wheels .table-responsive table th:nth-child(9), #wheels .table-responsive table td:nth-child(9) { min-width: 120px; max-width: 150px; } /* การดำเนินการ */
-
-
-/* Styling for images within the table cells (เฉพาะในตาราง) */
-table td img {
-    width: 60px;  /* เพิ่มขนาดรูปภาพให้ใหญ่ขึ้นเล็กน้อย */
-    height: 60px; /* ทำให้เป็นสี่เหลี่ยมจัตุรัส */
-    object-fit: cover; /* ครอบคลุมพื้นที่โดยไม่บิดเบือน */
-    border-radius: 8px; /* ทำให้มุมมนขึ้นเล็กน้อย */
-    vertical-align: middle; /* จัดกึ่งกลางแนวตั้งกับข้อความอื่นในเซลล์ */
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1); /* เพิ่มเงาเล็กน้อย */
-    transition: transform 0.2s ease;
-}
-
-table td img:hover {
-    transform: scale(1.1); /* ขยายรูปภาพเล็กน้อยเมื่อวางเมาส์เหนือ */
-}
-
-/* Specific styling for action buttons to ensure they look good in table cells */
-.action-buttons {
+td.action-buttons {
     display: flex;
-    gap: 5px; /* ลดช่องว่างระหว่างปุ่ม */
-    flex-wrap: nowrap; /* ป้องกันปุ่มไม่ให้ขึ้นบรรทัดใหม่ */
-    min-width: 120px; /* กำหนดความกว้างขั้นต่ำเพื่อให้ปุ่มมีพื้นที่ */
+    gap: 5px;
+    flex-wrap: nowrap; /* Ensure buttons stay on one line */
+    min-width: 120px; /* Ensure enough space for buttons */
 }
 
-.action-buttons .btn-sm {
-    padding: 6px 10px; /* ปรับ padding ของปุ่มเล็กๆ */
-    font-size: 0.85em; /* ลดขนาดฟอนต์ */
-    border-radius: 6px;
-    flex-shrink: 0; /* ไม่ให้ปุ่มหดตัว */
+/* Specific styling for quantity column */
+td .text-danger { color: var(--danger-color); font-weight: 600; }
+td .text-warning { color: var(--accent-color); font-weight: 600; }
+
+.promo-badge {
+    background-color: var(--secondary-color);
+    color: var(--text-white);
+    padding: 3px 8px;
+    border-radius: var(--border-radius-sm);
+    font-size: 0.8em;
+    font-weight: 600;
+    white-space: nowrap;
+    display: inline-block; /* Ensure padding works */
+}
+
+.price-for-4.promo-price {
+    color: var(--danger-color); /* Red for discounted price */
+    font-weight: 600;
 }
 
 
@@ -518,187 +525,176 @@ table td img:hover {
 a {
     color: var(--primary-color);
     text-decoration: none;
-    transition: color 0.3s ease;
+    transition: color var(--transition-speed) var(--transition-ease);
 }
-
 a:hover {
     color: var(--primary-dark);
     text-decoration: underline;
 }
 
-/* --- Image styling for wheel details (ภาพเดี่ยวในหน้า wheel_detail) --- */
-.wheel-image {
-    max-width: 400px;
-    height: auto;
-    display: block;
-    margin: 0 auto 30px auto; /* จัดกึ่งกลางและมีระยะห่างด้านล่าง */
-    border-radius: 10px;
-    box-shadow: var(--shadow-medium);
-    border: 1px solid var(--border-color);
-}
-
 /* --- No data message --- */
 p.no-data {
     text-align: center;
-    padding: 30px;
-    color: #777;
+    padding: var(--spacing-xl);
+    color: var(--text-muted);
     font-style: italic;
     background-color: #f0f0f0;
-    border-radius: 8px;
-    margin-top: 20px;
-}
-
-/* --- Footer --- */
-footer {
-    text-align: center;
-    padding: 20px;
-    margin-top: 40px;
-    background-color: var(--text-dark);
-    color: #eee;
-    font-size: 0.9em;
-    box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.1);
+    border-radius: var(--border-radius-md);
+    margin-top: var(--spacing-lg);
 }
 
 
-/* --- Responsive Adjustments --- */
-@media (max-width: 992px) {
-    .container {
-        margin: 20px auto;
-        padding: 20px;
-    }
-    h1, h2 {
-        font-size: 1.8em;
-    }
-    h3 {
-        font-size: 1.5em;
-    }
-    .form-row {
-        gap: 15px;
-    }
-    .form-group.half-width {
-        flex-basis: calc(50% - 7.5px);
-    }
-    .form-group.quarter-width {
-        flex-basis: calc(33.33% - 10px); /* 3 คอลัมน์บนหน้าจอขนาดกลาง */
-    }
-    .navbar-links {
-        gap: 10px;
-    }
-    .navbar a {
-        padding: 8px 12px;
-        font-size: 0.95em;
-    }
+/* --- Responsive Adjustments (Mobile First Approach) --- */
 
-    /* ปรับความกว้างสูงสุดของคอลัมน์ในตารางสำหรับจอขนาดกลาง (หลังจากลบ ID) */
-    #tires .table-responsive table th:nth-child(1), #tires .table-responsive table td:nth-child(1) { max-width: 120px; } /* รุ่นยาง */
-    #tires .table-responsive table th:nth-child(2), #tires .table-responsive table td:nth-child(2) { max-width: 80px; } /* เบอร์ยาง */
-    #tires .table-responsive table th:nth-child(4), #tires .table-responsive table td:nth-child(4) { max-width: 80px; } /* ราคาต่อเส้น */
-    #tires .table-responsive table th:nth-child(5), #tires .table-responsive table td:nth-child(5) { max-width: 100px; } /* โปรโมชัน */
-    #tires .table-responsive table th:nth-child(6), #tires .table-responsive table td:nth-child(6) { max-width: 100px; } /* ราคา 4 เส้น */
-
-    #wheels .table-responsive table th:nth-child(1), #wheels .table-responsive table td:nth-child(1) { max-width: 120px; } /* ลาย */
-    #wheels .table-responsive table th:nth-child(2), #wheels .table-responsive table td:nth-child(2) { max-width: 100px; } /* ขนาด */
-    #wheels .table-responsive table th:nth-child(8), #wheels .table-responsive table td:nth-child(8) { max-width: 70px; } /* รูปภาพ */
-
-}
-
-@media (max-width: 768px) {
-    body {
-        font-size: 15px;
+/* Extra small devices (phones, 320px and up) */
+@media (max-width: 480px) {
+    body { font-size: 14px; }
+    .container { margin: var(--spacing-sm); padding: var(--spacing-md); }
+    h1 { font-size: 1.8em; }
+    h2 { font-size: 1.5em; margin-top: var(--spacing-xl); }
+    h3 { font-size: 1.3em; margin-top: var(--spacing-lg); }
+    .navbar { padding: var(--spacing-sm); flex-direction: column; align-items: flex-start; }
+    .navbar-links { width: 100%; justify-content: space-around; margin-left: 0; }
+    .navbar-links a { padding: var(--spacing-xs) var(--spacing-sm); font-size: 0.85em; flex-basis: auto; }
+    .navbar-links .user-info { margin: var(--spacing-sm) 0; text-align: center; width: 100%; }
+    .flash-message { padding: var(--spacing-sm) var(--spacing-md); font-size: 0.9em; }
+    .flash-message::before { font-size: 1em; }
+    .tabs { flex-wrap: wrap; justify-content: center; }
+    .tab-button { flex: 1 1 45%; font-size: 0.95em; padding: var(--spacing-sm) var(--spacing-md); margin-bottom: var(--spacing-xs); }
+    .form-section { padding: var(--spacing-md); }
+    .form-row { flex-direction: column; gap: var(--spacing-md); }
+    .form-group, .form-group.half-width, .form-group.quarter-width {
+        flex-basis: 100%; min-width: unset; margin-bottom: var(--spacing-md);
     }
-    .container {
-        margin: 15px;
-        padding: 15px;
-        border-radius: 8px;
+    input[type="text"], input[type="number"], select, textarea { padding: var(--spacing-sm); }
+    .btn { padding: var(--spacing-sm) var(--spacing-md); font-size: 0.9em; min-width: unset; }
+    th, td { padding: var(--spacing-sm) var(--spacing-md); font-size: 0.8em; }
+    td.action-buttons {
+        flex-direction: column; /* Stack buttons vertically for smaller screens */
+        min-width: 80px; /* ลด min-width สำหรับหน้าจอมือถือ */
+        padding: 5px; /* ลด padding */
     }
-    .navbar {
-        flex-direction: column; 
-        padding: 10px 15px;
-        align-items: flex-start;
-    }
-    .navbar-links {
-        margin-top: 10px;
-        flex-wrap: wrap;
-        justify-content: center;
-        width: 100%;
-    }
-    .navbar a {
-        padding: 6px 12px;
-        font-size: 0.9em;
-        flex: 1 1 auto; 
-        text-align: center;
-    }
-    .tabs {
-        flex-wrap: wrap; 
-    }
-    .tab-button {
-        flex: 1 1 auto; 
-        font-size: 1em;
-        padding: 12px 15px;
-        margin-bottom: 5px; 
-    }
-    .form-row {
-        flex-direction: column; 
-        gap: 0; 
-    }
-    .form-group,
-    .form-group.half-width,
-    .form-group.quarter-width {
-        flex-basis: 100%; 
-        min-width: unset; 
-        margin-bottom: 15px;
-    }
-    .form-section {
-        padding: 20px;
-    }
-    th, td {
-        padding: 10px 12px;
-        font-size: 0.85em;
-        white-space: normal; 
-        max-width: none; 
-        word-break: break-word; 
-    }
-    table td img {
-        width: 40px; 
-        height: 40px;
-        border-radius: 4px;
-    }
-    .action-buttons {
-        flex-wrap: wrap; 
-        justify-content: center; 
-    }
-    .btn {
-        padding: 10px 20px;
-        font-size: 0.9em;
+    .btn-small {
+        padding: 4px 6px; /* ลด padding ปุ่มให้เล็กลงอีก */
+        font-size: 0.75em; /* ลดขนาด font ปุ่ม */
         min-width: unset;
     }
-}
+    .btn-small i {
+        margin-right: 3px; /* ลดระยะห่างไอคอน */
+    }
 
-@media (max-width: 480px) {
-    h2 {
-        font-size: 1.5em;
+    /* ปรับความกว้างคอลัมน์ในตารางสำหรับหน้าจอเล็กมาก */
+    .report-section table th:nth-child(1), .report-section table td:nth-child(1) { width: 60px; } /* เวลา */
+    .report-section table th:nth-child(2), .report-section table td:nth-child(2) { width: 60px; } /* ประเภท */
+    .report-section table th:nth-child(3), .report-section table td:nth-child(3) { width: 40px; } /* จำนวน */
+    .report-section table th:nth-child(4), .report-section table td:nth-child(4) { width: 50px; } /* คงเหลือ */
+    .report-section table th:nth-child(5), .report-section table td:nth-child(5) { width: 80px; } /* ยี่ห้อ */
+    .report-section table th:nth-child(6), .report-section table td:nth-child(6) { width: 90px; } /* รุ่น/ลาย */
+    .report-section table th:nth-child(7), .report-section table td:nth-child(7) { width: 90px; } /* เบอร์ยาง/ขอบ */
+    .report-section table th:nth-child(8), .report-section table td:nth-child(8) { width: 120px; } /* หมายเหตุ */
+    .report-section table th:nth-child(9), .report-section table td:nth-child(9) { width: 70px; } /* พนักงาน */
+    .report-section table th:nth-child(10), .report-section table td:nth-child(10) { width: 70px; } /* หลักฐาน */
+    .report-section table th:last-child, .report-section table td:last-child { width: 100px; } /* จัดการ (ปรับให้พอดี 2 ปุ่มแนวตั้ง) */
+
+    /* สำหรับตารางแม็ก เพิ่ม ET และ สี */
+    .report-section table:last-of-type th:nth-child(7), .report-section table:last-of-type td:nth-child(7) { width: 50px; } /* ขอบ */
+    .report-section table:last-of-type th:nth-child(8), .report-section table:last-of-type td:nth-child(8) { width: 60px; } /* รู */
+    .report-section table:last-of-type th:nth-child(9), .report-section table:last-of-type td:nth-child(9) { width: 50px; } /* ET */
+    .report-section table:last-of-type th:nth-child(10), .report-section table:last-of-type td:nth-child(10) { width: 60px; } /* สี */
+    .report-section table:last-of-type th:nth-child(11), .report-section table:last-of-type td:nth-child(11) { width: 120px; } /* หมายเหตุ */
+    .report-section table:last-of-type th:nth-child(12), .report-section table:last-of-type td:nth-child(12) { width: 70px; } /* พนักงาน */
+    .report-section table:last-of-type th:nth-child(13), .report-section table:last-of-type td:nth-child(13) { width: 70px; } /* หลักฐาน */
+    .report-section table:last-of-type th:last-child, .report-section table:last-of-type td:last-child { width: 100px; } /* จัดการ */
     }
-    h3 {
-        font-size: 1.3em;
+
+    /* Small devices (phones, 481px to 768px) */
+    @media (min-width: 481px) and (max-width: 768px) {
+        body { font-size: 15px; }
+        .container { margin: var(--spacing-lg) auto; padding: var(--spacing-xl); }
+        .navbar-links { justify-content: flex-end; } /* Align links to right */
+        .tabs { justify-content: flex-start; flex-wrap: nowrap; }
+        .tab-button { flex-basis: auto; font-size: 1em; padding: var(--spacing-md) var(--spacing-xl); }
+        .form-row { gap: var(--spacing-md); }
+        .form-group.half-width { flex-basis: calc(50% - (var(--spacing-md) / 2)); }
+        .form-group.quarter-width { flex-basis: calc(33.33% - (var(--spacing-md) * 2 / 3)); } /* Three columns */
+        th, td { padding: var(--spacing-sm) var(--spacing-md); font-size: 0.85em; }
+        td.action-buttons { flex-direction: row; } /* Keep buttons horizontal if possible */
+
+        /* ปรับความกว้างคอลัมน์ในตารางสำหรับหน้าจอขนาดกลาง */
+        .report-section table th:nth-child(1), .report-section table td:nth-child(1) { width: 70px; } /* เวลา */
+        .report-section table th:nth-child(2), .report-section table td:nth-child(2) { width: 60px; } /* ประเภท */
+        .report-section table th:nth-child(3), .report-section table td:nth-child(3) { width: 50px; } /* จำนวน */
+        .report-section table th:nth-child(4), .report-section table td:nth-child(4) { width: 60px; } /* คงเหลือ */
+        .report-section table th:nth-child(5), .report-section table td:nth-child(5) { width: 90px; } /* ยี่ห้อ */
+        .report-section table th:nth-child(6), .report-section table td:nth-child(6) { width: 100px; } /* รุ่น/ลาย */
+        .report-section table th:nth-child(7), .report-section table td:nth-child(7) { width: 100px; } /* เบอร์ยาง/ขอบ */
+        .report-section table th:nth-child(8), .report-section table td:nth-child(8) { width: 140px; } /* หมายเหตุ */
+        .report-section table th:nth-child(9), .report-section table td:nth-child(9) { width: 70px; } /* พนักงาน */
+        .report-section table th:nth-child(10), .report-section table td:nth-child(10) { width: 70px; } /* หลักฐาน */
+        .report-section table th:last-child, .report-section table td:last-child { width: 130px; } /* จัดการ */
+
+        /* สำหรับตารางแม็ก เพิ่ม ET และ สี */
+        .report-section table:last-of-type th:nth-child(7), .report-section table:last-of-type td:nth-child(7) { width: 60px; } /* ขอบ */
+        .report-section table:last-of-type th:nth-child(8), .report-section table:last-of-type td:nth-child(8) { width: 70px; } /* รู */
+        .report-section table:last-of-type th:nth-child(9), .report-section table:last-of-type td:nth-child(9) { width: 60px; } /* ET */
+        .report-section table:last-of-type th:nth-child(10), .report-section table:last-of-type td:nth-child(10) { width: 70px; } /* สี */
+        .report-section table:last-of-type th:nth-child(11), .report-section table:last-of-type td:nth-child(11) { width: 140px; } /* หมายเหตุ */
+        .report-section table:last-of-type th:nth-child(12), .report-section table:last-of-type td:nth-child(12) { width: 70px; } /* พนักงาน */
+        .report-section table:last-of-type th:nth-child(13), .report-section table:last-of-type td:nth-child(13) { width: 70px; } /* หลักฐาน */
+        .report-section table:last-of-type th:last-child, .report-section table:last-of-type td:last-child { width: 130px; } /* จัดการ */
     }
-    .flash-message {
-        padding: 10px 15px;
-        font-size: 0.9em;
+
+    /* Medium devices (tablets, 769px to 992px) */
+    @media (min-width: 769px) and (max-width: 992px) {
+        .container { padding: var(--spacing-xxl); }
+        .form-row { gap: var(--spacing-lg); }
+        .form-group.half-width { flex-basis: calc(50% - (var(--spacing-lg) / 2)); }
+        .form-group.quarter-width { flex-basis: calc(25% - (var(--spacing-lg) * 3 / 4)); }
+        /* ปรับความกว้างคอลัมน์ในตารางสำหรับหน้าจอขนาดใหญ่ขึ้น */
+        .report-section table th:nth-child(1), .report-section table td:nth-child(1) { width: 90px; } /* เวลา */
+        .report-section table th:nth-child(2), .report-section table td:nth-child(2) { width: 80px; } /* ประเภท */
+        .report-section table th:nth-child(3), .report-section table td:nth-child(3) { width: 70px; } /* จำนวน */
+        .report-section table th:nth-child(4), .report-section table td:nth-child(4) { width: 80px; } /* คงเหลือ */
+        .report-section table th:nth-child(5), .report-section table td:nth-child(5) { width: 110px; } /* ยี่ห้อ */
+        .report-section table th:nth-child(6), .report-section table td:nth-child(6) { width: 130px; } /* รุ่น/ลาย */
+        .report-section table th:nth-child(7), .report-section table td:nth-child(7) { width: 130px; } /* เบอร์ยาง/ขอบ */
+        .report-section table th:nth-child(8), .report-section table td:nth-child(8) { width: 180px; } /* หมายเหตุ */
+        .report-section table th:nth-child(9), .report-section table td:nth-child(9) { width: 90px; } /* พนักงาน */
+        .report-section table th:nth-child(10), .report-section table td:nth-child(10) { width: 90px; } /* หลักฐาน */
+        .report-section table th:last-child, .report-section table td:last-child { width: 160px; } /* จัดการ */
+
+        /* สำหรับตารางแม็ก เพิ่ม ET และ สี */
+        .report-section table:last-of-type th:nth-child(7), .report-section table:last-of-type td:nth-child(7) { width: 70px; } /* ขอบ */
+        .report-section table:last-of-type th:nth-child(8), .report-section table:last-of-type td:nth-child(8) { width: 80px; } /* รู */
+        .report-section table:last-of-type th:nth-child(9), .report-section table:last-of-type td:nth-child(9) { width: 70px; } /* ET */
+        .report-section table:last-of-type th:nth-child(10), .report-section table:last-of-type td:nth-child(10) { width: 80px; } /* สี */
+        .report-section table:last-of-type th:nth-child(11), .report-section table:last-of-type td:nth-child(11) { width: 180px; } /* หมายเหตุ */
+        .report-section table:last-of-type th:nth-child(12), .report-section table:last-of-type td:nth-child(12) { width: 90px; } /* พนักงาน */
+        .report-section table:last-of-type th:nth-child(13), .report-section table:last-of-type td:nth-child(13) { width: 90px; } /* หลักฐาน */
+        .report-section table:last-of-type th:last-child, .report-section table:last-of-type td:last-child { width: 160px; } /* จัดการ */
     }
-    .flash-message::before {
-        font-size: 1em;
+
+    /* Large devices (desktops, 993px and up) - Standard Desktop View */
+    @media (min-width: 993px) {
+        .report-section table th:nth-child(1), .report-section table td:nth-child(1) { width: 100px; } /* เวลา */
+        .report-section table th:nth-child(2), .report-section table td:nth-child(2) { width: 90px; } /* ประเภท */
+        .report-section table th:nth-child(3), .report-section table td:nth-child(3) { width: 80px; } /* จำนวน */
+        .report-section table th:nth-child(4), .report-section table td:nth-child(4) { width: 90px; } /* คงเหลือ */
+        .report-section table th:nth-child(5), .report-section table td:nth-child(5) { width: 120px; } /* ยี่ห้อ */
+        .report-section table th:nth-child(6), .report-section table td:nth-child(6) { width: 140px; } /* รุ่น/ลาย */
+        .report-section table th:nth-child(7), .report-section table td:nth-child(7) { width: 140px; } /* เบอร์ยาง/ขอบ */
+        .report-section table th:nth-child(8), .report-section table td:nth-child(8) { width: 200px; } /* หมายเหตุ */
+        .report-section table th:nth-child(9), .report-section table td:nth-child(9) { width: 100px; } /* พนักงาน */
+        .report-section table th:nth-child(10), .report-section table td:nth-child(10) { width: 100px; } /* หลักฐาน */
+        .report-section table th:last-child, .report-section table td:last-child { width: 160px; } /* จัดการ */
+
+        /* สำหรับตารางแม็ก เพิ่ม ET และ สี */
+        .report-section table:last-of-type th:nth-child(7), .report-section table:last-of-type td:nth-child(7) { width: 80px; } /* ขอบ */
+        .report-section table:last-of-type th:nth-child(8), .report-section table:last-of-type td:nth-child(8) { width: 90px; } /* รู */
+        .report-section table:last-of-type th:nth-child(9), .report-section table:last-of-type td:nth-child(9) { width: 80px; } /* ET */
+        .report-section table:last-of-type th:nth-child(10), .report-section table:last-of-type td:nth-child(10) { width: 90px; } /* สี */
+        .report-section table:last-of-type th:nth-child(11), .report-section table:last-of-type td:nth-child(11) { width: 200px; } /* หมายเหตุ */
+        .report-section table:last-of-type th:nth-child(12), .report-section table:last-of-type td:nth-child(12) { width: 100px; } /* พนักงาน */
+        .report-section table:last-of-type th:nth-child(13), .report-section table:last-of-type td:nth-child(13) { width: 100px; } /* หลักฐาน */
+        .report-section table:last-of-type th:last-child, .report-section table:last-of-type td:last-child { width: 160px; } /* จัดการ */
     }
-    .tab-button {
-        font-size: 0.9em;
-        padding: 10px;
-    }
-    .form-section {
-        padding: 15px;
-    }
-    input[type="text"], input[type="number"], select, textarea {
-        padding: 10px;
-    }
-    th, td {
-        padding: 8px 10px;
-    }
-}

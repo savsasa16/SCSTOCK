@@ -194,9 +194,6 @@
         </div>
     </div>
 
-    <hr style="border-top: 1px dashed var(--border-color); margin: var(--spacing-xl) 0;">
-    <h3>ค่าทดสอบการแสดงผลตัวเลข: {{ test_value }}</h3> {# Added for debugging integer rendering #}
-
     <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
     <script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/th.js"></script>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
@@ -210,5 +207,5 @@
             locale: "th"
         });
     </script>
-    {# Cache busting comment: v1.0.11 - {{ now() | date('Y-m-d H:i:s') }} #}
+    {# Cache busting comment: v1.0.9 - {{ now() | date('Y-m-d H:i:s') }} #}
 {% endblock %}
