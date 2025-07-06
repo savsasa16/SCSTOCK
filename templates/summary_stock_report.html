@@ -52,10 +52,10 @@
                                 <tr>
                                     <td>{{ item.model | title }}</td>
                                     <td>{{ item.size }}</td>
-                                    <td>{{ item.initial_quantity }}</td>
-                                    <td class="text-success">+{{ item.IN }}</td>
-                                    <td class="text-danger">-{{ item.OUT }}</td>
-                                    <td>{{ item.final_quantity }}</td>
+                                    <td>{{ item.initial_quantity | int }}</td> {# Added | int filter #}
+                                    <td class="text-success">+{{ item.IN | int }}</td> {# Added | int filter #}
+                                    <td class="text-danger">-{{ item.OUT | int }}</td> {# Added | int filter #}
+                                    <td>{{ item.final_quantity | int }}</td> {# Added | int filter #}
                                 </tr>
                             {% endfor %}
                         </tbody>
@@ -83,6 +83,8 @@
                                 <th>ขอบ</th>
                                 <th>PCD</th>
                                 <th>กว้าง</th>
+                                <th>ET</th> {# Added ET header #}
+                                <th>สี</th> {# Added Color header #}
                                 <th>ยอดเริ่มต้น</th>
                                 <th>รับเข้า</th>
                                 <th>จ่ายออก</th>
@@ -96,10 +98,12 @@
                                     <td>{{ item.diameter }}</td>
                                     <td>{{ item.pcd }}</td>
                                     <td>{{ item.width }}</td>
-                                    <td>{{ item.initial_quantity }}</td>
-                                    <td class="text-success">+{{ item.IN }}</td>
-                                    <td class="text-danger">-{{ item.OUT }}</td>
-                                    <td>{{ item.final_quantity }}</td>
+                                    <td>{{ item.et }}</td> {# Display ET #}
+                                    <td>{{ item.color }}</td> {# Display Color #}
+                                    <td>{{ item.initial_quantity | int }}</td> {# Added | int filter #}
+                                    <td class="text-success">+{{ item.IN | int }}</td> {# Added | int filter #}
+                                    <td class="text-danger">-{{ item.OUT | int }}</td> {# Added | int filter #}
+                                    <td>{{ item.final_quantity | int }}</td> {# Added | int filter #}
                                 </tr>
                             {% endfor %}
                         </tbody>
@@ -117,37 +121,37 @@
         <div class="form-row">
             <div class="form-group quarter-width">
                 ยางรวม<br>
-                ยอดเริ่มต้น: <strong>{{ overall_tire_initial }}</strong>
+                ยอดเริ่มต้น: <strong>{{ overall_tire_initial | int }}</strong>
             </div>
             <div class="form-group quarter-width">
                 ยางรวม<br>
-                รับเข้า: <strong class="text-success">{{ overall_tire_in }}</strong>
+                รับเข้า: <strong class="text-success">{{ overall_tire_in | int }}</strong>
             </div>
             <div class="form-group quarter-width">
                 ยางรวม<br>
-                จ่ายออก: <strong class="text-danger">{{ overall_tire_out }}</strong>
+                จ่ายออก: <strong class="text-danger">{{ overall_tire_out | int }}</strong>
             </div>
             <div class="form-group quarter-width">
                 ยางรวม<br>
-                ยอดคงเหลือ: <strong>{{ overall_tire_final }}</strong>
+                ยอดคงเหลือ: <strong>{{ overall_tire_final | int }}</strong>
             </div>
         </div>
         <div class="form-row">
             <div class="form-group quarter-width">
                 แม็กรวม<br>
-                ยอดเริ่มต้น: <strong>{{ overall_wheel_initial }}</strong>
+                ยอดเริ่มต้น: <strong>{{ overall_wheel_initial | int }}</strong>
             </div>
             <div class="form-group quarter-width">
                 แม็กรวม<br>
-                รับเข้า: <strong class="text-success">{{ overall_wheel_in }}</strong>
+                รับเข้า: <strong class="text-success">{{ overall_wheel_in | int }}</strong>
             </div>
             <div class="form-group quarter-width">
                 แม็กรวม<br>
-                จ่ายออก: <strong class="text-danger">{{ overall_wheel_out }}</strong>
+                จ่ายออก: <strong class="text-danger">{{ overall_wheel_out | int }}</strong>
             </div>
             <div class="form-group quarter-width">
                 แม็กรวม<br>
-                ยอดคงเหลือ: <strong>{{ overall_wheel_final }}</strong>
+                ยอดคงเหลือ: <strong>{{ overall_wheel_final | int }}</strong>
             </div>
         </div>
 
@@ -159,9 +163,9 @@
                 {% for brand, summary in tire_brand_totals_for_summary_report.items() %} {# Changed to .items() to ensure iteration works #}
                     <div class="form-group quarter-width brand-summary-card">
                         {{ brand | title }}<br>
-                        รับเข้า: <strong class="text-success">{{ summary.IN }}</strong><br>
-                        จ่ายออก: <strong class="text-danger">{{ summary.OUT }}</strong><br>
-                        คงเหลือ: <strong>{{ summary.final_quantity_sum }}</strong>
+                        รับเข้า: <strong class="text-success">{{ summary.IN | int }}</strong><br>
+                        จ่ายออก: <strong class="text-danger">{{ summary.OUT | int }}</strong><br>
+                        คงเหลือ: <strong>{{ summary.final_quantity_sum | int }}</strong>
                     </div>
                 {% endfor %}
             {% else %}
@@ -177,9 +181,9 @@
                 {% for brand, summary in wheel_brand_totals_for_summary_report.items() %} {# Changed to .items() to ensure iteration works #}
                     <div class="form-group quarter-width brand-summary-card">
                         {{ brand | title }}<br>
-                        รับเข้า: <strong class="text-success">{{ summary.IN }}</strong><br>
-                        จ่ายออก: <strong class="text-danger">{{ summary.OUT }}</strong><br>
-                        คงเหลือ: <strong>{{ summary.final_quantity_sum }}</strong>
+                        รับเข้า: <strong class="text-success">{{ summary.IN | int }}</strong><br>
+                        จ่ายออก: <strong class="text-danger">{{ summary.OUT | int }}</strong><br>
+                        คงเหลือ: <strong>{{ summary.final_quantity_sum | int }}</strong>
                     </div>
                 {% endfor %}
             {% else %}
