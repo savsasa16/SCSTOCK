@@ -1428,6 +1428,8 @@ def daily_stock_report():
     sql_date_filter_end_of_day = report_datetime_obj.replace(hour=23, minute=59, second=59, microsecond=999999).isoformat()
 
     is_psycopg2_conn = "psycopg2" in str(type(conn)) 
+    # เพิ่มการประกาศตัวแปร timestamp_cast ในฟังก์ชัน daily_stock_report
+    timestamp_cast = "::timestamptz" if is_psycopg2_conn else ""
 
     # --- Tire Report Data ---
     tire_movements_query_today = f"""
@@ -1468,7 +1470,7 @@ def daily_stock_report():
     distinct_tire_ids_query_all_history = f"""
         SELECT DISTINCT tire_id
         FROM tire_movements
-        WHERE timestamp <= %s
+        WHERE timestamp <= %s{timestamp_cast}
     """
     if is_psycopg2_conn:
         cursor = conn.cursor() # New cursor for this query
@@ -1487,7 +1489,7 @@ def daily_stock_report():
         history_query_up_to_day_before = f"""
             SELECT type, quantity_change
             FROM tire_movements
-            WHERE tire_id = %s AND timestamp <= %s
+            WHERE tire_id = %s AND timestamp <= %s{timestamp_cast}
             ORDER BY timestamp ASC
         """
         if is_psycopg2_conn:
@@ -1621,7 +1623,7 @@ def daily_stock_report():
     distinct_wheel_ids_query_all_history = f"""
         SELECT DISTINCT wheel_id
         FROM wheel_movements
-        WHERE timestamp <= %s
+        WHERE timestamp <= %s{timestamp_cast}
     """
     if is_psycopg2_conn:
         cursor_wheel = conn.cursor() # New cursor
@@ -1640,7 +1642,7 @@ def daily_stock_report():
         history_query_up_to_day_before = f"""
             SELECT type, quantity_change
             FROM wheel_movements
-            WHERE wheel_id = %s AND timestamp <= %s
+            WHERE wheel_id = %s AND timestamp <= %s{timestamp_cast}
             ORDER BY timestamp ASC
         """
         if is_psycopg2_conn:
@@ -1748,7 +1750,7 @@ def daily_stock_report():
     query_total_before_tires = f"""
         SELECT COALESCE(SUM(CASE WHEN type = 'IN' THEN quantity_change ELSE -quantity_change END), 0)
         FROM tire_movements
-        WHERE timestamp < %s
+        WHERE timestamp < %s{timestamp_cast}
     """
     if is_psycopg2_conn:
         cursor = conn.cursor() # New cursor
@@ -1769,7 +1771,7 @@ def daily_stock_report():
     query_total_before_wheels = f"""
         SELECT COALESCE(SUM(CASE WHEN type = 'IN' THEN quantity_change ELSE -quantity_change END), 0)
         FROM wheel_movements
-        WHERE timestamp < %s;
+        WHERE timestamp < %s{timestamp_cast};
     """
     if is_psycopg2_conn:
         cursor = conn.cursor() # New cursor
