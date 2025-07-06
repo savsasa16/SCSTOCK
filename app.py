@@ -2028,6 +2028,7 @@ def summary_stock_report():
             HAVING
                 COALESCE(period_movements.in_qty_in_period, 0) != 0 OR
                 COALESCE(period_movements.out_qty_in_period, 0) != 0
+            GROUP BY t.id, t.brand, t.model, t.size, initial_stock.initial_qty, period_movements.in_qty_in_period, period_movements.out_qty_in_period -- Added missing GROUP BY columns
             ORDER BY t.brand, t.model, t.size;
         """
         
@@ -2109,6 +2110,7 @@ def summary_stock_report():
             HAVING
                 COALESCE(period_movements.in_qty_in_period, 0) != 0 OR
                 COALESCE(period_movements.out_qty_in_period, 0) != 0
+            GROUP BY w.id, w.brand, w.model, w.diameter, w.pcd, w.width, w.et, w.color, initial_stock.initial_qty, period_movements.in_qty_in_period, period_movements.out_qty_in_period -- Added missing GROUP BY columns
             ORDER BY w.brand, w.model, w.diameter;
         """
         wheel_params = (
