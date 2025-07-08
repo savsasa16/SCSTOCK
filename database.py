@@ -194,7 +194,7 @@ def init_db(conn):
                 image_filename VARCHAR(500) NULL,
                 user_id INTEGER NULL,
                 FOREIGN KEY (tire_id) REFERENCES tires(id), -- ไม่มี ON DELETE CASCADE
-                FOREIGN KEY (user_id) REFERENCES users(id)
+                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL -- ADDED ON DELETE SET NULL
             );
         """)
     else: # SQLite
@@ -210,7 +210,7 @@ def init_db(conn):
                 image_filename TEXT NULL,
                 user_id INTEGER NULL,
                 FOREIGN KEY (tire_id) REFERENCES tires(id), -- ไม่มี ON DELETE CASCADE
-                FOREIGN KEY (user_id) REFERENCES users(id)
+                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL -- ADDED ON DELETE SET NULL
             );
         """)
 
@@ -228,7 +228,7 @@ def init_db(conn):
                 image_filename VARCHAR(500) NULL,
                 user_id INTEGER NULL,
                 FOREIGN KEY (wheel_id) REFERENCES wheels(id), -- ไม่มี ON DELETE CASCADE
-                FOREIGN KEY (user_id) REFERENCES users(id)
+                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL -- ADDED ON DELETE SET NULL
             );
         """)
     else: # SQLite
@@ -244,7 +244,7 @@ def init_db(conn):
                 image_filename TEXT NULL,
                 user_id INTEGER NULL,
                 FOREIGN KEY (wheel_id) REFERENCES wheels(id), -- ไม่มี ON DELETE CASCADE
-                FOREIGN KEY (user_id) REFERENCES users(id)
+                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL -- ADDED ON DELETE SET NULL
             );
         """)
 
@@ -450,13 +450,43 @@ def update_user_role(conn, user_id, new_role):
         return False
 
 def delete_user(conn, user_id):
-    cursor = conn.cursor()
-    if "psycopg2" in str(type(conn)):
-        cursor.execute("DELETE FROM users WHERE id = %s", (user_id,))
-    else:
-        cursor.execute("DELETE FROM users WHERE id = ?", (user_id,))
-    conn.commit()
+    """
+    ลบผู้ใช้จากตาราง 'users' และตั้งค่า 'user_id' ในตาราง 'tire_movements'
+    และ 'wheel_movements' ที่เกี่ยวข้องให้เป็น NULL เพื่อไม่ให้ประวัติการเคลื่อนไหวถูกลบ
+    """
+    try:
+        cursor = conn.cursor()
+        is_postgres = "psycopg2" in str(type(conn))
 
+        # 1. อัปเดตเรคคอร์ดในตาราง 'tire_movements' ที่อ้างอิงถึง user_id ที่กำลังจะถูกลบ
+        #    ให้ตั้งค่า user_id เป็น NULL เพื่อปลดการผูกกับผู้ใช้นี้
+        if is_postgres:
+            cursor.execute("UPDATE tire_movements SET user_id = NULL WHERE user_id = %s", (user_id,))
+        else: # SQLite
+            cursor.execute("UPDATE tire_movements SET user_id = NULL WHERE user_id = ?", (user_id,))
+        print(f"Updated tire_movements for user ID {user_id}: SET user_id to NULL.")
+
+        # 2. อัปเดตเรคคอร์ดในตาราง 'wheel_movements' ที่อ้างอิงถึง user_id ที่กำลังจะถูกลบ
+        #    ให้ตั้งค่า user_id เป็น NULL เพื่อปลดการผูกกับผู้ใช้นี้
+        if is_postgres:
+            cursor.execute("UPDATE wheel_movements SET user_id = NULL WHERE user_id = %s", (user_id,))
+        else: # SQLite
+            cursor.execute("UPDATE wheel_movements SET user_id = NULL WHERE user_id = ?", (user_id,))
+        print(f"Updated wheel_movements for user ID {user_id}: SET user_id to NULL.")
+
+        # 3. จากนั้นจึงทำการลบผู้ใช้จากตาราง 'users'
+        if is_postgres:
+            cursor.execute("DELETE FROM users WHERE id = %s", (user_id,))
+        else: # SQLite
+            cursor.execute("DELETE FROM users WHERE id = ?", (user_id,))
+        
+        conn.commit() # ยืนยันการเปลี่ยนแปลงทั้งหมด
+        print(f"User ID {user_id} successfully deleted.")
+        return True
+    except Exception as e:
+        conn.rollback() # ยกเลิกการเปลี่ยนแปลงหากเกิดข้อผิดพลาด
+        print(f"Error deleting user: {e}")
+        return False
 
 
 # --- Promotion Functions ---
