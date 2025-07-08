@@ -1,75 +1,41 @@
 {% extends 'base.html' %}
 
-{% block title %}Admin Dashboard{% endblock %}
+{% block title %}Admin Dashboard - ระบบจัดการสต็อก{% endblock %}
 
 {% block content %}
-<h2 class="text-primary">Admin Dashboard</h2>
-<p class="lead">ยินดีต้อนรับสู่แผงควบคุมสำหรับผู้ดูแลระบบ</p>
+    <h2 class="page-header">Admin Dashboard</h2>
 
-<div class="admin-tools-grid">
-    <div class="tool-card">
-        <h3><i class="fas fa-users"></i> จัดการผู้ใช้</h3>
-        <p>เพิ่ม แก้ไข หรือลบผู้ใช้ในระบบ รวมถึงการเปลี่ยนบทบาทของผู้ใช้</p>
-        <a href="{{ url_for('manage_users') }}" class="btn btn-primary">ไปที่หน้าจัดการผู้ใช้</a>
+    <div class="tool-grid">
+        <a href="{{ url_for('manage_users') }}" class="tool-card">
+            <i class="fas fa-users"></i>
+            <h3>จัดการผู้ใช้</h3>
+            <p>เพิ่ม, แก้ไข, ลบผู้ใช้และกำหนดสิทธิ์</p>
+        </a>
+
+        <a href="{{ url_for('promotions') }}" class="tool-card">
+            <i class="fas fa-tags"></i>
+            <h3>จัดการโปรโมชัน</h3>
+            <p>สร้างและจัดการโปรโมชันส่วนลด</p>
+        </a>
+
+        <a href="{{ url_for('manage_wholesale_customers') }}" class="tool-card">
+            <i class="fas fa-store"></i>
+            <h3>จัดการลูกค้าค้าส่ง</h3>
+            <p>เพิ่ม, แก้ไข, ลบข้อมูลร้านค้าส่ง</p>
+        </a>
+
+        <a href="{{ url_for('export_import') }}" class="tool-card">
+            <i class="fas fa-file-export"></i>
+            <h3>นำเข้า/ส่งออกข้อมูล</h3>
+            <p>สำรองและกู้คืนข้อมูลสต็อก</p>
+        </a>
+
+        <a href="{{ url_for('admin_deleted_items') }}" class="tool-card">
+            <i class="fas fa-trash-restore-alt"></i>
+            <h3>รายการที่ถูกลบ</h3>
+            <p>ดูและกู้คืนสินค้าที่ถูกลบ</p>
+        </a>
+
+        {# คุณสามารถเพิ่มการ์ดเครื่องมืออื่นๆ ที่เกี่ยวข้องกับ Admin ได้ที่นี่ #}
     </div>
-
-    <div class="tool-card">
-        <h3><i class="fas fa-trash-alt"></i> รายการสินค้าที่ถูกลบ</h3>
-        <p>ตรวจสอบและกู้คืนรายการยางหรือแม็กที่ถูกทำเครื่องหมายว่าถูกลบ</p>
-        <a href="{{ url_for('admin_deleted_items') }}" class="btn btn-primary">ไปที่หน้ารายการสินค้าที่ถูกลบ</a>
-    </div>
-
-    {# สามารถเพิ่ม Tool Card อื่นๆ สำหรับ Admin ในอนาคตได้ที่นี่ #}
-    {# ตัวอย่าง:
-    <div class="tool-card">
-        <h3><i class="fas fa-cogs"></i> ตั้งค่าระบบ</h3>
-        <p>ปรับแต่งการตั้งค่าและพฤติกรรมของระบบ</p>
-        <a href="#" class="btn btn-primary">ไปที่หน้าตั้งค่า</a>
-    </div>
-    #}
-</div>
-
-<style>
-    .admin-tools-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-        gap: 25px;
-        margin-top: 30px;
-    }
-    .tool-card {
-        background-color: var(--bg-white);
-        padding: 25px;
-        border-radius: var(--border-radius-md);
-        box-shadow: var(--shadow-light);
-        text-align: center;
-        display: flex;
-        flex-direction: column;
-        justify-content: space-between; /* Push button to bottom */
-        align-items: center;
-    }
-    .tool-card h3 {
-        color: var(--text-dark);
-        margin-top: 0;
-        margin-bottom: 15px;
-        font-weight: 600;
-    }
-    .tool-card h3 i {
-        margin-right: 10px;
-        color: var(--primary-color);
-        font-size: 1.5em;
-    }
-    .tool-card p {
-        color: var(--text-muted);
-        font-size: 0.95em;
-        line-height: 1.5;
-        margin-bottom: 20px;
-        flex-grow: 1; /* Allow paragraph to take up available space */
-    }
-    .tool-card .btn {
-        width: 80%; /* Make button wider */
-        padding: 10px 15px;
-        font-size: 1em;
-        margin-top: auto; /* Push button to the bottom if content is short */
-    }
-</style>
 {% endblock %}

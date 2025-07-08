@@ -18,26 +18,100 @@
             </div>
 
             <div class="form-group">
-                <label for="current_type">ประเภทเดิม:</label>
-                <input type="text" id="current_type" value="{{ 'รับเข้า' if movement.type == 'IN' else 'จ่ายออก' }}" readonly class="form-control-static">
-            </div>
-
-            <div class="form-group">
-                <label for="current_quantity_change">จำนวนเดิม:</label>
-                <input type="text" id="current_quantity_change" value="{{ movement.quantity_change }}" readonly class="form-control-static">
+                <label for="current_remaining_quantity">คงเหลือ (ก่อนการแก้ไขนี้):</label>
+                <input type="text" id="current_remaining_quantity" value="{{ movement.remaining_quantity }}" readonly class="form-control-static">
             </div>
 
             <div class="form-group">
                 <label for="type">ประเภทใหม่:</label>
-                <select id="type" name="type" class="form-control" required>
+                {# REMOVED select2-enable: This select should be a standard dropdown #}
+                <select id="type" name="type" class="form-control" required onchange="toggleMovementTypeDetails()">
                     <option value="IN" {% if movement.type == 'IN' %}selected{% endif %}>รับเข้า</option>
                     <option value="OUT" {% if movement.type == 'OUT' %}selected{% endif %}>จ่ายออก</option>
+                    <option value="RETURN" {% if movement.type == 'RETURN' %}selected{% endif %}>รับคืน/ตีคืน</option>
                 </select>
             </div>
 
             <div class="form-group">
                 <label for="quantity_change">จำนวนใหม่:</label>
                 <input type="number" id="quantity_change" name="quantity_change" class="form-control" value="{{ movement.quantity_change }}" min="1" required>
+            </div>
+
+            <div class="form-group" id="channel_section">
+                <label for="channel_id">ช่องทางการเคลื่อนไหว:</label>
+                {# REMOVED select2-enable: This select should be a standard dropdown #}
+                <select class="form-control" id="channel_id" name="channel_id" required onchange="toggleChannelDetails()">
+                    <option value="">-- เลือกช่องทาง --</option>
+                    {% for channel in sales_channels %}
+                        <option value="{{ channel.id }}" {% if movement.channel_id == channel.id %}selected{% endif %}>
+                            {{ channel.name }}
+                        </option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="form-group" id="online_platform_section" style="display: none;">
+                <label for="online_platform_id">แพลตฟอร์มออนไลน์:</label>
+                {# This one still needs Select2, but with minimumInputLength: 0 for no typing search #}
+                <select class="form-control select2-enable" id="online_platform_id" name="online_platform_id">
+                    <option value="">-- เลือกแพลตฟอร์ม --</option>
+                    {% for platform in online_platforms %}
+                        <option value="{{ platform.id }}" {% if movement.online_platform_id == platform.id %}selected{% endif %}>
+                            {{ platform.name }}
+                        </option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            {# Modified: Use select for wholesale_customer #}
+            <div class="form-group" id="wholesale_customer_section" style="display: none;">
+                <label for="wholesale_customer_id">ชื่อลูกค้าค้าส่ง:</label>
+                {# This one needs Select2 with typing search #}
+                <select class="form-control select2-enable" id="wholesale_customer_id" name="wholesale_customer_id">
+                    <option value="">-- เลือกชื่อลูกค้าค้าส่ง --</option>
+                    {% for customer in wholesale_customers %}
+                        <option value="{{ customer.id }}" {% if movement.wholesale_customer_id == customer.id %}selected{% endif %}>
+                            {{ customer.name }}
+                        </option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="form-group" id="return_customer_type_section" style="display: none;">
+                <label for="return_customer_type">คืนจาก:</label>
+                {# This one still needs Select2, but with minimumInputLength: 0 for no typing search #}
+                <select class="form-control select2-enable" id="return_customer_type" name="return_customer_type" onchange="toggleReturnDetails()">
+                    <option value="">-- เลือกประเภทการคืน --</option>
+                    <option value="หน้าร้านลูกค้า" {% if movement.return_customer_type == 'หน้าร้านลูกค้า' %}selected{% endif %}>หน้าร้าน (ลูกค้าทั่วไป)</option>
+                    <option value="หน้าร้านร้านยาง" {% if movement.return_customer_type == 'หน้าร้านร้านยาง' %}selected{% endif %}>หน้าร้าน (ร้านยาง)</option>
+                    <option value="ออนไลน์" {% if movement.return_customer_type == 'ออนไลน์' %}selected{% endif %}>ออนไลน์</option>
+                </select>
+            </div>
+            {# NEW: Section for returning from wholesale customer (ร้านยาง) #}
+            <div class="form-group" id="return_wholesale_customer_section" style="display: none;">
+                <label for="return_wholesale_customer_id">ชื่อร้านยางที่คืน:</label>
+                {# This one needs Select2 with typing search #}
+                <select class="form-control select2-enable" id="return_wholesale_customer_id" name="return_wholesale_customer_id">
+                    <option value="">-- เลือกชื่อร้านยาง --</option>
+                    {% for customer in wholesale_customers %}
+                        <option value="{{ customer.id }}" {% if movement.wholesale_customer_id == customer.id and movement.return_customer_type == 'หน้าร้านร้านยาง' %}selected{% endif %}>
+                            {{ customer.name }}
+                        </option>
+                    {% endfor %}
+                </select>
+            </div>
+            {# END NEW: Section for returning from wholesale customer #}
+            <div class="form-group" id="return_online_platform_section" style="display: none;">
+                <label for="return_online_platform_id">แพลตฟอร์มออนไลน์ที่คืน:</label>
+                {# This one still needs Select2, but with minimumInputLength: 0 for no typing search #}
+                <select class="form-control select2-enable" id="return_online_platform_id" name="return_online_platform_id">
+                    <option value="">-- เลือกแพลตฟอร์ม --</option>
+                    {% for platform in online_platforms %}
+                        <option value="{{ platform.id }}" {% if movement.online_platform_id == platform.id and movement.return_customer_type == 'ออนไลน์' %}selected{% endif %}>
+                            {{ platform.name }}
+                        </option>
+                    {% endfor %}
+                </select>
             </div>
 
             <div class="form-group">
@@ -66,4 +140,219 @@
             <a href="{{ url_for('daily_stock_report') }}" class="btn btn-secondary">ยกเลิก</a>
         </form>
     </div>
+
+<script>
+    // Helper function to initialize a Select2 dropdown
+    function initSelect2(selector, placeholderText, allowClear = true, minimumInputLength = 0) { 
+        // Only initialize if element exists and is not already Select2'd
+        const element = $(selector);
+        if (element.length && !element.data('select2')) {
+            element.select2({
+                placeholder: placeholderText,
+                allowClear: allowClear,
+                minimumInputLength: minimumInputLength 
+            });
+        }
+    }
+
+    // Helper function to destroy a Select2 dropdown
+    function destroySelect2(selector) {
+        const element = $(selector);
+        if (element.data('select2')) {
+            element.select2('destroy');
+        }
+    }
+
+    document.addEventListener('DOMContentLoaded', function() {
+        // Initialize Select2 dropdowns on page load based on their specific needs
+        // Fields that need typing search (minimumInputLength: 1)
+        initSelect2('#wholesale_customer_id', '-- เลือกชื่อลูกค้าค้าส่ง --', true, 1);
+        initSelect2('#return_wholesale_customer_id', '-- เลือกชื่อร้านยางที่คืน --', true, 1); // NEW
+
+        // Fields that need Select2 but do NOT need typing search (all options visible by default)
+        // Note: #type and #channel_id are now plain dropdowns (no select2-enable class)
+        initSelect2('#online_platform_id', '-- เลือกแพลตฟอร์ม --', true, 0); 
+        initSelect2('#return_customer_type', '-- เลือกประเภทการคืน --', true, 0); 
+        initSelect2('#return_online_platform_id', '-- เลือกแพลตฟอร์มที่คืน --', true, 0); 
+        
+
+        // Call initial state setting functions based on current values
+        toggleMovementTypeDetails(); // This will also call toggleChannelDetails()
+    });
+
+    // Function to toggle visibility of channel-specific fields based on selected movement type
+    function toggleMovementTypeDetails() {
+        const typeSelect = document.getElementById('type');
+        const selectedType = typeSelect.value;
+        const channelSection = document.getElementById('channel_section');
+        const channelSelect = document.getElementById('channel_id');
+
+        // Get channel IDs from Flask (ensure these are passed from app.py to template)
+        const salesChannels = JSON.parse('{{ sales_channels | tojson | safe }}');
+        const buyInChannel = salesChannels.find(c => c.name === 'ซื้อเข้า')?.id;
+        const returnChannel = salesChannels.find(c => c.name === 'รับคืน')?.id;
+        const onlineChannel = salesChannels.find(c => c.name === 'ออนไลน์')?.id;
+        const retailChannel = salesChannels.find(c => c.name === 'หน้าร้าน')?.id;
+        const wholesaleChannel = salesChannels.find(c => c.name === 'ค้าส่ง')?.id;
+        
+        // Hide channel section if type is not set or invalid
+        if (!selectedType) {
+            channelSection.style.display = 'none';
+        } else {
+            channelSection.style.display = 'block';
+        }
+
+        // NEW: รีเซ็ตค่าช่องทางการเคลื่อนไหวเมื่อเปลี่ยนประเภท หรือถ้าค่าไม่ถูกต้อง
+        let currentChannelId = parseInt(channelSelect.value);
+        let shouldResetChannel = false;
+
+        if (selectedType === 'IN') {
+            if (currentChannelId !== buyInChannel) { // ถ้าไม่ใช่ซื้อเข้า
+                shouldResetChannel = true;
+            }
+        } else if (selectedType === 'OUT') {
+            if (![onlineChannel, wholesaleChannel, retailChannel].includes(currentChannelId)) { // ถ้าไม่ใช่ ออนไลน์/ค้าส่ง/หน้าร้าน
+                shouldResetChannel = true;
+            }
+        } else if (selectedType === 'RETURN') {
+            if (currentChannelId !== returnChannel) { // ถ้าไม่ใช่รับคืน
+                shouldResetChannel = true;
+            }
+        } else { // ไม่มีประเภทที่เลือก หรือประเภทไม่ถูกต้อง
+            shouldResetChannel = true;
+        }
+
+        if (shouldResetChannel) {
+             channelSelect.value = ""; // รีเซ็ตเป็นค่าว่าง
+        }
+
+
+        // Filter channel options based on selected type
+        Array.from(channelSelect.options).forEach(option => {
+            const value = parseInt(option.value);
+            option.style.display = 'block'; // Show all initially
+            option.disabled = false; // Enable all initially
+
+            if (selectedType === 'IN') {
+                if (option.value === '' || value === buyInChannel) {
+                    // Keep 'ซื้อเข้า' and empty
+                } else {
+                    option.style.display = 'none';
+                }
+            } else if (selectedType === 'OUT') {
+                if (option.value === '' || value === onlineChannel || value === wholesaleChannel || value === retailChannel) {
+                    // Keep 'ออนไลน์', 'ค้าส่ง', 'หน้าร้าน', and empty
+                } else {
+                    option.style.display = 'none';
+                }
+            } else if (selectedType === 'RETURN') {
+                if (option.value === '' || value === returnChannel) {
+                    // Keep 'รับคืน' and empty
+                } else {
+                    option.style.display = 'none';
+                }
+            } else { // No type selected or invalid type
+                option.style.display = 'none'; // Hide all
+            }
+        });
+        
+        // Ensure that if a forced channel is set by type, it's selected. (สำหรับ IN/RETURN)
+        // ตรวจสอบ channelSelect.value !== String(ID) เพื่อป้องกันการ reset ค่าที่ถูกต้องที่ Flask pre-select มา
+        if (selectedType === 'IN' && channelSelect.value !== String(buyInChannel)) {
+             channelSelect.value = buyInChannel || "";
+        } else if (selectedType === 'RETURN' && channelSelect.value !== String(returnChannel)) {
+            channelSelect.value = returnChannel || "";
+        }
+
+        // Always re-evaluate channel details based on current state (pre-filled or user changed)
+        toggleChannelDetails();
+    }
+
+    // Function to toggle visibility of specific fields based on selected channel
+    function toggleChannelDetails() {
+        const channelSelect = document.getElementById('channel_id');
+        const onlineSection = document.getElementById('online_platform_section');
+        const wholesaleSection = document.getElementById('wholesale_customer_section');
+        const returnTypeSection = document.getElementById('return_customer_type_section');
+        const returnOnlinePlatformSection = document.getElementById('return_online_platform_section');
+        const returnWholesaleCustomerSection = document.getElementById('return_wholesale_customer_section'); // NEW
+        const movementTypeSelect = document.getElementById('type');
+        const selectedMovementType = movementTypeSelect.value;
+
+        // Reset visibility for all channel-specific sections
+        onlineSection.style.display = 'none';
+        wholesaleSection.style.display = 'none';
+        returnTypeSection.style.display = 'none';
+        returnOnlinePlatformSection.style.display = 'none';
+        returnWholesaleCustomerSection.style.display = 'none'; // NEW: Hide this section too
+
+        // Reset values of Select2 dropdowns (important to clear data if sections are hidden)
+        $('#online_platform_id').val('').trigger('change.select2');
+        $('#wholesale_customer_id').val('').trigger('change.select2'); 
+        $('#return_customer_type').val('').trigger('change.select2');
+        $('#return_online_platform_id').val('').trigger('change.select2');
+        $('#return_wholesale_customer_id').val('').trigger('change.select2'); // NEW
+
+        const selectedChannelOption = channelSelect.options[channelSelect.selectedIndex];
+        const selectedChannelName = selectedChannelOption ? selectedChannelOption.text.trim() : '';
+
+        // Logic based on the selected CHANNEL
+        if (selectedChannelName === 'ออนไลน์') {
+            onlineSection.style.display = 'block';
+            // Pre-select current movement data if available and matches (from movement.online_platform_id)
+            if ("{{ movement.channel_name | default('') }}" === 'ออนไลน์' && "{{ movement.online_platform_id | default('') }}" !== '') {
+                $('#online_platform_id').val("{{ movement.online_platform_id }}").trigger('change.select2');
+            }
+        } else if (selectedChannelName === 'ค้าส่ง') {
+            wholesaleSection.style.display = 'block';
+            // Pre-select current movement data if available and matches (from movement.wholesale_customer_id)
+            if ("{{ movement.channel_name | default('') }}" === 'ค้าส่ง' && "{{ movement.wholesale_customer_id | default('') }}" !== '') {
+                $('#wholesale_customer_id').val("{{ movement.wholesale_customer_id }}").trigger('change.select2');
+            }
+        } else if (selectedChannelName === 'รับคืน') {
+            // Only show return options if the movement type is 'RETURN'
+            if (selectedMovementType === 'RETURN') {
+                returnTypeSection.style.display = 'block';
+                // Pre-select current movement data for return_customer_type
+                if ("{{ movement.return_customer_type | default('') }}" !== '') {
+                    $('#return_customer_type').val("{{ movement.return_customer_type }}").trigger('change.select2');
+                }
+                toggleReturnDetails(); // Call nested function to handle return type details
+            }
+        }
+        // Trigger Select2 update for channel select itself (already done at the end of toggleMovementTypeDetails)
+        // $('#channel_id').trigger('change.select2'); 
+    }
+
+    // Function to toggle visibility of online platform for returns
+    function toggleReturnDetails() {
+        const returnTypeSelect = document.getElementById('return_customer_type');
+        const returnOnlinePlatformSection = document.getElementById('return_online_platform_section');
+        const returnWholesaleCustomerSection = document.getElementById('return_wholesale_customer_section'); // NEW
+        
+        returnOnlinePlatformSection.style.display = 'none'; // Hide by default
+        returnWholesaleCustomerSection.style.display = 'none'; // NEW: Hide by default
+
+        // Reset values for return-specific dropdowns
+        $('#return_online_platform_id').val('').trigger('change.select2');
+        $('#return_wholesale_customer_id').val('').trigger('change.select2'); // NEW
+
+        const selectedReturnType = returnTypeSelect.value;
+        if (selectedReturnType === 'ออนไลน์') {
+            returnOnlinePlatformSection.style.display = 'block';
+            // Pre-select current movement data if available and matches (from movement.online_platform_id)
+            if ("{{ movement.return_customer_type | default('') }}" === 'ออนไลน์' && "{{ movement.online_platform_id | default('') }}" !== '') {
+                $('#return_online_platform_id').val("{{ movement.online_platform_id }}").trigger('change.select2');
+            }
+        } else if (selectedReturnType === 'หน้าร้านร้านยาง') { // NEW: Handle 'หน้าร้านร้านยาง'
+            returnWholesaleCustomerSection.style.display = 'block';
+            // Pre-select current movement data if available and matches (from movement.wholesale_customer_id)
+            if ("{{ movement.return_customer_type | default('') }}" === 'หน้าร้านร้านยาง' && "{{ movement.wholesale_customer_id | default('') }}" !== '') {
+                $('#return_wholesale_customer_id').val("{{ movement.wholesale_customer_id }}").trigger('change.select2');
+            }
+        }
+        // Trigger Select2 update for return type select itself
+        // $('#return_customer_type').trigger('change.select2'); // This is already triggered by the main function call if needed.
+    }
+</script>
 {% endblock %}

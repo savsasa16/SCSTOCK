@@ -159,14 +159,18 @@
     .report-section table:first-of-type td:nth-child(6) { width: 120px; }
     .report-section table:first-of-type th:nth-child(7), /* เบอร์ยาง */
     .report-section table:first-of-type td:nth-child(7) { width: 120px; }
-    .report-section table:first-of-type th:nth-child(8), /* หมายเหตุ */
-    .report-section table:first-of-type td:nth-child(8) { width: 150px; }
-    .report-section table:first-of-type th:nth-child(9), /* พนักงาน */
-    .report-section table:first-of-type td:nth-child(9) { width: 80px; }
-    .report-section table:first-of-type th:nth-child(10), /* หลักฐาน */
+    .report-section table:first-of-type th:nth-child(8), /* ช่องทาง */
+    .report-section table:first-of-type td:nth-child(8) { width: 100px; }
+    .report-section table:first-of-type th:nth-child(9), /* รายละเอียดช่องทาง */
+    .report-section table:first-of-type td:nth-child(9) { width: 150px; }
+    .report-section table:first-of-type th:nth-child(10), /* พนักงาน */
     .report-section table:first-of-type td:nth-child(10) { width: 80px; }
-    .report-section table:first-of-type th:nth-child(11), /* จัดการ */
-    .report-section table:first-of-type td:nth-child(11) { width: 150px; } /* เพิ่มความกว้างให้พอดี 2 ปุ่ม */
+    .report-section table:first-of-type th:nth-child(11), /* หมายเหตุ */
+    .report-section table:first-of-type td:nth-child(11) { width: 150px; }
+    .report-section table:first-of-type th:nth-child(12), /* หลักฐาน */
+    .report-section table:first-of-type td:nth-child(12) { width: 80px; }
+    .report-section table:first-of-type th:nth-child(13), /* จัดการ */
+    .report-section table:first-of-type td:nth-child(13) { width: 150px; } /* เพิ่มความกว้างให้พอดี 2 ปุ่ม */
 
     /* กำหนดความกว้างของแต่ละคอลัมน์สำหรับตารางแม็ก */
     .report-section table:last-of-type th:nth-child(1), /* เวลา */
@@ -185,14 +189,18 @@
     .report-section table:last-of-type td:nth-child(7) { width: 60px; }
     .report-section table:last-of-type th:nth-child(8), /* รู */
     .report-section table:last-of-type td:nth-child(8) { width: 70px; }
-    .report-section table:last-of-type th:nth-child(9), /* หมายเหตุ */
-    .report-section table:last-of-type td:nth-child(9) { width: 150px; }
-    .report-section table:last-of-type th:nth-child(10), /* พนักงาน */
-    .report-section table:last-of-type td:nth-child(10) { width: 80px; }
-    .report-section table:last-of-type th:nth-child(11), /* หลักฐาน */
+    .report-section table:last-of-type th:nth-child(9), /* ช่องทาง */
+    .report-section table:last-of-type td:nth-child(9) { width: 100px; }
+    .report-section table:last-of-type th:nth-child(10), /* รายละเอียดช่องทาง */
+    .report-section table:last-of-type td:nth-child(10) { width: 150px; }
+    .report-section table:last-of-type th:nth-child(11), /* พนักงาน */
     .report-section table:last-of-type td:nth-child(11) { width: 80px; }
-    .report-section table:last-of-type th:nth-child(12), /* จัดการ */
-    .report-section table:last-of-type td:nth-child(12) { width: 150px; } /* เพิ่มความกว้างให้พอดี 2 ปุ่ม */
+    .report-section table:last-of-type th:nth-child(12), /* หมายเหตุ */
+    .report-section table:last-of-type td:nth-child(12) { width: 150px; }
+    .report-section table:last-of-type th:nth-child(13), /* หลักฐาน */
+    .report-section table:last-of-type td:nth-child(13) { width: 80px; }
+    .report-section table:last-of-type th:nth-child(14), /* จัดการ */
+    .report-section table:last-of-type td:nth-child(14) { width: 150px; } /* เพิ่มความกว้างให้พอดี 2 ปุ่ม */
 
 
     .report-section tbody tr:nth-child(even) {
@@ -336,20 +344,22 @@
         .report-section table th:nth-child(3), .report-section table td:nth-child(3) { width: 40px; } /* จำนวน */
         .report-section table th:nth-child(4), .report-section table td:nth-child(4) { width: 50px; } /* คงเหลือ */
         .report-section table th:nth-child(5), .report-section table td:nth-child(5) { width: 80px; } /* ยี่ห้อ */
-        .report-section table th:nth-child(6), .report-section table td:nth-child(6) { width: 90px; } /* รุ่น/ลาย */
-        .report-section table th:nth-child(7), .report-section table td:nth-child(7) { width: 90px; } /* เบอร์ยาง/ขอบ */
-        .report-section table th:nth-child(8), .report-section table td:nth-child(8) { width: 120px; } /* หมายเหตุ */
-        .report-section table th:nth-child(9), .report-section table td:nth-child(9) { width: 70px; } /* พนักงาน */
-        .report-section table th:nth-child(10), .report-section table td:nth-child(10) { width: 70px; } /* หลักฐาน */
+        .report-section table th:nth-child(6), .report-section table td:nth-child(6) { width: 90px; } /* รุ่น */
+        .report-section table th:nth-child(7), .report-section table td:nth-child(7) { width: 90px; } /* เบอร์ยาง */
+        .report-section table th:nth-child(8), .report-section table td:nth-child(8) { width: 80px; } /* ช่องทาง */
+        .report-section table th:nth-child(9), .report-section table td:nth-child(9) { width: 120px; } /* รายละเอียดช่องทาง */
+        .report-section table th:nth-child(10), .report-section table td:nth-child(10) { width: 70px; } /* พนักงาน */
+        .report-section table th:nth-child(11), .report-section table td:nth-child(11) { width: 120px; } /* หมายเหตุ */
+        .report-section table th:nth-child(12), .report-section table td:nth-child(12) { width: 70px; } /* หลักฐาน */
         .report-section table th:last-child, .report-section table td:last-child { width: 100px; } /* จัดการ (ปรับให้พอดี 2 ปุ่มแนวตั้ง) */
 
         /* สำหรับตารางแม็ก เพิ่ม ET และ สี */
         .report-section table:last-of-type th:nth-child(7), .report-section table:last-of-type td:nth-child(7) { width: 50px; } /* ขอบ */
         .report-section table:last-of-type th:nth-child(8), .report-section table:last-of-type td:nth-child(8) { width: 60px; } /* รู */
-        .report-section table:last-of-type th:nth-child(9), .report-section table:last-of-type td:nth-child(9) { width: 50px; } /* ET */
-        .report-section table:last-of-type th:nth-child(10), .report-section table:last-of-type td:nth-child(10) { width: 60px; } /* สี */
-        .report-section table:last-of-type th:nth-child(11), .report-section table:last-of-type td:nth-child(11) { width: 120px; } /* หมายเหตุ */
-        .report-section table:last-of-type th:nth-child(12), .report-section table:last-of-type td:nth-child(12) { width: 70px; } /* พนักงาน */
+        .report-section table:last-of-type th:nth-child(9), .report-section table:last-of-type td:nth-child(9) { width: 80px; } /* ช่องทาง */
+        .report-section table:last-of-type th:nth-child(10), .report-section table:last-of-type td:nth-child(10) { width: 120px; } /* รายละเอียดช่องทาง */
+        .report-section table:last-of-type th:nth-child(11), .report-section table:last-of-type td:nth-child(11) { width: 70px; } /* พนักงาน */
+        .report-section table:last-of-type th:nth-child(12), .report-section table:last-of-type td:nth-child(12) { width: 120px; } /* หมายเหตุ */
         .report-section table:last-of-type th:nth-child(13), .report-section table:last-of-type td:nth-child(13) { width: 70px; } /* หลักฐาน */
         .report-section table:last-of-type th:last-child, .report-section table:last-of-type td:last-child { width: 100px; } /* จัดการ */
     }
@@ -373,20 +383,22 @@
         .report-section table th:nth-child(3), .report-section table td:nth-child(3) { width: 50px; } /* จำนวน */
         .report-section table th:nth-child(4), .report-section table td:nth-child(4) { width: 60px; } /* คงเหลือ */
         .report-section table th:nth-child(5), .report-section table td:nth-child(5) { width: 90px; } /* ยี่ห้อ */
-        .report-section table th:nth-child(6), .report-section table td:nth-child(6) { width: 100px; } /* รุ่น/ลาย */
-        .report-section table th:nth-child(7), .report-section table td:nth-child(7) { width: 100px; } /* เบอร์ยาง/ขอบ */
-        .report-section table th:nth-child(8), .report-section table td:nth-child(8) { width: 140px; } /* หมายเหตุ */
-        .report-section table th:nth-child(9), .report-section table td:nth-child(9) { width: 70px; } /* พนักงาน */
-        .report-section table th:nth-child(10), .report-section table td:nth-child(10) { width: 70px; } /* หลักฐาน */
+        .report-section table th:nth-child(6), .report-section table td:nth-child(6) { width: 100px; } /* รุ่น */
+        .report-section table th:nth-child(7), .report-section table td:nth-child(7) { width: 100px; } /* เบอร์ยาง */
+        .report-section table th:nth-child(8), .report-section table td:nth-child(8) { width: 90px; } /* ช่องทาง */
+        .report-section table th:nth-child(9), .report-section table td:nth-child(9) { width: 140px; } /* รายละเอียดช่องทาง */
+        .report-section table th:nth-child(10), .report-section table td:nth-child(10) { width: 70px; } /* พนักงาน */
+        .report-section table th:nth-child(11), .report-section table td:nth-child(11) { width: 140px; } /* หมายเหตุ */
+        .report-section table th:nth-child(12), .report-section table td:nth-child(12) { width: 70px; } /* หลักฐาน */
         .report-section table th:last-child, .report-section table td:last-child { width: 130px; } /* จัดการ */
 
         /* สำหรับตารางแม็ก เพิ่ม ET และ สี */
         .report-section table:last-of-type th:nth-child(7), .report-section table:last-of-type td:nth-child(7) { width: 60px; } /* ขอบ */
         .report-section table:last-of-type th:nth-child(8), .report-section table:last-of-type td:nth-child(8) { width: 70px; } /* รู */
-        .report-section table:last-of-type th:nth-child(9), .report-section table:last-of-type td:nth-child(9) { width: 60px; } /* ET */
-        .report-section table:last-of-type th:nth-child(10), .report-section table:last-of-type td:nth-child(10) { width: 70px; } /* สี */
-        .report-section table:last-of-type th:nth-child(11), .report-section table:last-of-type td:nth-child(11) { width: 140px; } /* หมายเหตุ */
-        .report-section table:last-of-type th:nth-child(12), .report-section table:last-of-type td:nth-child(12) { width: 70px; } /* พนักงาน */
+        .report-section table:last-of-type th:nth-child(9), .report-section table:last-of-type td:nth-child(9) { width: 90px; } /* ช่องทาง */
+        .report-section table:last-of-type th:nth-child(10), .report-section table:last-of-type td:nth-child(10) { width: 140px; } /* รายละเอียดช่องทาง */
+        .report-section table:last-of-type th:nth-child(11), .report-section table:last-of-type td:nth-child(11) { width: 70px; } /* พนักงาน */
+        .report-section table:last-of-type th:nth-child(12), .report-section table:last-of-type td:nth-child(12) { width: 140px; } /* หมายเหตุ */
         .report-section table:last-of-type th:nth-child(13), .report-section table:last-of-type td:nth-child(13) { width: 70px; } /* หลักฐาน */
         .report-section table:last-of-type th:last-child, .report-section table:last-of-type td:last-child { width: 130px; } /* จัดการ */
     }
@@ -403,20 +415,22 @@
         .report-section table th:nth-child(3), .report-section table td:nth-child(3) { width: 70px; } /* จำนวน */
         .report-section table th:nth-child(4), .report-section table td:nth-child(4) { width: 80px; } /* คงเหลือ */
         .report-section table th:nth-child(5), .report-section table td:nth-child(5) { width: 110px; } /* ยี่ห้อ */
-        .report-section table th:nth-child(6), .report-section table td:nth-child(6) { width: 130px; } /* รุ่น/ลาย */
-        .report-section table th:nth-child(7), .report-section table td:nth-child(7) { width: 130px; } /* เบอร์ยาง/ขอบ */
-        .report-section table th:nth-child(8), .report-section table td:nth-child(8) { width: 180px; } /* หมายเหตุ */
-        .report-section table th:nth-child(9), .report-section table td:nth-child(9) { width: 90px; } /* พนักงาน */
-        .report-section table th:nth-child(10), .report-section table td:nth-child(10) { width: 90px; } /* หลักฐาน */
+        .report-section table th:nth-child(6), .report-section table td:nth-child(6) { width: 130px; } /* รุ่น */
+        .report-section table th:nth-child(7), .report-section table td:nth-child(7) { width: 130px; } /* เบอร์ยาง */
+        .report-section table th:nth-child(8), .report-section table td:nth-child(8) { width: 110px; } /* ช่องทาง */
+        .report-section table th:nth-child(9), .report-section table td:nth-child(9) { width: 180px; } /* รายละเอียดช่องทาง */
+        .report-section table th:nth-child(10), .report-section table td:nth-child(10) { width: 90px; } /* พนักงาน */
+        .report-section table th:nth-child(11), .report-section table td:nth-child(11) { width: 180px; } /* หมายเหตุ */
+        .report-section table th:nth-child(12), .report-section table td:nth-child(12) { width: 90px; } /* หลักฐาน */
         .report-section table th:last-child, .report-section table td:last-child { width: 160px; } /* จัดการ */
 
         /* สำหรับตารางแม็ก เพิ่ม ET และ สี */
         .report-section table:last-of-type th:nth-child(7), .report-section table:last-of-type td:nth-child(7) { width: 70px; } /* ขอบ */
         .report-section table:last-of-type th:nth-child(8), .report-section table:last-of-type td:nth-child(8) { width: 80px; } /* รู */
-        .report-section table:last-of-type th:nth-child(9), .report-section table:last-of-type td:nth-child(9) { width: 70px; } /* ET */
-        .report-section table:last-of-type th:nth-child(10), .report-section table:last-of-type td:nth-child(10) { width: 80px; } /* สี */
-        .report-section table:last-of-type th:nth-child(11), .report-section table:last-of-type td:nth-child(11) { width: 180px; } /* หมายเหตุ */
-        .report-section table:last-of-type th:nth-child(12), .report-section table:last-of-type td:nth-child(12) { width: 90px; } /* พนักงาน */
+        .report-section table:last-of-type th:nth-child(9), .report-section table:last-of-type td:nth-child(9) { width: 110px; } /* ช่องทาง */
+        .report-section table:last-of-type th:nth-child(10), .report-section table:last-of-type td:nth-child(10) { width: 180px; } /* รายละเอียดช่องทาง */
+        .report-section table:last-of-type th:nth-child(11), .report-section table:last-of-type td:nth-child(11) { width: 90px; } /* พนักงาน */
+        .report-section table:last-of-type th:nth-child(12), .report-section table:last-of-type td:nth-child(12) { width: 180px; } /* หมายเหตุ */
         .report-section table:last-of-type th:nth-child(13), .report-section table:last-of-type td:nth-child(13) { width: 90px; } /* หลักฐาน */
         .report-section table:last-of-type th:last-child, .report-section table:last-of-type td:last-child { width: 160px; } /* จัดการ */
     }
@@ -428,20 +442,22 @@
         .report-section table th:nth-child(3), .report-section table td:nth-child(3) { width: 80px; } /* จำนวน */
         .report-section table th:nth-child(4), .report-section table td:nth-child(4) { width: 90px; } /* คงเหลือ */
         .report-section table th:nth-child(5), .report-section table td:nth-child(5) { width: 120px; } /* ยี่ห้อ */
-        .report-section table th:nth-child(6), .report-section table td:nth-child(6) { width: 140px; } /* รุ่น/ลาย */
-        .report-section table th:nth-child(7), .report-section table td:nth-child(7) { width: 140px; } /* เบอร์ยาง/ขอบ */
-        .report-section table th:nth-child(8), .report-section table td:nth-child(8) { width: 200px; } /* หมายเหตุ */
-        .report-section table th:nth-child(9), .report-section table td:nth-child(9) { width: 100px; } /* พนักงาน */
-        .report-section table th:nth-child(10), .report-section table td:nth-child(10) { width: 100px; } /* หลักฐาน */
+        .report-section table th:nth-child(6), .report-section table td:nth-child(6) { width: 140px; } /* รุ่น */
+        .report-section table th:nth-child(7), .report-section table td:nth-child(7) { width: 140px; } /* เบอร์ยาง */
+        .report-section table th:nth-child(8), .report-section table td:nth-child(8) { width: 120px; } /* ช่องทาง */
+        .report-section table th:nth-child(9), .report-section table td:nth-child(9) { width: 200px; } /* รายละเอียดช่องทาง */
+        .report-section table th:nth-child(10), .report-section table td:nth-child(10) { width: 100px; } /* พนักงาน */
+        .report-section table th:nth-child(11), .report-section table td:nth-child(11) { width: 200px; } /* หมายเหตุ */
+        .report-section table th:nth-child(12), .report-section table td:nth-child(12) { width: 100px; } /* หลักฐาน */
         .report-section table th:last-child, .report-section table td:last-child { width: 160px; } /* จัดการ */
 
         /* สำหรับตารางแม็ก เพิ่ม ET และ สี */
         .report-section table:last-of-type th:nth-child(7), .report-section table:last-of-type td:nth-child(7) { width: 80px; } /* ขอบ */
         .report-section table:last-of-type th:nth-child(8), .report-section table:last-of-type td:nth-child(8) { width: 90px; } /* รู */
-        .report-section table:last-of-type th:nth-child(9), .report-section table:last-of-type td:nth-child(9) { width: 80px; } /* ET */
-        .report-section table:last-of-type th:nth-child(10), .report-section table:last-of-type td:nth-child(10) { width: 90px; } /* สี */
-        .report-section table:last-of-type th:nth-child(11), .report-section table:last-of-type td:nth-child(11) { width: 200px; } /* หมายเหตุ */
-        .report-section table:last-of-type th:nth-child(12), .report-section table:last-of-type td:nth-child(12) { width: 100px; } /* พนักงาน */
+        .report-section table:last-of-type th:nth-child(9), .report-section table:last-of-type td:nth-child(9) { width: 120px; } /* ช่องทาง */
+        .report-section table:last-of-type th:nth-child(10), .report-section table:last-of-type td:nth-child(10) { width: 200px; } /* รายละเอียดช่องทาง */
+        .report-section table:last-of-type th:nth-child(11), .report-section table:last-of-type td:nth-child(11) { width: 100px; } /* พนักงาน */
+        .report-section table:last-of-type th:nth-child(12), .report-section table:last-of-type td:nth-child(12) { width: 200px; } /* หมายเหตุ */
         .report-section table:last-of-type th:nth-child(13), .report-section table:last-of-type td:nth-child(13) { width: 100px; } /* หลักฐาน */
         .report-section table:last-of-type th:last-child, .report-section table:last-of-type td:last-child { width: 160px; } /* จัดการ */
     }
@@ -453,17 +469,17 @@
         <h4>สรุปยาง</h4>
         <p>รับเข้ารวม: <strong>{{ tire_total_in }}</strong> เส้น</p>
         <p>จ่ายออกรวม: <strong>{{ tire_total_out }}</strong> เส้น</p>
+        <p>รับคืนรวม: <strong>{{ tire_total_return }}</strong> เส้น</p>
         <p>คงเหลือในคลังทั้งหมด: <strong>{{ tire_total_remaining }}</strong> เส้น</p>
     </div>
     <div class="summary-card">
         <h4>สรุปแม็ก</h4>
         <p>รับเข้ารวม: <strong>{{ wheel_total_in }}</strong> วง</p>
         <p>จ่ายออกรวม: <strong>{{ wheel_total_out }}</strong> วง</p>
+        <p>รับคืนรวม: <strong>{{ wheel_total_return }}</strong> วง</p>
         <p>คงเหลือในคลังทั้งหมด: <strong>{{ wheel_total_remaining }}</strong> วง</p>
     </div>
 </div>
-
-{# ส่วน "รายงานสต็อกยาง" และ "รายงานสต็อกแม็ก" (ตารางสรุปตามรุ่น) ถูกลบออกแล้ว #}
 
 <div class="report-section">
     <h3>ประวัติการเคลื่อนไหวสต็อกยางโดยละเอียดสำหรับวันที่ {{ report_date_obj.strftime('%d-%m-%Y') }}</h3>
@@ -479,8 +495,10 @@
                         <th>ยี่ห้อ</th>
                         <th>รุ่น</th>
                         <th>เบอร์ยาง</th>
-                        <th>หมายเหตุ</th>
+                        <th>ช่องทาง</th>
+                        <th>รายละเอียดช่องทาง</th>
                         <th>พนักงาน</th>
+                        <th>หมายเหตุ</th>
                         <th>หลักฐาน</th>
                         {% if current_user.is_admin() %}
                         <th>จัดการ</th>
@@ -488,18 +506,40 @@
                     </tr>
                 </thead>
                 <tbody>
-                    {# ตัดตัวเรียง Jinja2 ออกแล้ว โดยจะใช้การเรียงลำดับจาก Backend แทน #}
                     {% for movement in tire_movements_raw %}
                         <tr>
                             <td>{{ movement.timestamp.strftime('%H:%M:%S') if movement.timestamp else '-' }}</td>
-                            <td>{{ 'รับเข้า' if movement.type == 'IN' else 'จ่ายออก' }}</td>
+                            <td>
+                                {% if movement.type == 'IN' %}
+                                    <span class="badge badge-success">รับเข้า</span>
+                                {% elif movement.type == 'OUT' %}
+                                    <span class="badge badge-danger">จ่ายออก</span>
+                                {% elif movement.type == 'RETURN' %}
+                                    <span class="badge badge-info">รับคืน</span>
+                                {% endif %}
+                            </td>
                             <td>{{ movement.quantity_change }}</td>
                             <td>{{ movement.remaining_quantity }}</td>
                             <td>{{ movement.brand }}</td>
                             <td>{{ movement.model }}</td>
                             <td>{{ movement.size }}</td>
-                            <td>{{ movement.notes if movement.notes else '-' }}</td>
+                            <td>{{ movement.channel_name | default('-') }}</td>
+                            <td>
+                                {% if movement.channel_name == 'ออนไลน์' %}
+                                    {{ movement.online_platform_name | default('-') }}
+                                {% elif movement.channel_name == 'ค้าส่ง' %}
+                                    {{ movement.wholesale_customer_name | default('-') }}
+                                {% elif movement.type == 'RETURN' and movement.return_customer_type %}
+                                    {{ movement.return_customer_type }}
+                                    {% if movement.return_customer_type == 'ออนไลน์' %}
+                                        ({{ movement.online_platform_name | default('-') }})
+                                    {% endif %}
+                                {% else %}
+                                    -
+                                {% endif %}
+                            </td>
                             <td>{{ movement.user_username if movement.user_username else '-' }}</td>
+                            <td>{{ movement.notes if movement.notes else '-' }}</td>
                             <td>
                                 {% if movement.image_filename %}
                                     <a href="{{ movement.image_filename }}" target="_blank">
@@ -544,8 +584,10 @@
                         <th>ลาย</th>
                         <th>ขอบ</th>
                         <th>รู</th>
-                        <th>หมายเหตุ</th>
+                        <th>ช่องทาง</th>
+                        <th>รายละเอียดช่องทาง</th>
                         <th>พนักงาน</th>
+                        <th>หมายเหตุ</th>
                         <th>หลักฐาน</th>
                         {% if current_user.is_admin() %}
                         <th>จัดการ</th>
@@ -553,19 +595,41 @@
                     </tr>
                 </thead>
                 <tbody>
-                    {# ตัดตัวเรียง Jinja2 ออกแล้ว โดยจะใช้การเรียงลำดับจาก Backend แทน #}
                     {% for movement in wheel_movements_raw %}
                         <tr>
                             <td>{{ movement.timestamp.strftime('%H:%M:%S') if movement.timestamp else '-' }}</td>
-                            <td>{{ 'รับเข้า' if movement.type == 'IN' else 'จ่ายออก' }}</td>
+                            <td>
+                                {% if movement.type == 'IN' %}
+                                    <span class="badge badge-success">รับเข้า</span>
+                                {% elif movement.type == 'OUT' %}
+                                    <span class="badge badge-danger">จ่ายออก</span>
+                                {% elif movement.type == 'RETURN' %}
+                                    <span class="badge badge-info">รับคืน</span>
+                                {% endif %}
+                            </td>
                             <td>{{ movement.quantity_change }}</td>
                             <td>{{ movement.remaining_quantity }}</td>
                             <td>{{ movement.brand }}</td>
                             <td>{{ movement.model }}</td>
                             <td>{{ "%.1f"|format(movement.diameter) }}</td>
                             <td>{{ movement.pcd if movement.pcd else '-' }}</td>
-                            <td>{{ movement.notes if movement.notes else '-' }}</td>
+                            <td>{{ movement.channel_name | default('-') }}</td>
+                            <td>
+                                {% if movement.channel_name == 'ออนไลน์' %}
+                                    {{ movement.online_platform_name | default('-') }}
+                                {% elif movement.channel_name == 'ค้าส่ง' %}
+                                    {{ movement.wholesale_customer_name | default('-') }}
+                                {% elif movement.type == 'RETURN' and movement.return_customer_type %}
+                                    {{ movement.return_customer_type }}
+                                    {% if movement.return_customer_type == 'ออนไลน์' %}
+                                        ({{ movement.online_platform_name | default('-') }})
+                                    {% endif %}
+                                {% else %}
+                                    -
+                                {% endif %}
+                            </td>
                             <td>{{ movement.user_username if movement.user_username else '-' }}</td>
+                            <td>{{ movement.notes if movement.notes else '-' }}</td>
                             <td>
                                 {% if movement.image_filename %}
                                     <a href="{{ movement.image_filename }}" target="_blank">
