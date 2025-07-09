@@ -275,7 +275,9 @@ def process_tire_report_data(all_tires, current_user_obj, include_summary_in_out
             # NEW: เพิ่มฟิลด์ cost_sc, cost_dunlop, cost_online เข้าไปใน dictionary ที่จะส่งให้ template
             'cost_sc': tire_dict.get('cost_sc'),
             'cost_dunlop': tire_dict.get('cost_dunlop'),
-            'cost_online': tire_dict.get('cost_online')
+            'cost_online': tire_dict.get('cost_online'),
+            'wholesale_price1': tire_dict.get('wholesale_price1'),
+            'wholesale_price2': tire_dict.get('wholesale_price2')
         })
         brand_quantities[brand] += tire_dict['quantity']
 
@@ -357,6 +359,7 @@ def index():
         if not current_user.can_view_wholesale_price(): # If no permission to view wholesale price
             filtered_tire['wholesale_price1'] = None
             filtered_tire['wholesale_price2'] = None
+            
         # NOTE: Logic for hiding retail price and promotions for 'wholesale_sales' and 'viewer' roles
         # will be handled in process_tire_report_data using current_user.can_view_retail_price()
         # and current_user.is_retail_sales() together.
