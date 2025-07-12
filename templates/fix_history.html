@@ -1,0 +1,32 @@
+{% extends 'base.html' %}
+
+{% block page_title %}ซ่อมแซมข้อมูลประวัติสต็อก{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-lg-8">
+        <div class="card shadow-sm">
+            <div class="card-header">
+                <h4 class="mb-0"><i class="fas fa-wrench me-2"></i>ซ่อมแซมข้อมูลประวัติสต็อก</h4>
+            </div>
+            <div class="card-body">
+                <div class="alert alert-warning" role="alert">
+                    <h5 class="alert-heading">คำเตือน!</h5>
+                    <p>การดำเนินการนี้จะทำการ **คำนวณค่า "คงเหลือ" (Remaining Quantity) ใหม่ทั้งหมด** ในตารางประวัติการเคลื่อนไหวของสินค้าทุกชิ้น (ทั้งยางและแม็ก)</p>
+                    <p>กระบวนการนี้อาจใช้เวลาสักครู่ และควรใช้เมื่อพบว่าข้อมูลการแสดงผลในตารางประวัติไม่ถูกต้องเท่านั้น</p>
+                    <hr>
+                    <p class="mb-0">โปรดสำรองข้อมูลก่อนดำเนินการหากไม่แน่ใจ</p>
+                </div>
+                
+                <form action="{{ url_for('fix_history') }}" method="POST" onsubmit="return confirm('คุณยืนยันที่จะเริ่มการซ่อมแซมข้อมูลประวัติทั้งหมดหรือไม่?');">
+                    <div class="d-grid">
+                        <button type="submit" class="btn btn-danger btn-lg">
+                            <i class="fas fa-cogs me-2"></i>เริ่มการซ่อมแซมข้อมูล
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

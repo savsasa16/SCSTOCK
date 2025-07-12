@@ -1,205 +1,203 @@
 {% extends 'base.html' %}
 
+{% block page_title %}แก้ไขข้อมูลแม็ก{% endblock %}
+
 {% block content %}
-<h2>แก้ไขข้อมูลแม็ก</h2>
-
-<div class="form-section">
-    <form action="{{ url_for('edit_wheel', wheel_id=wheel.id) }}" method="post" enctype="multipart/form-data">
-        <div class="form-group">
-            <label for="brand">ยี่ห้อ:</label>
-            <input type="text" id="brand" name="brand" value="{{ wheel.brand }}" required>
-        </div>
-        <div class="form-group">
-            <label for="model">ลาย:</label>
-            <input type="text" id="model" name="model" value="{{ wheel.model }}" required>
-        </div>
-        <div class="form-group">
-            <label for="diameter">ขอบ (นิ้ว):</label>
-            <input type="number" id="diameter" name="diameter" value="{{ '%.1f'|format(wheel.diameter) }}" step="0.1" required>
-        </div>
-        <div class="form-group">
-            <label for="pcd">รู:</label>
-            <input type="text" id="pcd" name="pcd" value="{{ wheel.pcd }}" required>
-        </div>
-        <div class="form-group">
-            <label for="width">กว้าง (นิ้ว):</label>
-            <input type="number" id="width" name="width" value="{{ '%.1f'|format(wheel.width) }}" step="0.1" required>
-        </div>
-        <div class="form-group">
-            <label for="et">ET:</label>
-            <input type="number" id="et" name="et" value="{{ wheel.et if wheel.et is not none else '' }}">
-        </div>
-        <div class="form-group">
-            <label for="color">สี:</label>
-            <input type="text" id="color" name="color" value="{{ wheel.color if wheel.color is not none else '' }}">
-        </div>
-
-        <div class="form-group">
-            <label for="retail_price">ราคาขายปลีก (บาท):</label>
-            <input type="number" id="retail_price" name="retail_price" value="{{ '%.2f'|format(wheel.retail_price) }}" step="0.01" required>
-        </div>
-
-        <h3>ต้นทุนและราคาขายส่ง (ไม่บังคับ)</h3>
-        <div class="form-group">
-            <label for="cost">ทุน (บาท/วง):</label>
-            <input type="number" id="cost" name="cost" value="{{ '%.2f'|format(wheel.cost) if wheel.cost is not none else '' }}" step="0.01">
-        </div>
-        <div class="form-group">
-            <label for="cost_online">ทุน Online (บาท/วง):</label>
-            <input type="number" id="cost_online" name="cost_online" value="{{ '%.2f'|format(wheel.cost_online) if wheel.cost_online is not none else '' }}" step="0.01">
-        </div>
-        <div class="form-group">
-            <label for="wholesale_price1">ราคาขายส่ง 1 (บาท/วง):</label>
-            <input type="number" id="wholesale_price1" name="wholesale_price1" value="{{ '%.2f'|format(wheel.wholesale_price1) if wheel.wholesale_price1 is not none else '' }}" step="0.01">
-        </div>
-        <div class="form-group">
-            <label for="wholesale_price2">ราคาขายส่ง 2 (บาท/วง):</label>
-            <input type="number" id="wholesale_price2" name="wholesale_price2" value="{{ '%.2f'|format(wheel.wholesale_price2) if wheel.wholesale_price2 is not none else '' }}" step="0.01">
-        </div>
-
-        <div class="form-group">
-            <label>รูปแม็กปัจจุบัน:</label>
-            {% if wheel.image_filename %}
-                <p>
-                    <a href="{{ wheel.image_filename }}" target="_blank">
-                        <img src="{{ wheel.image_filename }}" alt="Wheel Image" style="max-width: 150px; height: auto; border: 1px solid #ccc;">
-                    </a>
-                </p>
-                <div class="form-check">
-                    <input type="checkbox" id="delete_existing_image" name="delete_existing_image">
-                    <label for="delete_existing_image">ลบรูปแม็กปัจจุบัน</label>
-                </div>
-            {% else %}
-                <p>ไม่มีรูปแม็กปัจจุบัน</p>
-            {% endif %}
-        </div>
-
-        <div class="form-group">
-            <label for="image_file">อัปโหลดรูปแม็กใหม่ (จะแทนที่รูปเดิมหากมี):</label>
-            <input type="file" id="image_file" name="image_file" accept="image/*">
-        </div>
-
-        <button type="submit" class="btn btn-primary">บันทึกการแก้ไข</button>
-        <a href="{{ url_for('wheel_detail', wheel_id=wheel.id) }}" class="btn btn-secondary">ยกเลิก</a>
-		
-<div class="barcode-management-section">
-    <h3>จัดการ Barcode ID สำหรับแม็กวงนี้</h3>
-    <div id="barcodeStatus" class="flash-message" style="display:none;"></div>
-
-    <div class="form-group">
-        <label for="new_wheel_barcode">เพิ่ม Barcode ID ใหม่:</label>
-        <input type="text" id="new_wheel_barcode" placeholder="ยิงหรือพิมพ์ Barcode ID ใหม่">
-        <button id="add_wheel_barcode_btn" class="btn btn-primary btn-sm" style="margin-top: 10px;">เพิ่ม Barcode</button>
+<div class="card shadow-sm">
+    <div class="card-header">
+        <h4 class="mb-0">แก้ไขข้อมูลแม็ก: {{ wheel.brand }} {{ wheel.model }}</h4>
     </div>
+    <div class="card-body">
+        <form action="{{ url_for('edit_wheel', wheel_id=wheel.id) }}" method="post" enctype="multipart/form-data">
+            <h5 class="mb-3">ข้อมูลหลัก</h5>
+            <div class="row g-3">
+                <div class="col-md-6">
+                    <label for="brand" class="form-label">ยี่ห้อ*</label>
+                    <input type="text" id="brand" name="brand" class="form-control" value="{{ wheel.brand }}" required>
+                </div>
+                <div class="col-md-6">
+                    <label for="model" class="form-label">ลาย*</label>
+                    <input type="text" id="model" name="model" class="form-control" value="{{ wheel.model }}" required>
+                </div>
+                <div class="col-md-3">
+                    <label for="diameter" class="form-label">ขอบ (นิ้ว)*</label>
+                    <input type="number" id="diameter" name="diameter" class="form-control" value="{{ '%.1f'|format(wheel.diameter) }}" step="0.1" required>
+                </div>
+                <div class="col-md-3">
+                    <label for="width" class="form-label">กว้าง (นิ้ว)*</label>
+                    <input type="number" id="width" name="width" class="form-control" value="{{ '%.1f'|format(wheel.width) }}" step="0.1" required>
+                </div>
+                <div class="col-md-3">
+                    <label for="pcd" class="form-label">รู*</label>
+                    <input type="text" id="pcd" name="pcd" class="form-control" value="{{ wheel.pcd }}" required>
+                </div>
+                <div class="col-md-3">
+                    <label for="et" class="form-label">ET (ออฟเซ็ต)</label>
+                    <input type="number" id="et" name="et" class="form-control" value="{{ wheel.et if wheel.et is not none else '' }}">
+                </div>
+                <div class="col-md-6">
+                    <label for="color" class="form-label">สี</label>
+                    <input type="text" id="color" name="color" class="form-control" value="{{ wheel.color if wheel.color is not none else '' }}">
+                </div>
+                <div class="col-md-6">
+                    <label for="retail_price" class="form-label">ราคาขายปลีก (บาท)*</label>
+                    <input type="number" id="retail_price" name="retail_price" class="form-control" value="{{ '%.2f'|format(wheel.retail_price) }}" step="0.01" required>
+                </div>
+            </div>
 
-    <h4>Barcode ID ที่ผูกอยู่:</h4>
-    <ul id="wheel_barcodes_list" class="list-group">
-        {% if wheel_barcodes %}
-            {% for barcode_item in wheel_barcodes %}
-            <li class="list-group-item" data-barcode="{{ barcode_item.barcode_string }}">
-                {{ barcode_item.barcode_string }}
-                {% if barcode_item.is_primary_barcode %}
-                    <span class="badge badge-primary" style="margin-left: 5px;">หลัก</span>
-                {% endif %}
-                <button class="btn btn-danger btn-sm delete-barcode-btn" data-barcode="{{ barcode_item.barcode_string }}">ลบ</button>
-            </li>
-            {% endfor %}
-        {% else %}
-            <li class="list-group-item">ยังไม่มี Barcode ID ผูกอยู่</li>
-        {% endif %}
-    </ul>
-    </form>
-	</div>
-	
-<style>
-    /* เพิ่ม CSS ที่จำเป็นสำหรับส่วนนี้ (เหมือน edit_tire.html) */
-    .barcode-management-section {
-        background-color: var(--bg-white);
-        padding: 20px;
-        border-radius: var(--border-radius-md);
-        box-shadow: var(--shadow-light);
-        margin-top: 30px;
-    }
-    .barcode-management-section h3, .barcode-management-section h4 {
-        color: var(--primary-color);
-        margin-bottom: 15px;
-        border-bottom: 1px solid var(--border-color);
-        padding-bottom: 10px;
-        font-weight: 600;
-    }
-    .barcode-management-section .list-group {
-        list-style: none;
-        padding: 0;
-    }
-    .barcode-management-section .list-group-item {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        padding: 10px 15px;
-        border: 1px solid var(--border-color);
-        border-radius: var(--border-radius);
-        margin-bottom: 8px;
-        background-color: var(--bg-light);
-    }
-    .barcode-management-section .list-group-item:hover {
-        background-color: var(--bg-hover-light);
-    }
-    .barcode-management-section .list-group-item .btn-danger {
-        padding: 5px 10px;
-        font-size: 0.8em;
-        margin-left: 10px;
-    }
-    .barcode-management-section .badge {
-        background-color: var(--accent-color);
-        color: white;
-        padding: 3px 8px;
-        border-radius: 12px;
-        font-size: 0.75em;
-    }
-</style>
+            <hr class="my-4">
+            <h5 class="mb-3">ต้นทุนและราคาขายส่ง (ไม่บังคับ)</h5>
+            <div class="row g-3">
+                <div class="col-md-3">
+                    <label for="cost" class="form-label">ทุน</label>
+                    <input type="number" id="cost" name="cost" class="form-control" value="{{ '%.2f'|format(wheel.cost) if wheel.cost is not none else '' }}" step="0.01">
+                </div>
+                <div class="col-md-3">
+                    <label for="cost_online" class="form-label">ทุน Online</label>
+                    <input type="number" id="cost_online" name="cost_online" class="form-control" value="{{ '%.2f'|format(wheel.cost_online) if wheel.cost_online is not none else '' }}" step="0.01">
+                </div>
+                <div class="col-md-3">
+                    <label for="wholesale_price1" class="form-label">ราคาขายส่ง 1</label>
+                    <input type="number" id="wholesale_price1" name="wholesale_price1" class="form-control" value="{{ '%.2f'|format(wheel.wholesale_price1) if wheel.wholesale_price1 is not none else '' }}" step="0.01">
+                </div>
+                <div class="col-md-3">
+                    <label for="wholesale_price2" class="form-label">ราคาขายส่ง 2</label>
+                    <input type="number" id="wholesale_price2" name="wholesale_price2" class="form-control" value="{{ '%.2f'|format(wheel.wholesale_price2) if wheel.wholesale_price2 is not none else '' }}" step="0.01">
+                </div>
+            </div>
 
+            <hr class="my-4">
+            <h5 class="mb-3">รูปภาพ</h5>
+            <div class="row">
+                <div class="col-md-6">
+                    <label for="image_file" class="form-label">อัปโหลดรูปแม็กใหม่ (จะแทนที่รูปเดิม)</label>
+                    <input type="file" id="image_file" name="image_file" class="form-control" accept="image/*">
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label">รูปแม็กปัจจุบัน:</label>
+                    {% if wheel.image_filename %}
+                        <div>
+                            <a href="{{ wheel.image_filename }}" target="_blank">
+                                <img src="{{ wheel.image_filename }}" alt="Wheel Image" class="img-thumbnail" style="max-width: 150px;">
+                            </a>
+                            <div class="form-check mt-2">
+                                <input type="checkbox" class="form-check-input" id="delete_existing_image" name="delete_existing_image">
+                                <label class="form-check-label" for="delete_existing_image">ลบรูปแม็กปัจจุบัน</label>
+                            </div>
+                        </div>
+                    {% else %}
+                        <p class="text-muted">ไม่มีรูปแม็กปัจจุบัน</p>
+                    {% endif %}
+                </div>
+            </div>
+            
+            <div class="mt-4">
+                <button type="submit" class="btn btn-primary"><i class="fas fa-save me-2"></i>บันทึกการแก้ไข</button>
+                <a href="{{ url_for('index', tab='wheels') }}" class="btn btn-secondary"><i class="fas fa-times me-2"></i>ยกเลิก</a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="card shadow-sm mt-4">
+    <div class="card-header">
+        <h5 class="mb-0">จัดการ Barcode ID</h5>
+    </div>
+    <div class="card-body">
+        <div id="barcodeStatus"></div>
+        <div class="mb-3">
+            <label for="new_wheel_barcode" class="form-label">เพิ่ม Barcode ID ใหม่:</label>
+            <div class="input-group">
+                <input type="text" id="new_wheel_barcode" class="form-control" placeholder="ยิงหรือพิมพ์ Barcode ID ใหม่">
+                <button id="add_wheel_barcode_btn" class="btn btn-outline-success" type="button">เพิ่ม Barcode</button>
+            </div>
+        </div>
+
+        <h6>Barcode ID ที่ผูกอยู่:</h6>
+        <ul id="wheel_barcodes_list" class="list-group">
+            </ul>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
 <script>
     document.addEventListener('DOMContentLoaded', function() {
-        // ส่วนสำหรับการจัดการ Barcode ID ในหน้า edit_wheel
-        const wheelId = {{ wheel.id }}; // ดึง ID ของแม็กจาก Jinja2
+        const wheelId = {{ wheel.id }};
         const newBarcodeInput = document.getElementById('new_wheel_barcode');
         const addBarcodeBtn = document.getElementById('add_wheel_barcode_btn');
         const wheelBarcodesList = document.getElementById('wheel_barcodes_list');
-        const barcodeStatusDiv = document.getElementById('barcodeStatus'); // ใช้ ID เดียวกัน
+        const barcodeStatusDiv = document.getElementById('barcodeStatus');
 
         function showBarcodeStatus(message, type = 'info') {
-            barcodeStatusDiv.textContent = message;
-            barcodeStatusDiv.className = `flash-message flash-${type}`;
-            barcodeStatusDiv.style.display = 'block';
-            setTimeout(() => { barcodeStatusDiv.textContent = ''; barcodeStatusDiv.style.display = 'none'; }, 3000);
+            barcodeStatusDiv.innerHTML = `<div class="alert alert-${type} alert-dismissible fade show" role="alert">
+                                            ${message}
+                                            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                                          </div>`;
         }
 
         function renderBarcodes(barcodes) {
-            wheelBarcodesList.innerHTML = ''; // Clear existing list
-            if (barcodes.length === 0) {
-                wheelBarcodesList.innerHTML = '<li class="list-group-item">ยังไม่มี Barcode ID ผูกอยู่</li>';
+            wheelBarcodesList.innerHTML = '';
+            if (!barcodes || barcodes.length === 0) {
+                wheelBarcodesList.innerHTML = '<li class="list-group-item text-muted">ยังไม่มี Barcode ID ผูกอยู่</li>';
                 return;
             }
             barcodes.forEach(barcode_item => {
                 const li = document.createElement('li');
-                li.className = 'list-group-item';
-                li.dataset.barcode = barcode_item.barcode_string;
-
-                let primaryBadge = '';
-                if (barcode_item.is_primary_barcode) {
-                    primaryBadge = '<span class="badge badge-primary" style="margin-left: 5px;">หลัก</span>';
-                }
+                li.className = 'list-group-item d-flex justify-content-between align-items-center';
+                
+                const primaryBadge = barcode_item.is_primary_barcode 
+                    ? '<span class="badge text-bg-primary ms-2">หลัก</span>' 
+                    : '';
 
                 li.innerHTML = `
-                    <span>${barcode_item.barcode_string} <span class="math-inline">\{primaryBadge\}</span\>
-<button class="btn btn-danger btn-sm delete-barcode-btn" data-barcode="{barcode_item.barcode_string}">ลบ</button>
-`;
-wheelBarcodesList.appendChild(li);
-});
-addDeleteBarcodeEventListeners(); // Re-attach event listeners after re-rendering
-}
+                    <span>${barcode_item.barcode_string} ${primaryBadge}</span>
+                    <button class="btn btn-danger btn-sm delete-barcode-btn" data-barcode="${barcode_item.barcode_string}">
+                        <i class="fas fa-trash-alt"></i>
+                    </button>
+                `;
+                wheelBarcodesList.appendChild(li);
+            });
+            addDeleteBarcodeEventListeners();
+        }
 
-        // Event listener for adding a new barcode
+        async function fetchBarcodesAndRender() {
+            try {
+                const response = await fetch(`/api/wheel/${wheelId}/barcodes`); // Use wheel-specific API
+                const data = await response.json();
+                if (data.success) {
+                    renderBarcodes(data.barcodes);
+                } else {
+                    showBarcodeStatus(data.message || 'ไม่สามารถโหลดรายการบาร์โค้ดได้', 'danger');
+                }
+            } catch (error) {
+                console.error('Error fetching barcodes:', error);
+                showBarcodeStatus('เกิดข้อผิดพลาดในการเชื่อมต่อเพื่อโหลดบาร์โค้ด', 'danger');
+            }
+        }
+
+        function addDeleteBarcodeEventListeners() {
+            document.querySelectorAll('.delete-barcode-btn').forEach(button => {
+                button.onclick = function() {
+                    const barcodeToDelete = this.dataset.barcode;
+                    if (confirm(`คุณแน่ใจหรือไม่ว่าต้องการลบ Barcode ID: ${barcodeToDelete} ?`)) {
+                        fetch(`/api/wheel/${wheelId}/barcodes`, { // Use wheel-specific API
+                            method: 'DELETE',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ barcode_string: barcodeToDelete })
+                        })
+                        .then(response => response.json())
+                        .then(data => {
+                            showBarcodeStatus(data.message, data.success ? 'success' : 'danger');
+                            if (data.success) {
+                                fetchBarcodesAndRender(); // Re-render the list on success
+                            }
+                        });
+                    }
+                };
+            });
+        }
+        
         addBarcodeBtn.addEventListener('click', function() {
             const newBarcode = newBarcodeInput.value.trim();
             if (!newBarcode) {
@@ -207,60 +205,23 @@ addDeleteBarcodeEventListeners(); // Re-attach event listeners after re-renderin
                 return;
             }
 
-            fetch(`/api/wheel/${wheelId}/barcodes`, { // ใช้ wheelId
+            fetch(`/api/wheel/${wheelId}/barcodes`, { // Use wheel-specific API
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ barcode_string: newBarcode })
             })
             .then(response => response.json())
             .then(data => {
+                showBarcodeStatus(data.message, data.success ? 'success' : 'danger');
                 if (data.success) {
-                    showBarcodeStatus(data.message, 'success');
-                    newBarcodeInput.value = ''; // Clear input
-                    window.location.reload(); 
-                } else {
-                    showBarcodeStatus(data.message, 'danger');
+                    newBarcodeInput.value = '';
+                    fetchBarcodesAndRender(); // Re-render the list on success
                 }
-            })
-            .catch(error => {
-                console.error('Error adding barcode:', error);
-                showBarcodeStatus('เกิดข้อผิดพลาดในการเพิ่ม Barcode ID', 'danger');
             });
         });
 
-        // Event listener for deleting a barcode
-        function addDeleteBarcodeEventListeners() {
-            document.querySelectorAll('.delete-barcode-btn').forEach(button => {
-                button.onclick = function() {
-                    const barcodeToDelete = this.dataset.barcode;
-                    if (confirm(`คุณแน่ใจหรือไม่ว่าต้องการลบ Barcode ID: ${barcodeToDelete} ?`)) {
-                        fetch(`/api/wheel/${wheelId}/barcodes`, { // ใช้ wheelId
-                            method: 'DELETE',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ barcode_string: barcodeToDelete })
-                        })
-                        .then(response => response.json())
-                        .then(data => {
-                            if (data.success) {
-                                showBarcodeStatus(data.message, 'success');
-                                window.location.reload();
-                            } else {
-                                showBarcodeStatus(data.message, 'danger');
-                            }
-                        })
-                        .catch(error => {
-                            console.error('Error deleting barcode:', error);
-                            showBarcodeStatus('เกิดข้อผิดพลาดในการลบ Barcode ID', 'danger');
-                        });
-                    }
-                };
-            });
-        }
-
-        renderBarcodes({{ wheel_barcodes | tojson }}); // Render initial barcodes passed from Flask
-        // Note: wheel_barcodes is passed from Flask. If you want live updates without reload,
-        // you'd need a separate GET API for barcodes, or manage the array in JS directly.
-        // For simplicity and correctness with current data flow, we'll reload after add/delete.
+        // Initial load of barcodes
+        fetchBarcodesAndRender();
     });
 </script>
 {% endblock %}

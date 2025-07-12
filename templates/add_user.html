@@ -1,133 +1,55 @@
 {% extends 'base.html' %}
 
-{% block title %}เพิ่มผู้ใช้ใหม่{% endblock %}
+{% block page_title %}เพิ่มผู้ใช้ใหม่{% endblock %}
 
 {% block content %}
-<h2>เพิ่มผู้ใช้ใหม่</h2>
+<div class="row justify-content-center">
+    <div class="col-lg-8 col-md-10">
+        <div class="card shadow-sm">
+            <div class="card-header">
+                <h4 class="mb-0">เพิ่มผู้ใช้ใหม่</h4>
+            </div>
+            <div class="card-body">
+                <form method="POST" action="{{ url_for('add_new_user') }}">
+                    <div class="row g-3">
+                        <div class="col-12">
+                            <label for="username" class="form-label">ชื่อผู้ใช้ (Username) <span class="text-danger">*</span></label>
+                            <input type="text" id="username" name="username" class="form-control" required>
+                        </div>
 
-{% with messages = get_flashed_messages(with_categories=true) %}
-    {% if messages %}
-        <div class="flashes">
-            {% for category, message in messages %}
-                <div class="alert alert-{{ category }}">{{ message }}</div>
-            {% endfor %}
+                        <div class="col-md-6">
+                            <label for="password" class="form-label">รหัสผ่าน <span class="text-danger">*</span></label>
+                            <input type="password" id="password" name="password" class="form-control" required>
+                        </div>
+
+                        <div class="col-md-6">
+                            <label for="confirm_password" class="form-label">ยืนยันรหัสผ่าน <span class="text-danger">*</span></label>
+                            <input type="password" id="confirm_password" name="confirm_password" class="form-control" required>
+                        </div>
+
+                        <div class="col-12">
+                            <label for="role" class="form-label">บทบาท (Role) <span class="text-danger">*</span></label>
+                            <select id="role" name="role" class="form-select">
+                                <option value="viewer">เซลล์ (salesman)</option>
+                                <option value="retail_sales">พนักงานขาย (Retail Sales)</option>
+                                <option value="wholesale_sales">พนักงานค้าส่ง (Wholesale Sales)</option>
+                                <option value="editor">พนักงานขายที่ปรับสต๊อกได้ (Editor)</option>
+                                <option value="admin">ผู้ดูแลระบบ (Admin)</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="mt-4">
+                        <button type="submit" class="btn btn-primary">
+                            <i class="fas fa-plus me-2"></i>เพิ่มผู้ใช้
+                        </button>
+                        <a href="{{ url_for('manage_users') }}" class="btn btn-secondary">
+                            <i class="fas fa-times me-2"></i>ยกเลิก
+                        </a>
+                    </div>
+                </form>
+            </div>
         </div>
-    {% endif %}
-{% endwith %}
-
-<form method="POST" action="{{ url_for('add_new_user') }}">
-    <div class="form-group">
-        <label for="username">ชื่อผู้ใช้:</label>
-        <input type="text" id="username" name="username" class="form-control" required>
     </div>
-    {# ส่วนของอีเมลถูกลบออกตามคำขอของผู้ใช้ #}
-    <div class="form-group">
-        <label for="password">รหัสผ่าน:</label>
-        <input type="password" id="password" name="password" class="form-control" required>
-    </div>
-    <div class="form-group">
-        <label for="confirm_password">ยืนยันรหัสผ่าน:</label> {# เพิ่มช่องยืนยันรหัสผ่าน #}
-        <input type="password" id="confirm_password" name="confirm_password" class="form-control" required>
-    </div>
-    <div class="form-group">
-        <label for="role">บทบาท:</label>
-        <select id="role" name="role" class="form-control">
-            <option value="viewer">เซลล์ (salesman)</option>
-            <option value="retail_sales">พนักงานขาย (Retail Sales)</option>
-            <option value="wholesale_sales">พนักงานค้าส่ง (Wholesale Sales)</option>
-            <option value="editor">พนักงานขายที่ปรับสต๊อกได้ (Editor)</option>
-            <option value="admin">ผู้ดูแลระบบ (Admin)</option>
-        </select>
-    </div>
-    <button type="submit" class="btn btn-primary"><i class="fas fa-plus"></i> เพิ่มผู้ใช้</button>
-    <a href="{{ url_for('manage_users') }}" class="btn btn-secondary">ยกเลิก</a>
-</form>
-
-<style>
-    /* เพิ่ม CSS สำหรับฟอร์ม */
-    form {
-        max-width: 600px;
-        margin: 20px auto;
-        padding: 20px;
-        background-color: var(--bg-white);
-        border-radius: var(--border-radius-md);
-        box-shadow: var(--shadow-light);
-    }
-    .form-group {
-        margin-bottom: 15px;
-    }
-    .form-group label {
-        display: block;
-        margin-bottom: 5px;
-        font-weight: bold;
-    }
-    .form-control {
-        width: 100%;
-        padding: 10px;
-        border: 1px solid var(--border-color);
-        border-radius: var(--border-radius);
-        box-sizing: border-box;
-    }
-    .form-check {
-        display: flex;
-        align-items: center;
-        margin-bottom: 15px;
-    }
-    .form-check-input {
-        margin-right: 10px;
-        width: auto; /* Override .form-control width */
-    }
-    .btn {
-        padding: 10px 15px;
-        border-radius: var(--border-radius);
-        cursor: pointer;
-        font-weight: bold;
-        text-decoration: none;
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        gap: 5px;
-    }
-    .btn-primary {
-        background-color: var(--primary-color);
-        color: white;
-        border: 1px solid var(--primary-color);
-    }
-    .btn-primary:hover {
-        background-color: var(--primary-dark);
-        border-color: var(--primary-dark);
-    }
-    .btn-secondary {
-        background-color: var(--btn-secondary-bg);
-        color: var(--text-color-secondary);
-        border: 1px solid var(--border-color);
-        margin-left: 10px;
-    }
-    .btn-secondary:hover {
-        background-color: var(--btn-secondary-hover-bg);
-    }
-    .flashes {
-        margin-bottom: 20px;
-    }
-    .alert {
-        padding: 10px;
-        margin-bottom: 10px;
-        border-radius: var(--border-radius);
-    }
-    .alert-success {
-        background-color: #d4edda;
-        color: #155724;
-        border-color: #c3e6cb;
-    }
-    .alert-danger {
-        background-color: #f8d7da;
-        color: #721c24;
-        border-color: #f5c6cb;
-    }
-    .alert-warning {
-        background-color: #fff3cd;
-        color: #856404;
-        border-color: #ffeeba;
-    }
-</style>
+</div>
 {% endblock %}

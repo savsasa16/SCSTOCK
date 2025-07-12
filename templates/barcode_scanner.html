@@ -1,644 +1,349 @@
 {% extends 'base.html' %}
 
-{% block title %}ตัดสต็อกด้วยบาร์โค้ด{% endblock %}
+{% block page_title %}ตัดสต็อกด้วยบาร์โค้ด{% endblock %}
 
 {% block content %}
-<style>
-    /* สไตล์เพิ่มเติมสำหรับหน้า Barcode Scanner */
-    .barcode-scan-section {
-        background-color: var(--bg-white);
-        padding: 25px;
-        border-radius: var(--border-radius-md);
-        box-shadow: var(--shadow-light);
-        margin-bottom: 30px;
-    }
-    .barcode-scan-section h3 {
-        color: var(--primary-color);
-        margin-top: 20px;
-        margin-bottom: 15px;
-        font-weight: 600;
-        border-bottom: 1px solid var(--border-color);
-        padding-bottom: 10px;
-    }
-    .barcode-scan-section .form-group {
-        margin-bottom: 20px;
-    }
-    .barcode-scan-section label {
-        font-size: 1.1em;
-        margin-bottom: 8px;
-    }
-    .barcode-scan-section input[type="text"] {
-        padding: 12px;
-        font-size: 1.2em;
-        border-radius: var(--border-radius);
-        border: 2px solid var(--primary-color); /* ให้ช่อง input เด่นขึ้น */
-        width: 100%;
-        box-sizing: border-box;
-    }
-    .barcode-scan-section input[type="text"]:focus {
-        border-color: var(--accent-color);
-        box-shadow: 0 0 0 3px rgba(var(--primary-color-rgb), 0.25);
-    }
-    .flash-message {
-        padding: 10px;
-        margin-top: 15px;
-        border-radius: var(--border-radius-sm);
-        text-align: center;
-        font-weight: bold;
-        display: none; /* ซ่อนไว้ก่อน */
-    }
-    .flash-info { background-color: #e0f7fa; color: #007bb2; display: block; }
-    .flash-success { background-color: #e8f5e9; color: #28a745; display: block; }
-    .flash-warning { background-color: #fff3e0; color: #ffc107; display: block; }
-    .flash-danger { background-color: #ffebee; color: #dc3545; display: block; }
-
-    #scannedItemsTable {
-        width: 100%;
-        border-collapse: collapse;
-        margin-top: 20px;
-    }
-    #scannedItemsTable th, #scannedItemsTable td {
-        border: 1px solid var(--border-color);
-        padding: 10px;
-        text-align: left;
-    }
-    #scannedItemsTable th {
-        background-color: #f8f8f8;
-    }
-    #scannedItemsTable tbody tr:nth-child(even) {
-        background-color: var(--bg-stripe);
-    }
-    #scannedItemsTable .qty-input {
-        width: 70px;
-        padding: 5px;
-        border-radius: var(--border-radius-sm);
-        border: 1px solid var(--border-color);
-        text-align: center;
-    }
-    .action-buttons {
-        margin-top: 25px;
-        text-align: center;
-    }
-    .action-buttons button {
-        padding: 12px 25px;
-        font-size: 1.1em;
-        margin: 0 10px;
-        border-radius: var(--border-radius);
-        cursor: pointer;
-        transition: background-color 0.3s ease;
-    }
-
-    /* Modal styles */
-    .modal {
-        display: none; /* Hidden by default */
-        position: fixed; /* Stay in place */
-        z-index: 1000; /* Sit on top */
-        left: 0;
-        top: 0;
-        width: 100%; /* Full width */
-        height: 100%; /* Full height */
-        overflow: auto; /* Enable scroll if needed */
-        background-color: rgba(0,0,0,0.4); /* Black w/ opacity */
-    }
-    .modal-content {
-        background-color: #fefefe;
-        margin: 10% auto; /* 10% from the top and centered */
-        padding: 30px;
-        border-radius: var(--border-radius-md);
-        box-shadow: 0 4px 8px 0 rgba(0,0,0,0.2),0 6px 20px 0 rgba(0,0,0,0.19);
-        width: 80%; /* Could be more or less, depending on screen size */
-        max-width: 600px; /* Max width for larger screens */
-        position: relative;
-    }
-    .close-button {
-        color: #aaa;
-        float: right;
-        font-size: 28px;
-        font-weight: bold;
-    }
-    .close-button:hover,
-    .close-button:focus {
-        color: black;
-        text-decoration: none;
-        cursor: pointer;
-    }
-    .modal-content input[type="text"],
-    .modal-content select {
-        width: 100%;
-        padding: 8px;
-        margin-bottom: 10px;
-        border: 1px solid var(--border-color);
-        border-radius: var(--border-radius);
-    }
-    .modal-content button {
-        padding: 10px 15px;
-        border-radius: var(--border-radius);
-        cursor: pointer;
-    }
-
-    /* สไตล์สำหรับปรับขนาดกล้องให้ responsive (สามารถลบออกได้หากไม่มีกล้องแล้ว) */
-    /*
-    #qr-reader {
-        width: 100%;
-        max-width: 450px;
-        aspect-ratio: 450 / 250;
-        height: auto;
-        overflow: hidden;
-        margin: 0 auto;
-        display: none;
-    }
-    #qr-reader__scan_region {
-        border: 2px solid var(--primary-color);
-    }
-    #qr-reader video {
-        width: 100% !important;
-        height: auto !important;
-        object-fit: cover;
-    }
-    */
-</style>
-
-<div class="barcode-scan-section">
-    <h2>ตัดสต็อกด้วยบาร์โค้ด</h2>
-
-    <div class="form-group">
-        <label for="barcodeInput">สแกนบาร์โค้ด (ด้วยเครื่องยิงบาร์โค้ด):</label>
-        <input type="text" id="barcodeInput" autofocus placeholder="ยิงบาร์โค้ดที่นี่...">
+<div class="card shadow-sm">
+    <div class="card-header">
+        <h4 class="mb-0"><i class="fas fa-barcode me-2"></i>ตัดสต็อกด้วยบาร์โค้ด</h4>
     </div>
-    <div id="scanStatus" class="flash-message"></div>
+    <div class="card-body">
+        <div class="row justify-content-center">
+            <div class="col-lg-8">
+                <div class="mb-3">
+                    <label for="barcodeInput" class="form-label fs-5">สแกนบาร์โค้ด (ด้วยเครื่องยิงบาร์โค้ด):</label>
+                    <input type="text" class="form-control form-control-lg text-center" id="barcodeInput" autofocus placeholder="ยิงบาร์โค้ดที่นี่...">
+                </div>
+                <div id="scanStatus"></div>
+            </div>
+        </div>
 
-    {# --- ส่วนสำหรับเปิด/ปิดกล้องสแกน (ถูกลบออกไปแล้ว) --- #}
-    {# <div id="qr-reader"></div> #}
-    {# <div id="qr-reader-results" style="text-align: center; margin-top: 10px;"></div> #}
-    {# ------------------------------------------------ #}
+        <hr class="my-4">
 
-    <h3>รายการที่สแกนแล้ว</h3>
-    <div class="table-responsive">
-        <table id="scannedItemsTable">
-            <thead>
-                <tr>
-                    <th>ประเภท</th>
-                    <th>ยี่ห้อ</th>
-                    <th>รุ่น/ลาย</th>
-                    <th>ข้อมูลจำเพาะ</th>
-                    <th>สต็อกปัจจุบัน</th>
-                    <th>จำนวนที่ทำรายการ</th>
-                    <th>ดำเนินการ</th>
-                </tr>
-            </thead>
-            <tbody>
-                {# JavaScript จะแทรกแถวที่นี่ #}
-                <tr><td colspan="7" class="text-center">ยังไม่มีรายการที่สแกน</td></tr>
-            </tbody>
-        </table>
-    </div>
+        <h5 class="mb-3">รายการที่สแกนแล้ว</h5>
+        <div class="table-responsive">
+            <table class="table table-striped table-hover table-sm" id="scannedItemsTable">
+                <thead class="table-light">
+                    <tr>
+                        <th>ประเภท</th>
+                        <th>ยี่ห้อ/รุ่น</th>
+                        <th>ข้อมูลจำเพาะ</th>
+                        <th class="text-center">สต็อกปัจจุบัน</th>
+                        <th class="text-center" style="width: 120px;">จำนวน</th>
+                        <th class="text-center">ลบ</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr><td colspan="6" class="text-center text-muted">ยังไม่มีรายการที่สแกน</td></tr>
+                </tbody>
+            </table>
+        </div>
 
-    {# --- เพิ่มช่องหมายเหตุสำหรับ Transaction --- #}
-    <div class="form-group" style="margin-top: 20px;">
-        <label for="transactionNotes">หมายเหตุ (ถ้ามี):</label>
-        <textarea id="transactionNotes" class="form-control" rows="3" placeholder="เช่น ขายหน้าร้าน,ค้าส่งร้าน... / ขายออนไลน์"></textarea>
-    </div>
-    {# ----------------------------------------- #}
-    
-    <div class="action-buttons">
-        <button id="processInBtn" class="btn btn-success">รับเข้าสต็อก</button>
-        <button id="processOutBtn" class="btn btn-danger">จ่ายออกสต็อก</button>
-        <button id="clearAllBtn" class="btn btn-secondary">ล้างรายการทั้งหมด</button>
+        <div class="row mt-4">
+            <div class="col-md-12">
+                <div class="mb-3">
+                    <label for="transactionNotes" class="form-label">หมายเหตุ (ถ้ามี):</label>
+                    <textarea id="transactionNotes" class="form-control" rows="2" placeholder="เช่น ขายหน้าร้าน, ค้าส่งร้าน A / ขายออนไลน์"></textarea>
+                </div>
+            </div>
+        </div>
+        
+        <div class="text-center mt-4">
+            <button id="processInBtn" class="btn btn-lg btn-success mx-2"><i class="fas fa-plus-circle me-2"></i>รับเข้าสต็อก</button>
+            <button id="processOutBtn" class="btn btn-lg btn-danger mx-2"><i class="fas fa-minus-circle me-2"></i>จ่ายออกสต็อก</button>
+            <button id="clearAllBtn" class="btn btn-secondary mx-2"><i class="fas fa-times me-2"></i>ล้างทั้งหมด</button>
+        </div>
     </div>
 </div>
 
-{# Modal สำหรับเชื่อมโยงบาร์โค้ด #}
-<div id="linkBarcodeModal" class="modal">
-    <div class="modal-content">
-        <span class="close-button">&times;</span>
-        <h4>ไม่มีบาร์โค้ดนี้ในระบบ: <span id="modalScannedBarcode"></span></h4>
-        <p>กรุณาเลือกว่าต้องการเพิ่มสินค้าใหม่ หรือเชื่อมโยงบาร์โค้ดนี้กับสินค้าที่มีอยู่</p>
-        
-        <div class="form-group">
-            <label for="searchItemBarcode">ค้นหาสินค้า (ยี่ห้อ, รุ่น, เบอร์ยาง/ลาย):</label>
-            <input type="text" id="searchItemBarcode" placeholder="พิมพ์เพื่อค้นหา...">
-            <button id="searchItemBtn" class="btn btn-primary btn-sm" style="margin-top: 10px;">ค้นหา</button>
+<div class="modal fade" id="linkBarcodeModal" tabindex="-1" aria-labelledby="linkBarcodeModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="linkBarcodeModalLabel">
+                    <i class="fas fa-exclamation-triangle text-warning me-2"></i>ไม่พบบาร์โค้ดในระบบ
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p>บาร์โค้ด <strong id="modalScannedBarcode" class="text-danger"></strong> ยังไม่มีในระบบ</p>
+                <p>กรุณาเลือกว่าต้องการ **เพิ่มสินค้าใหม่** หรือ **เชื่อมโยงบาร์โค้ดนี้กับสินค้าที่มีอยู่**</p>
+                
+                <hr>
+
+                <h6>ค้นหาสินค้าเพื่อเชื่อมโยง</h6>
+                <div class="input-group mb-3">
+                    <input type="text" class="form-control" id="searchItemBarcode" placeholder="พิมพ์ยี่ห้อ, รุ่น, หรือเบอร์ยางเพื่อค้นหา...">
+                    <button id="searchItemBtn" class="btn btn-outline-primary" type="button"><i class="fas fa-search"></i> ค้นหา</button>
+                </div>
+                
+                <div id="searchItemResults" style="max-height: 200px; overflow-y: auto;">
+                    </div>
+            </div>
+            <div class="modal-footer justify-content-between">
+                <button id="goToAddItemBtn" type="button" class="btn btn-info">
+                    <i class="fas fa-plus me-2"></i>ไปหน้าเพิ่มสินค้าใหม่
+                </button>
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">ปิด</button>
+            </div>
         </div>
-        
-        <div id="searchItemResults">
-            {# ผลลัพธ์การค้นหาจะแสดงที่นี่ #}
-        </div>
-        
-        <p style="margin-top: 20px;">หรือ</p>
-        <button id="goToAddItemBtn" class="btn btn-info">ไปหน้าเพิ่มสินค้าใหม่</button>
     </div>
 </div>
 
-{# --- เพิ่ม Audio element สำหรับเสียงแจ้งเตือน --- #}
 <audio id="scanSuccessSound" src="https://cdn.freesound.org/previews/148/148694_2512692-lq.mp3" preload="auto"></audio>
 <audio id="scanErrorSound" src="https://cdn.freesound.org/previews/516/516905_4864041-lq.mp3" preload="auto"></audio>
-{# --------------------------------------------- #}
+{% endblock %}
 
-{# --- ลบ Script Library ของ html5-qrcode ที่นี่ --- #}
-{# <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script> #}
-{# ------------------------------------------------- #}
 
+{% block scripts %}
 <script>
-    console.log("=== barcode_scanner.html: Script parsing started ===");
-
-    // แก้ไข 1: ย้ายการประกาศ scannedItems ออกมานอก DOMContentLoaded
-    let scannedItems = {}; // ประกาศตัวแปรนี้ที่ Global Scope
+    let scannedItems = {}; // Global scope for scanned items object
 
     document.addEventListener('DOMContentLoaded', function() {
-        console.log("--- DOMContentLoaded event fired ---");
-
+        // --- Element Selectors ---
         const barcodeInput = document.getElementById('barcodeInput');
         const scanStatus = document.getElementById('scanStatus');
         const scannedItemsTableBody = document.querySelector('#scannedItemsTable tbody');
         const processInBtn = document.getElementById('processInBtn');
         const processOutBtn = document.getElementById('processOutBtn');
         const clearAllBtn = document.getElementById('clearAllBtn');
-        // เพิ่ม: ดึง element ของช่องหมายเหตุ (คุณมีใน HTML แล้ว!)
         const transactionNotesInput = document.getElementById('transactionNotes');
 
-        // Modal elements
-        const linkBarcodeModal = document.getElementById('linkBarcodeModal');
-        const closeButton = document.querySelector('.close-button');
+        // --- Modal Elements and Instance ---
+        const linkBarcodeModalEl = document.getElementById('linkBarcodeModal');
+        const linkBarcodeModal = new bootstrap.Modal(linkBarcodeModalEl);
         const modalScannedBarcodeSpan = document.getElementById('modalScannedBarcode');
         const searchItemBarcodeInput = document.getElementById('searchItemBarcode');
         const searchItemBtn = document.getElementById('searchItemBtn');
         const searchItemResultsDiv = document.getElementById('searchItemResults');
         const goToAddItemBtn = document.getElementById('goToAddItemBtn');
-
-        // --- Camera Scan Elements (ถูกลบออกไปแล้ว) ---
-        // const startScanBtn = document.getElementById('startScanBtn');
-        // const stopScanBtn = document.getElementById('stopScanBtn');
-        // const qrReaderDiv = document.getElementById('qr-reader');
-        // const qrReaderResultsDiv = document.getElementById('qr-reader-results');
-        // let html5QrCode = null;
-        // -----------------------------
-
-        // --- Audio/Vibration Elements and Flags ---
+        
+        // --- Audio/Vibration Elements ---
         const scanSuccessSound = document.getElementById('scanSuccessSound');
-		const scanErrorSound = document.getElementById('scanErrorSound');
-        let currentTimeout = null; // Used for input debounce (physical scanner)
-        let isProcessingScan = false; // Flag to prevent rapid processing from camera scan
-        // Removed SCAN_COOLDOWN_TIME, lastScannedBarcode, lastScanTime as they are for camera scan
-        // ------------------------------------------
+        const scanErrorSound = document.getElementById('scanErrorSound');
+        let currentTimeout = null;
+        let isProcessingScan = false;
 
-        // console.log("Elements fetched. startScanBtn:", startScanBtn, "qrReaderDiv:", qrReaderDiv);
-        // Removed camera-specific console.log and error check
-
-        // Function to display messages
+        // --- Functions ---
         function showStatus(message, type = 'info') {
-            scanStatus.textContent = message;
-            scanStatus.className = `flash-message flash-${type}`;
-            scanStatus.style.display = 'block';
-            setTimeout(() => { scanStatus.textContent = ''; scanStatus.style.display = 'none'; }, 3000);
+            scanStatus.innerHTML = `<div class="alert alert-${type} alert-dismissible fade show" role="alert">${message}<button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button></div>`;
         }
 
-        // --- ฟังก์ชันสำหรับเล่นเสียง/สั่น (ปรับปรุงให้ใช้ isSuccess parameter) ---
         function playScanFeedback(isSuccess = true) {
             const soundToPlay = isSuccess ? scanSuccessSound : scanErrorSound;
+            if (soundToPlay) {
+                soundToPlay.currentTime = 0;
+                soundToPlay.play().catch(e => console.warn("Could not play sound:", e));
+            }
             if ("vibrate" in navigator) {
-                // พยายามเล่นเสียงก่อน
-                if (soundToPlay) {
-                    soundToPlay.currentTime = 0; // รีเซ็ตเสียงไปที่เริ่มต้น
-					soundToPlay.play().catch(e => {
-                        console.warn("Could not play sound, attempting to vibrate:", e);
-                        navigator.vibrate(isSuccess ? 200 : [100, 50, 100]); // สั่นสั้นๆ เมื่อสำเร็จ, สั่นแบบ "buzzer" เมื่อผิดพลาด
-                    });
-                } else {
-                    // หากไม่มี element เสียง ให้สั่นอย่างเดียว
-                    navigator.vibrate(isSuccess ? 200 : [100, 50, 100]);
-                }
-            } else if (soundToPlay) {
-                 // ถ้าไม่รองรับการสั่น ให้เล่นเสียงอย่างเดียว
-                 soundToPlay.currentTime = 0;
-                 soundToPlay.play().catch(e => {
-					console.warn("Could not play sound:", e);
-                 });
-            } else {
-                console.log("No audio element or vibration support for feedback.");
+                navigator.vibrate(isSuccess ? 100 : [100, 50, 100]);
             }
         }
-        // ------------------------------------
 
-        // Function to render scanned items table
         function renderScannedItems() {
             scannedItemsTableBody.innerHTML = '';
             let hasItems = false;
-            for (const barcode_id in scannedItems) {
+            for (const item_id in scannedItems) {
                 hasItems = true;
-                const item = scannedItems[barcode_id].data;
-                const quantityToProcess = scannedItems[barcode_id].quantity_to_process;
-                const row = document.createElement('tr');
-
+                const item = scannedItems[item_id].data;
+                const quantityToProcess = scannedItems[item_id].quantity_to_process;
+                
                 let spec_info = '';
                 if (item.type === 'tire') {
                     spec_info = item.size;
                 } else if (item.type === 'wheel') {
-                    spec_info = `${item.diameter || ''}x${item.width || ''} ${item.pcd || ''} ${item.et ? item.et : ''}`;
+                    spec_info = `${item.diameter || ''}x${item.width || ''} ${item.pcd || ''} ${item.et ? 'ET'+item.et : ''}`;
                 }
-
+                
+                const row = document.createElement('tr');
+                row.dataset.itemId = item_id;
                 row.innerHTML = `
                     <td>${item.type === 'tire' ? 'ยาง' : 'แม็ก'}</td>
-                    <td>${item.brand ? item.brand.charAt(0).toUpperCase() + item.brand.slice(1) : ''}</td>
-                    <td>${item.model ? item.model.charAt(0).toUpperCase() + item.model.slice(1) : ''}</td>
+                    <td><strong>${item.brand || ''}</strong> ${item.model || ''}</td>
                     <td>${spec_info}</td>
-                    <td>${item.current_quantity}</td>
-                    <td>
-                        <input type="number" value="${quantityToProcess}" min="1" class="qty-input" data-barcode-id="${barcode_id}">
+                    <td class="text-center">${item.current_quantity}</td>
+                    <td class="text-center">
+                        <input type="number" value="${quantityToProcess}" min="1" class="form-control form-control-sm qty-input" data-item-id="${item_id}">
                     </td>
-                    <td>
-                        <button class="btn btn-danger btn-sm remove-item-btn" data-barcode-id="${barcode_id}"><i class="fas fa-times"></i></button>
+                    <td class="text-center">
+                        <button class="btn btn-outline-danger btn-sm remove-item-btn" data-item-id="${item_id}"><i class="fas fa-times"></i></button>
                     </td>
                 `;
                 scannedItemsTableBody.appendChild(row);
             }
 
             if (!hasItems) {
-                 const noItemsRow = document.createElement('tr');
-                 noItemsRow.innerHTML = `<td colspan="7" class="text-center">ยังไม่มีรายการที่สแกน</td>`;
-                 scannedItemsTableBody.appendChild(noItemsRow);
+                scannedItemsTableBody.innerHTML = `<tr><td colspan="6" class="text-center text-muted">ยังไม่มีรายการที่สแกน</td></tr>`;
             }
 
-            // Add event listeners for quantity changes and remove buttons
             document.querySelectorAll('.qty-input').forEach(input => {
                 input.onchange = function() {
-                    const id = this.dataset.barcodeId;
                     let newQty = parseInt(this.value);
-                    if (isNaN(newQty) || newQty < 1) {
-                        newQty = 1; // Default to 1 if invalid
-                        this.value = 1;
-                    }
-                    scannedItems[id].quantity_to_process = newQty;
+                    scannedItems[this.dataset.itemId].quantity_to_process = (isNaN(newQty) || newQty < 1) ? 1 : newQty;
+                    this.value = scannedItems[this.dataset.itemId].quantity_to_process;
                 };
             });
-
             document.querySelectorAll('.remove-item-btn').forEach(button => {
-                button.onclick = function() {
-                    const id = this.dataset.barcodeId;
-                    delete scannedItems[id];
-                    renderScannedItems(); // Re-render table after removal
+                button.onclick = () => {
+                    delete scannedItems[button.dataset.itemId];
+                    renderScannedItems();
                 };
             });
-
-            barcodeInput.focus(); // Keep focus on barcode input, useful for physical scanners
-        }
-		
-        // Removed startScanBtn.addEventListener and stopScanBtn.addEventListener
-
-        // --- ฟังก์ชันประมวลผลบาร์โค้ดที่สแกน (ใช้สำหรับทั้ง Input และกล้อง) ---
-        function processScannedBarcode(barcode) {
-            console.log("processScannedBarcode called with:", barcode);
-
-            // แก้ไข 4: ย้ายการ validate บาร์โค้ดมาไว้ด้านบนสุด
-            if (barcode.length < 5 || barcode.length > 20 || !/^[a-zA-Z0-9]+$/.test(barcode)) {
-                showStatus("บาร์โค้ดไม่ถูกต้องหรือสแกนไม่สมบูรณ์ กรุณาลองใหม่", 'warning');
-                playScanFeedback(false);
-                return; // หยุดการประมวลผลทันทีหากบาร์โค้ดไม่ถูกต้อง
-            }
-
-            // สำหรับ Physical Scanner (barcodeInput)
-            // Removed camera-specific debounce logic
-            if (currentTimeout) {
-                clearTimeout(currentTimeout);
-            }
-            currentTimeout = setTimeout(() => {
-                fetchAndProcess(barcode);
-                barcodeInput.value = ''; // เคลียร์ค่า input หลังประมวลผล (สำหรับ physical scanner)
-            }, 100); // Debounce for physical scanner
+            barcodeInput.focus();
         }
 
         function fetchAndProcess(barcode) {
-            // เพิ่ม flag เพื่อป้องกันการเรียกซ้อนกันในกรณีที่ network ช้า
-            if (isProcessingScan) {
-                console.log("Already processing a scan, ignoring:", barcode);
-                return;
-            }
-            isProcessingScan = true; // ตั้งค่า flag ว่ากำลังประมวลผล
+            if (isProcessingScan) return;
+            isProcessingScan = true;
 
             fetch(`/api/scan_item_lookup?barcode_id=${barcode}`)
                 .then(response => response.json())
                 .then(data => {
-                    isProcessingScan = false; // รีเซ็ต flag เมื่อประมวลผลเสร็จ
-                    console.log("Lookup API response:", data);
                     if (data.success) {
                         const item_data = data.item;
-                        if (item_data.id) {
-                            if (scannedItems[item_data.id]) {
-                                scannedItems[item_data.id].quantity_to_process++;
-                            } else {
-                                scannedItems[item_data.id] = {
-                                    data: item_data,
-                                    quantity_to_process: 1
-                                };
-                            }
-                            showStatus(`สแกน ${item_data.brand.charAt(0).toUpperCase() + item_data.brand.slice(1)} ${item_data.model.charAt(0).toUpperCase() + item_data.model.slice(1)} สำเร็จ!`, 'success');
-                            renderScannedItems();
-                            playScanFeedback(true); // <-- เรียกใช้ฟังก์ชัน Feedback เมื่อสำเร็จ
+                        if (scannedItems[item_data.id]) {
+                            scannedItems[item_data.id].quantity_to_process++;
                         } else {
-                            showStatus('ข้อมูลไม่สมบูรณ์จากเซิร์ฟเวอร์', 'danger');
-                            playScanFeedback(false); // Feedback สำหรับกรณีข้อมูลไม่สมบูรณ์
+                            scannedItems[item_data.id] = { data: item_data, quantity_to_process: 1 };
                         }
+                        showStatus(`สแกน <strong>${item_data.brand || ''} ${item_data.model || ''}</strong> สำเร็จ!`, 'success');
+                        renderScannedItems();
+                        playScanFeedback(true);
                     } else {
-                        showStatus(data.message, 'danger');
-                        // แก้ไข 5: ทำให้ Modal เปิดเฉพาะเมื่อ action_required เป็น 'link_new_barcode'
+                        showStatus(data.message, 'warning');
                         if (data.action_required === 'link_new_barcode' && data.scanned_barcode) {
                             modalScannedBarcodeSpan.textContent = data.scanned_barcode;
-                            linkBarcodeModal.style.display = 'block';
-                            linkBarcodeModal.dataset.scannedBarcode = data.scanned_barcode; 
-                            playScanFeedback(false); // Feedback เมื่อบาร์โค้ดไม่รู้จัก
-                        } else { // กรณีอื่นที่สแกนไม่สำเร็จ แต่ไม่ใช่ link_new_barcode
-                            playScanFeedback(false);
+                            linkBarcodeModalEl.dataset.scannedBarcode = data.scanned_barcode;
+                            searchItemResultsDiv.innerHTML = ''; // Clear previous results
+                            searchItemBarcodeInput.value = ''; // Clear search input
+                            linkBarcodeModal.show();
                         }
+                        playScanFeedback(false);
                     }
                 })
-                .catch(error => {
-                    isProcessingScan = false; // รีเซ็ต flag หากเกิดข้อผิดพลาด
-                    console.error('Error in fetch lookup:', error);
-                    showStatus('เกิดข้อผิดพลาดในการเชื่อมต่อเซิร์ฟเวอร์', 'danger');
-                    playScanFeedback(false); // Feedback เมื่อเกิด error
-                });
+                .catch(error => { console.error('Error:', error); showStatus('เกิดข้อผิดพลาดในการเชื่อมต่อ', 'danger'); playScanFeedback(false); })
+                .finally(() => { isProcessingScan = false; });
         }
-        // ------------------------------------------------------------------
-
-        // Barcode input handler (สำหรับเครื่องยิงบาร์โค้ดแบบ USB/Bluetooth)
-        barcodeInput.addEventListener('keypress', function(e) {
-            if (e.key === 'Enter') {
-                e.preventDefault(); // Prevent form submission
-                const barcode = this.value.trim();
-                if (barcode) {
-                    processScannedBarcode(barcode); // เรียกใช้ฟังก์ชันประมวลผลรวม
-                }
-            }
-        });
-
-        // Clear all items button
-        clearAllBtn.addEventListener('click', function() {
-            if (confirm('คุณแน่ใจหรือไม่ว่าต้องการล้างรายการทั้งหมด?')) {
-                scannedItems = {};
-                renderScannedItems();
-                showStatus('รายการถูกล้างแล้ว', 'info');
-                if (transactionNotesInput) { // เคลียร์ช่องหมายเหตุด้วย
-                    transactionNotesInput.value = '';
-                }
-            }
-        });
-
-        // Process stock transaction
-        function processTransaction(type) {
-            if (Object.keys(scannedItems).length === 0) {
-                showStatus('ไม่มีรายการให้ทำรายการ', 'warning');
+        
+        function processScannedBarcode(barcode) {
+            if (barcode.length < 3 || barcode.length > 50) { // Adjusted validation
+                showStatus("บาร์โค้ดไม่ถูกต้อง", 'warning');
+                playScanFeedback(false);
                 return;
             }
+            if (currentTimeout) clearTimeout(currentTimeout);
+            currentTimeout = setTimeout(() => {
+                fetchAndProcess(barcode);
+                barcodeInput.value = '';
+            }, 100);
+        }
 
-            const itemsToProcess = [];
-            for (const barcode_id in scannedItems) {
-                const item = scannedItems[barcode_id].data;
-                const quantity = scannedItems[barcode_id].quantity_to_process;
-                itemsToProcess.push({
-                    id: item.id, // This is the actual DB ID/Barcode ID
-                    item_type: item.type, // 'tire' or 'wheel'
-                    quantity: quantity
-                });
-            }
-
-            // ดึงค่าหมายเหตุจากช่อง input
-            const notes = transactionNotesInput ? transactionNotesInput.value.trim() : ''; // <-- ดึงค่าหมายเหตุ
+        function processTransaction(type) {
+            if (Object.keys(scannedItems).length === 0) { showStatus('ไม่มีรายการให้ทำรายการ', 'warning'); return; }
+            const itemsToProcess = Object.keys(scannedItems).map(id => ({
+                id: id,
+                item_type: scannedItems[id].data.type,
+                quantity: scannedItems[id].quantity_to_process
+            }));
+            const notes = transactionNotesInput.value.trim();
 
             fetch('/api/process_stock_transaction', {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    type: type,
-                    items: itemsToProcess,
-                    notes: notes // <-- ส่ง notes ไปยัง Backend
-                })
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ type, items: itemsToProcess, notes })
             })
-            .then(response => response.json())
+            .then(res => res.json())
             .then(data => {
+                showStatus(data.message, data.success ? 'success' : 'danger');
                 if (data.success) {
-                    showStatus(data.message, 'success');
-                    scannedItems = {}; // Clear items on success
+                    scannedItems = {};
                     renderScannedItems();
-                    if (transactionNotesInput) {
-                        transactionNotesInput.value = ''; // เคลียร์ช่องหมายเหตุหลังทำรายการสำเร็จ
-                    }
-                } else {
-                    showStatus(data.message, 'danger');
+                    transactionNotesInput.value = '';
                 }
             })
-            .catch(error => {
-                console.error('Error in fetch transaction:', error);
-                showStatus('เกิดข้อผิดพลาดในการเชื่อมต่อเซิร์ฟเวอร์', 'danger');
-            });
+            .catch(err => { console.error('Error:', err); showStatus('เกิดข้อผิดพลาดในการทำรายการ', 'danger'); });
         }
 
+        function linkBarcodeToItem(scannedBarcode, itemId, itemType) {
+            fetch('/api/link_barcode_to_item', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ scanned_barcode: scannedBarcode, item_id: itemId, item_type: itemType })
+            })
+            .then(res => res.json())
+            .then(data => {
+                showStatus(data.message, data.success ? 'success' : 'danger');
+                if (data.success) {
+                    linkBarcodeModal.hide();
+                    processScannedBarcode(scannedBarcode); // Rescan after successful link
+                }
+            })
+            .catch(err => { console.error('Error:', err); showStatus('เกิดข้อผิดพลาดในการเชื่อมโยง', 'danger'); });
+        }
+
+        // --- Event Listeners ---
+        barcodeInput.addEventListener('keypress', e => { if (e.key === 'Enter') { e.preventDefault(); processScannedBarcode(barcodeInput.value.trim()); } });
+        clearAllBtn.addEventListener('click', () => { if (confirm('ยืนยันการล้างรายการทั้งหมด?')) { scannedItems = {}; renderScannedItems(); transactionNotesInput.value = ''; showStatus('ล้างรายการแล้ว', 'info'); } });
         processInBtn.addEventListener('click', () => processTransaction('IN'));
         processOutBtn.addEventListener('click', () => processTransaction('OUT'));
+        goToAddItemBtn.addEventListener('click', () => { const scannedBarcode = linkBarcodeModalEl.dataset.scannedBarcode; window.location.href = `/add_item?scanned_barcode=${scannedBarcode}`; });
 
-        renderScannedItems(); // Initial render
-
-        // --- Modal related JavaScript ---
-        closeButton.addEventListener('click', () => {
-            linkBarcodeModal.style.display = 'none';
-            searchItemResultsDiv.innerHTML = ''; // Clear search results
-            searchItemBarcodeInput.value = ''; // Clear search input
-            barcodeInput.focus(); // Return focus to main barcode input
-        });
-
-        window.addEventListener('click', (event) => {
-            if (event.target == linkBarcodeModal) {
-                linkBarcodeModal.style.display = 'none';
-                searchItemResultsDiv.innerHTML = '';
-                searchItemBarcodeInput.value = '';
-                barcodeInput.focus();
-            }
-        });
-
-        goToAddItemBtn.addEventListener('click', () => {
-            const scannedBarcode = linkBarcodeModal.dataset.scannedBarcode;
-            window.location.href = `/add_item?tab=tire&scanned_barcode=${scannedBarcode}`;
-        });
-
+        // ✅✅✅ START: โค้ดที่แก้ไขและเพิ่มเติม ✅✅✅
         searchItemBtn.addEventListener('click', function() {
             const query = searchItemBarcodeInput.value.trim();
             if (query.length < 2) {
-                searchItemResultsDiv.innerHTML = '<p class="flash-warning">กรุณาพิมพ์อย่างน้อย 2 ตัวอักษรเพื่อค้นหา</p>';
+                searchItemResultsDiv.innerHTML = '<div class="alert alert-warning p-2">กรุณาพิมพ์อย่างน้อย 2 ตัวอักษร</div>';
                 return;
             }
             
+            searchItemResultsDiv.innerHTML = '<div class="text-center p-2"><div class="spinner-border spinner-border-sm" role="status"></div></div>';
+
             fetch(`/api/search_items_for_link?query=${query}`)
                 .then(response => response.json())
                 .then(data => {
                     searchItemResultsDiv.innerHTML = '';
                     if (data.success && data.items.length > 0) {
-                        const resultsList = document.createElement('ul');
-                        resultsList.style.listStyle = 'none';
-                        resultsList.style.padding = '0';
+                        const listGroup = document.createElement('ul');
+                        listGroup.className = 'list-group';
+                        
                         data.items.forEach(item => {
                             const li = document.createElement('li');
-                            li.style.marginBottom = '10px';
-                            li.style.padding = '10px';
-                            li.style.border = '1px solid #eee';
-                            li.style.borderRadius = 'var(--border-radius-sm)';
-                            li.innerHTML = `
-                                <strong>${item.brand.charAt(0).toUpperCase() + item.brand.slice(1)} ${item.model.charAt(0).toUpperCase() + item.model.slice(1)}</strong> 
-                                (${item.type === 'tire' ? item.size : item.diameter + 'x' + item.width + ' ' + item.pcd}) 
-                                สต็อก: ${item.current_quantity}
-                                <button class="btn btn-primary btn-sm link-selected-barcode-btn" 
-                                        data-item-id="${item.id}" 
-                                        data-item-type="${item.type}" 
-                                        data-barcode-to-link="${linkBarcodeModal.dataset.scannedBarcode}"
-                                        style="margin-left: 10px;">ผูกบาร์โค้ดนี้</button>
-                            `;
-                            resultsList.appendChild(li);
-                        });
-                        searchItemResultsDiv.appendChild(resultsList);
+                            li.className = 'list-group-item d-flex justify-content-between align-items-center';
+                            
+                            let itemText = '';
+                            if (item.type === 'tire') {
+                                itemText = `(ยาง) ${item.brand} ${item.model} ${item.size}`;
+                            } else {
+                                itemText = `(แม็ก) ${item.brand} ${item.model} ${item.diameter || ''}x${item.width || ''}`;
+                            }
 
-                        document.querySelectorAll('.link-selected-barcode-btn').forEach(button => {
-                            button.addEventListener('click', function() {
-                                const itemId = this.dataset.itemId;
-                                const itemType = this.dataset.itemType;
-                                const barcodeToLink = this.dataset.barcodeToLink;
-                                
-                                fetch('/api/link_barcode_to_item', {
-                                    method: 'POST',
-                                    headers: { 'Content-Type': 'application/json' },
-                                    body: JSON.stringify({ 
-                                        scanned_barcode: barcodeToLink, 
-                                        item_id: itemId, 
-                                        item_type: itemType,
-                                        is_primary: false
-                                    })
-                                })
-                                .then(response => response.json())
-                                .then(linkData => {
-                                    if (linkData.success) {
-                                        showStatus(linkData.message, 'success');
-                                        linkBarcodeModal.style.display = 'none';
-                                        searchItemResultsDiv.innerHTML = '';
-                                        searchItemBarcodeInput.value = '';
-                                        barcodeInput.focus();
-                                    } else {
-                                        searchItemResultsDiv.innerHTML = `<p class="flash-danger">${linkData.message}</p>`;
-                                    }
-                                })
-                                .catch(error => {
-                                    console.error('Error in link barcode API:', error);
-                                    searchItemResultsDiv.innerHTML = '<p class="flash-danger">เกิดข้อผิดพลาดในการเชื่อมโยงบาร์โค้ด</p>';
-                                });
+                            li.innerHTML = `
+                                <span class="small">${itemText} (สต็อก: ${item.current_quantity})</span>
+                                <button class="btn btn-success btn-sm link-item-btn">เชื่อมโยง</button>
+                            `;
+                            
+                            li.querySelector('.link-item-btn').addEventListener('click', () => {
+                                const scannedBarcode = linkBarcodeModalEl.dataset.scannedBarcode;
+                                linkBarcodeToItem(scannedBarcode, item.id, item.type);
                             });
+
+                            listGroup.appendChild(li);
                         });
+                        searchItemResultsDiv.appendChild(listGroup);
 
                     } else {
-                        searchItemResultsDiv.innerHTML = '<p class="flash-info">ไม่พบสินค้าที่ตรงกับคำค้นหา. คุณอาจต้องเพิ่มสินค้าใหม่.</p>';
+                        searchItemResultsDiv.innerHTML = '<div class="alert alert-info p-2">ไม่พบสินค้าที่ตรงกับคำค้นหา</div>';
                     }
                 })
                 .catch(error => {
-                    console.error('Error in search items API:', error);
-                    searchItemResultsDiv.innerHTML = '<p class="flash-danger">เกิดข้อผิดพลาดในการค้นหาสินค้า</p>';
+                    console.error('Error searching:', error);
+                    searchItemResultsDiv.innerHTML = '<div class="alert alert-danger p-2">เกิดข้อผิดพลาดในการค้นหา</div>';
                 });
         });
+        // ✅✅✅ END: โค้ดที่แก้ไขและเพิ่มเติม ✅✅✅
+
+        // --- Initial Call ---
+        renderScannedItems();
     });
 </script>
 {% endblock %}

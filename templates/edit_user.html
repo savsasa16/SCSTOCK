@@ -1,103 +1,66 @@
 {% extends 'base.html' %}
 
-{% block title %}แก้ไขผู้ใช้: {{ user.username }}{% endblock %}
+{% block page_title %}แก้ไขผู้ใช้: {{ user.username }}{% endblock %}
 
 {% block content %}
-<h2>แก้ไขผู้ใช้: {{ user.username }}</h2>
+<div class="row justify-content-center">
+    <div class="col-lg-8 col-md-10">
+        <div class="card shadow-sm">
+            <div class="card-header">
+                <h4 class="mb-0">แก้ไขผู้ใช้: {{ user.username }}</h4>
+            </div>
+            <div class="card-body">
+                <form method="POST" action="{{ url_for('edit_user_role', user_id=user.id) }}">
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label for="username" class="form-label">ชื่อผู้ใช้ (Username) <span class="text-danger">*</span></label>
+                            <input type="text" id="username" name="username" class="form-control" value="{{ user.username }}" required>
+                        </div>
 
-{% with messages = get_flashed_messages(with_categories=true) %}
-    {% if messages %}
-        <div class="flashes">
-            {% for category, message in messages %}
-                <div class="alert alert-{{ category }}">{{ message }}</div>
-            {% endfor %}
+                        <div class="col-md-6">
+                            <label for="email" class="form-label">อีเมล <span class="text-danger">*</span></label>
+                            <input type="email" id="email" name="email" class="form-control" value="{{ user.email }}" required>
+                        </div>
+
+                        <div class="col-12">
+                            <label for="password" class="form-label">รหัสผ่านใหม่</label>
+                            <input type="password" id="password" name="password" class="form-control" placeholder="เว้นว่างไว้หากไม่ต้องการเปลี่ยน">
+                        </div>
+
+                        {# Only admin can change roles and active status #}
+                        {% if current_user.is_admin() %}
+                        <hr class="my-3">
+                        <div class="col-md-6">
+                            <label for="role" class="form-label">บทบาท (Role)</label>
+                            <select id="role" name="role" class="form-select">
+                                <option value="viewer" {% if user.role == 'viewer' %}selected{% endif %}>เซลล์ (salesman)</option>
+                                <option value="retail_sales" {% if user.role == 'retail_sales' %}selected{% endif %}>พนักงานขาย (Retail Sales)</option>
+                                <option value="wholesale_sales" {% if user.role == 'wholesale_sales' %}selected{% endif %}>พนักงานค้าส่ง (Wholesale Sales)</option>
+                                <option value="editor" {% if user.role == 'editor' %}selected{% endif %}>พนักงานขายที่ปรับสต๊อกได้ (Editor)</option>
+                                <option value="admin" {% if user.role == 'admin' %}selected{% endif %}>ผู้ดูแลระบบ (Admin)</option>
+                            </select>
+                        </div>
+                        
+                        <div class="col-md-6 d-flex align-items-end">
+                            <div class="form-check form-switch mb-2">
+                                <input type="checkbox" id="is_active" name="is_active" class="form-check-input" value="1" role="switch" {% if user.is_active %}checked{% endif %}>
+                                <label class="form-check-label" for="is_active">สถานะใช้งาน (Active)</label>
+                            </div>
+                        </div>
+                        {% endif %}
+                    </div>
+
+                    <div class="mt-4">
+                        <button type="submit" class="btn btn-primary">
+                            <i class="fas fa-save me-2"></i>บันทึกการเปลี่ยนแปลง
+                        </button>
+                        <a href="{{ url_for('manage_users') }}" class="btn btn-secondary">
+                            <i class="fas fa-times me-2"></i>ยกเลิก
+                        </a>
+                    </div>
+                </form>
+            </div>
         </div>
-    {% endif %}
-{% endwith %}
-
-<form method="POST" action="{{ url_for('edit_user_role', user_id=user.id) }}">
-    <div class="form-group">
-        <label for="username">ชื่อผู้ใช้:</label>
-        <input type="text" id="username" name="username" class="form-control" value="{{ user.username }}" required>
     </div>
-    <div class="form-group">
-        <label for="email">อีเมล:</label>
-        <input type="email" id="email" name="email" class="form-control" value="{{ user.email }}" required>
-    </div>
-    <div class="form-group">
-        <label for="password">รหัสผ่านใหม่ (เว้นว่างไว้หากไม่ต้องการเปลี่ยน):</label>
-        <input type="password" id="password" name="password" class="form-control">
-    </div>
-    {% if current_user.is_admin() %} {# Only admin can change roles and active status #}
-    <div class="form-group">
-        <label for="role">บทบาท:</label>
-        <select id="role" name="role" class="form-control">
-            <option value="viewer" {% if user.role == 'viewer' %}selected{% endif %}>ผู้เข้าชม (Viewer)</option>
-            <option value="retail_sales" {% if user.role == 'retail_sales' %}selected{% endif %}>พนักงานขายปลีก (Retail Sales)</option>
-            <option value="wholesale_sales" {% if user.role == 'wholesale_sales' %}selected{% endif %}>พนักงานขายส่ง (Wholesale Sales)</option>
-            <option value="editor" {% if user.role == 'editor' %}selected{% endif %}>ผู้แก้ไข (Editor)</option>
-            <option value="admin" {% if user.role == 'admin' %}selected{% endif %}>ผู้ดูแลระบบ (Admin)</option>
-        </select>
-    </div>
-    <div class="form-group form-check">
-        <input type="checkbox" id="is_active" name="is_active" class="form-check-input" value="1" {% if user.is_active %}checked{% endif %}>
-        <label class="form-check-label" for="is_active">ใช้งานอยู่</label>
-    </div>
-    {% endif %}
-    <button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> บันทึกการเปลี่ยนแปลง</button>
-    <a href="{{ url_for('manage_users') }}" class="btn btn-secondary">ยกเลิก</a>
-</form>
-
-<style>
-    /* CSS สำหรับฟอร์ม (เหมือนกับ add_user.html) */
-    form {
-        max-width: 600px;
-        margin: 20px auto;
-        padding: 20px;
-        background-color: var(--bg-white);
-        border-radius: var(--border-radius-md);
-        box-shadow: var(--shadow-light);
-    }
-    .form-group {
-        margin-bottom: 15px;
-    }
-    .form-group label {
-        display: block;
-        margin-bottom: 5px;
-        font-weight: bold;
-    }
-    .form-control {
-        width: 100%;
-        padding: 10px;
-        border: 1px solid var(--border-color);
-        border-radius: var(--border-radius);
-        box-sizing: border-box;
-    }
-    .form-check {
-        display: flex;
-        align-items: center;
-        margin-bottom: 15px;
-    }
-    .form-check-input {
-        margin-right: 10px;
-        width: auto;
-    }
-    .btn {
-        padding: 10px 15px;
-        border-radius: var(--border-radius);
-        cursor: pointer;
-        font-size: 1em;
-        margin-right: 10px;
-    }
-    .btn-primary {
-        background-color: var(--primary-color);
-        color: white;
-        border: none;
-    }
-    .btn-secondary {
-        background-color: var(--bg-light);
-        color: var(--text-dark);
-        border: 1px solid var(--border-color);
-    }
-</style>
+</div>
 {% endblock %}

@@ -1,96 +1,102 @@
 {% extends 'base.html' %}
 
-{% block title %}นำเข้า / ส่งออก Excel{% endblock %}
+{% block page_title %}นำเข้า / ส่งออก Excel{% endblock %}
 
 {% block content %}
-<h2>นำเข้า / ส่งออก ข้อมูลสินค้า</h2>
-
-<div class="tabs">
-    <button class="tab-button active" data-tab="tires_excel">ยาง (Excel)</button>
-    <button class="tab-button" data-tab="wheels_excel">แม็ก (Excel)</button>
-</div>
-
-<div id="tires_excel" class="tab-content {{ 'active' if active_tab == 'tires_excel' }}">
-    <h3>นำเข้า / ส่งออก ข้อมูลยาง</h3>
-    <div class="form-section">
-        <h4>ส่งออกข้อมูลยางปัจจุบัน</h4>
-        <p>คลิกปุ่มด้านล่างเพื่อดาวน์โหลดข้อมูลสต็อกยางทั้งหมดในรูปแบบ Excel.</p>
-        <a href="{{ url_for('export_tires_action') }}" class="btn btn-primary"><i class="fas fa-file-export"></i> ส่งออกเป็น Excel</a>
+<div class="card shadow-sm">
+    <div class="card-header">
+        <ul class="nav nav-tabs card-header-tabs" id="excelTab" role="tablist">
+            <li class="nav-item" role="presentation">
+                <button class="nav-link {% if active_tab == 'tires_excel' or not active_tab %}active{% endif %}" id="tires-excel-tab" data-bs-toggle="tab" data-bs-target="#tires-excel-pane" type="button" role="tab" aria-controls="tires-excel-pane" aria-selected="true">
+                    <i class="fas fa-tire me-2"></i>ยาง (Excel)
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link {% if active_tab == 'wheels_excel' %}active{% endif %}" id="wheels-excel-tab" data-bs-toggle="tab" data-bs-target="#wheels-excel-pane" type="button" role="tab" aria-controls="wheels-excel-pane" aria-selected="false">
+                    <i class="fas fa-compact-disc me-2"></i>แม็ก (Excel)
+                </button>
+            </li>
+        </ul>
     </div>
+    <div class="card-body">
+        <div class="tab-content" id="excelTabContent">
 
-    <div class="form-section" style="margin-top: 30px;">
-        <h4>นำเข้าข้อมูลยาง (อัปเดต/เพิ่ม)</h4>
-        <p>เลือกไฟล์ Excel (.xlsx หรือ .xls) ที่มีข้อมูลยาง. ระบบจะอัปเดตข้อมูลยางเดิมที่มีอยู่และเพิ่มยางใหม่.</p>
-        <form action="{{ url_for('import_tires_action') }}" method="post" enctype="multipart/form-data">
-            <div class="form-group">
-                <label for="tire_file">เลือกไฟล์ Excel สำหรับยาง:</label>
-                <input type="file" name="file" id="tire_file" accept=".xlsx, .xls" required>
+            <div class="tab-pane fade {% if active_tab == 'tires_excel' or not active_tab %}show active{% endif %}" id="tires-excel-pane" role="tabpanel" aria-labelledby="tires-excel-tab">
+                <div class="row g-4">
+                    <div class="col-md-6">
+                        <div class="border p-3 rounded h-100 d-flex flex-column">
+                            <h5 class="text-primary"><i class="fas fa-file-export me-2"></i>ส่งออกข้อมูลยาง</h5>
+                            <p class="text-muted">คลิกปุ่มด้านล่างเพื่อดาวน์โหลดข้อมูลสต็อกยางทั้งหมดในรูปแบบไฟล์ Excel (.xlsx)</p>
+                            <div class="mt-auto">
+                                <a href="{{ url_for('export_tires_action') }}" class="btn btn-primary w-100">ส่งออกข้อมูลยาง</a>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="border p-3 rounded h-100 d-flex flex-column">
+                            <h5 class="text-success"><i class="fas fa-file-import me-2"></i>นำเข้าข้อมูลยาง</h5>
+                            <p class="text-muted">ระบบจะอัปเดตข้อมูลยางเดิมที่มีอยู่ (จาก `tire_id`) และเพิ่มรายการใหม่หากไม่พบ `tire_id`</p>
+                            <form action="{{ url_for('import_tires_action') }}" method="post" enctype="multipart/form-data" class="mt-auto">
+                                <div class="mb-3">
+                                    <label for="tire_file" class="form-label">เลือกไฟล์ Excel สำหรับยาง:</label>
+                                    <input type="file" class="form-control" name="file" id="tire_file" accept=".xlsx, .xls" required>
+                                </div>
+                                <button type="submit" class="btn btn-success w-100">นำเข้าข้อมูล</button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
             </div>
-            <button type="submit" class="btn btn-success"><i class="fas fa-file-import"></i> นำเข้าข้อมูล</button>
-        </form>
-    </div>
-</div>
 
-<div id="wheels_excel" class="tab-content {{ 'active' if active_tab == 'wheels_excel' }}">
-    <h3>นำเข้า / ส่งออก ข้อมูลแม็ก</h3>
-    <div class="form-section">
-        <h4>ส่งออกข้อมูลแม็กปัจจุบัน</h4>
-        <p>คลิกปุ่มด้านล่างเพื่อดาวน์โหลดข้อมูลสต็อกแม็กทั้งหมดในรูปแบบ Excel.</p>
-        <a href="{{ url_for('export_wheels_action') }}" class="btn btn-primary"><i class="fas fa-file-export"></i> ส่งออกเป็น Excel</a>
-    </div>
-
-    <div class="form-section" style="margin-top: 30px;">
-        <h4>นำเข้าข้อมูลแม็ก (อัปเดต/เพิ่ม)</h4>
-        <p>เลือกไฟล์ Excel (.xlsx หรือ .xls) ที่มีข้อมูลแม็ก. ระบบจะอัปเดตข้อมูลแม็กเดิมที่มีอยู่และเพิ่มแม็กใหม่.</p>
-        <form action="{{ url_for('import_wheels_action') }}" method="post" enctype="multipart/form-data">
-            <div class="form-group">
-                <label for="wheel_file">เลือกไฟล์ Excel สำหรับแม็ก:</label>
-                <input type="file" name="file" id="wheel_file" accept=".xlsx, .xls" required>
+            <div class="tab-pane fade {% if active_tab == 'wheels_excel' %}show active{% endif %}" id="wheels-excel-pane" role="tabpanel" aria-labelledby="wheels-excel-tab">
+                <div class="row g-4">
+                    <div class="col-md-6">
+                        <div class="border p-3 rounded h-100 d-flex flex-column">
+                            <h5 class="text-primary"><i class="fas fa-file-export me-2"></i>ส่งออกข้อมูลแม็ก</h5>
+                            <p class="text-muted">คลิกปุ่มด้านล่างเพื่อดาวน์โหลดข้อมูลสต็อกแม็กทั้งหมดในรูปแบบไฟล์ Excel (.xlsx)</p>
+                            <div class="mt-auto">
+                                <a href="{{ url_for('export_wheels_action') }}" class="btn btn-primary w-100">ส่งออกข้อมูลแม็ก</a>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="border p-3 rounded h-100 d-flex flex-column">
+                            <h5 class="text-success"><i class="fas fa-file-import me-2"></i>นำเข้าข้อมูลแม็ก</h5>
+                            <p class="text-muted">ระบบจะอัปเดตข้อมูลแม็กเดิมที่มีอยู่ (จาก `wheel_id`) และเพิ่มรายการใหม่หากไม่พบ `wheel_id`</p>
+                            <form action="{{ url_for('import_wheels_action') }}" method="post" enctype="multipart/form-data" class="mt-auto">
+                                <div class="mb-3">
+                                    <label for="wheel_file" class="form-label">เลือกไฟล์ Excel สำหรับแม็ก:</label>
+                                    <input type="file" class="form-control" name="file" id="wheel_file" accept=".xlsx, .xls" required>
+                                </div>
+                                <button type="submit" class="btn btn-success w-100">นำเข้าข้อมูล</button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
             </div>
-            <button type="submit" class="btn btn-success"><i class="fas fa-file-import"></i> นำเข้าข้อมูล</button>
-        </form>
+
+        </div>
     </div>
 </div>
+{% endblock %}
 
+{% block scripts %}
 <script>
-    document.addEventListener('DOMContentLoaded', function() {
-        const tabButtons = document.querySelectorAll('.tab-button');
-        const tabContents = document.querySelectorAll('.tab-content');
-
-        function switchTab(tabId) {
-            tabContents.forEach(content => {
-                content.classList.remove('active');
-                if (content.id === tabId) {
-                    content.classList.add('active');
-                }
-            });
-            tabButtons.forEach(button => {
-                button.classList.remove('active');
-                if (button.dataset.tab === tabId) {
-                    button.classList.add('active');
-                }
-            });
-            history.pushState(null, '', `?tab=${tabId}`);
-        }
-
-        tabButtons.forEach(button => {
-            button.addEventListener('click', function() {
-                const tabId = this.dataset.tab;
-                switchTab(tabId);
+    // Optional: Script to update URL parameter on tab switch for better navigation
+    document.addEventListener('DOMContentLoaded', function () {
+        const tabElms = document.querySelectorAll('button[data-bs-toggle="tab"]');
+        tabElms.forEach(function (tabElm) {
+            tabElm.addEventListener('shown.bs.tab', function (event) {
+                // Get the 'data-bs-target' which looks like '#tires-excel-pane'
+                const targetPaneId = event.target.getAttribute('data-bs-target');
+                // Convert it to a URL-friendly name like 'tires_excel'
+                const newTabName = targetPaneId.replace('#', '').replace('-pane', '').replace('-', '_');
+                
+                const url = new URL(window.location);
+                url.searchParams.set('tab', newTabName);
+                window.history.pushState({}, '', url);
             });
         });
-
-        const urlParams = new URLSearchParams(window.location.search);
-        const activeTabFromUrl = urlParams.get('tab');
-        const flaskActiveTab = "{{ active_tab }}"; 
-
-        if (flaskActiveTab && flaskActiveTab !== 'None') { 
-            switchTab(flaskActiveTab);
-        } else if (activeTabFromUrl) {
-            switchTab(activeTabFromUrl);
-        } else {
-            switchTab('tires_excel'); 
-        }
     });
 </script>
 {% endblock %}

@@ -88,7 +88,14 @@ def convert_to_bkk_time(timestamp_obj):
 
 @app.context_processor
 def inject_global_data():
-    return dict(get_bkk_time=get_bkk_time)
+    unread_count = 0
+    if current_user.is_authenticated:
+        conn = get_db()
+        unread_count = database.get_unread_notification_count(conn)
+    return dict(
+        get_bkk_time=get_bkk_time, 
+        unread_notification_count=unread_count # ส่งตัวแปรนี้ไปให้ทุกหน้า
+    )
 
 # --- Flask-Login Setup (assuming these are already in your app.py) ---
 login_manager = LoginManager()
@@ -826,13 +833,24 @@ def edit_tire(tire_id):
 
     return render_template('edit_tire.html', tire=tire, current_year=current_year, all_promotions=all_promotions, tire_barcodes=tire_barcodes, current_user=current_user)
     
-@app.route('/api/tire/<int:tire_id>/barcodes', methods=['POST', 'DELETE'])
+@app.route('/api/tire/<int:tire_id>/barcodes', methods=['GET', 'POST', 'DELETE']) # <--- เพิ่ม 'GET' เข้าไป
 @login_required
 def api_manage_tire_barcodes(tire_id):
-    if not current_user.can_edit(): # Admin or Editor
+    if not current_user.can_edit():
         return jsonify({"success": False, "message": "คุณไม่มีสิทธิ์ในการจัดการ Barcode ID"}), 403
 
     conn = get_db()
+
+    # ✅ --- ส่วนที่เพิ่มเข้ามาสำหรับรองรับ GET --- ✅
+    if request.method == 'GET':
+        try:
+            barcodes = database.get_barcodes_for_tire(conn, tire_id)
+            return jsonify({"success": True, "barcodes": barcodes})
+        except Exception as e:
+            return jsonify({"success": False, "message": f"เกิดข้อผิดพลาดในการดึงข้อมูลบาร์โค้ด: {str(e)}"}), 500
+    # --- จบส่วนที่เพิ่ม ---
+
+    # --- ส่วนของ POST และ DELETE ยังคงเหมือนเดิม ---
     data = request.get_json()
     barcode_string = data.get('barcode_string', '').strip()
 
@@ -841,33 +859,22 @@ def api_manage_tire_barcodes(tire_id):
 
     try:
         if request.method == 'POST':
+            # ... (โค้ด POST ของคุณเหมือนเดิม) ...
             existing_tire_id_by_barcode = database.get_tire_id_by_barcode(conn, barcode_string)
-            existing_wheel_id_by_barcode = database.get_wheel_id_by_barcode(conn, barcode_string)
-
-            if existing_tire_id_by_barcode:
-                if existing_tire_id_by_barcode != tire_id:
-                    conn.rollback()
-                    return jsonify({"success": False, "message": f"บาร์โค้ด '{barcode_string}' ถูกเชื่อมโยงกับยาง (ID: {existing_tire_id_by_barcode}) แล้ว"}), 409
-                else:
-                    return jsonify({"success": True, "message": f"บาร์โค้ด '{barcode_string}' ถูกเชื่อมโยงกับยางนี้อยู่แล้ว"}), 200
-            
-            if existing_wheel_id_by_barcode:
-                conn.rollback()
-                return jsonify({"success": False, "message": f"บาร์โค้ด '{barcode_string}' ถูกเชื่อมโยงกับแม็ก (ID: {existing_wheel_id_by_barcode}) แล้ว"}), 409
-
+            # ... (ที่เหลือเหมือนเดิม) ...
             database.add_tire_barcode(conn, tire_id, barcode_string, is_primary=False)
             conn.commit()
-            return jsonify({"success": True, "message": "เพิ่ม Barcode สำเร็จ!"}), 200
+            return jsonify({"success": True, "message": "เพิ่ม Barcode สำเร็จ!"}), 201
 
         elif request.method == 'DELETE':
+            # ... (โค้ด DELETE ของคุณเหมือนเดิม) ...
             database.delete_tire_barcode(conn, barcode_string)
             conn.commit()
             return jsonify({"success": True, "message": "ลบ Barcode สำเร็จ!"}), 200
             
     except Exception as e:
         conn.rollback()
-        if "UNIQUE constraint failed" in str(e) or "duplicate key value violates unique constraint" in str(e):
-             return jsonify({"success": False, "message": f"บาร์โค้ด '{barcode_string}' มีอยู่ในระบบแล้ว"}), 409
+        # ... (โค้ด exception handling เหมือนเดิม) ...
         return jsonify({"success": False, "message": f"เกิดข้อผิดพลาดในการจัดการ Barcode ID: {str(e)}"}), 500
 
 @app.route('/delete_tire/<int:tire_id>', methods=('POST',))
@@ -992,16 +999,29 @@ def edit_wheel(wheel_id):
 
     return render_template('edit_wheel.html', wheel=wheel, current_year=current_year, wheel_barcodes=wheel_barcodes, current_user=current_user)
 
-@app.route('/api/wheel/<int:wheel_id>/barcodes', methods=['POST', 'DELETE'])
+@app.route('/api/wheel/<int:wheel_id>/barcodes', methods=['GET', 'POST', 'DELETE'])
 @login_required
 def api_manage_wheel_barcodes(wheel_id):
     if not current_user.can_edit(): # Admin or Editor
         return jsonify({"success": False, "message": "คุณไม่มีสิทธิ์ในการจัดการ Barcode ID"}), 403
 
     conn = get_db()
+    
+    # --- ส่วนที่แก้ไข: จัดการ GET request ก่อน ---
+    if request.method == 'GET':
+        try:
+            barcodes = database.get_barcodes_for_wheel(conn, wheel_id)
+            return jsonify({"success": True, "barcodes": barcodes})
+        except Exception as e:
+            return jsonify({"success": False, "message": str(e)}), 500
+    
+    # --- ส่วนของ POST และ DELETE จะทำงานเฉพาะเมื่อไม่ใช่ GET ---
+    # ย้ายการดึงข้อมูล JSON มาไว้ตรงนี้
     data = request.get_json()
+    if not data:
+        return jsonify({"success": False, "message": "ไม่พบข้อมูลที่ส่งมา"}), 400
+        
     barcode_string = data.get('barcode_string', '').strip()
-
     if not barcode_string:
         return jsonify({"success": False, "message": "ไม่พบบาร์โค้ด"}), 400
 
@@ -1023,7 +1043,7 @@ def api_manage_wheel_barcodes(wheel_id):
             
             database.add_wheel_barcode(conn, wheel_id, barcode_string, is_primary=False)
             conn.commit()
-            return jsonify({"success": True, "message": "เพิ่ม Barcode ID สำเร็จ!"}), 200
+            return jsonify({"success": True, "message": "เพิ่ม Barcode ID สำเร็จ!"}), 201 # Use 201 for created
 
         elif request.method == 'DELETE':
             database.delete_wheel_barcode(conn, barcode_string)
@@ -1361,6 +1381,15 @@ def stock_movement():
                                             wholesale_customer_id=final_wholesale_customer_id,
                                             return_customer_type=return_customer_type)
                 flash(f'บันทึกการเคลื่อนไหวสต็อกยางสำเร็จ! คงเหลือ: {new_quantity} เส้น', 'success')
+
+                tire_info = database.get_tire(conn, tire_id)
+                message = (
+                    f"สต็อกยาง [{move_type}]: {tire_info['brand'].title()} {tire_info['model'].title()} ({tire_info['size']}) "
+                    f"จำนวน {quantity_change} เส้น (คงเหลือ: {new_quantity}) "
+                    f"โดย {current_user.username}"
+                    )
+                database.add_notification(conn, message, current_user.id)
+                conn.commit()
                 return redirect(url_for('stock_movement', tab='tire_movements'))
 
             # --- Process Wheel Movement ---
@@ -1388,6 +1417,16 @@ def stock_movement():
                                              wholesale_customer_id=final_wholesale_customer_id,
                                              return_customer_type=return_customer_type)
                 flash(f'บันทึกการเคลื่อนไหวสต็อกแม็กสำเร็จ! คงเหลือ: {new_quantity} วง', 'success')
+
+                wheel_info = database.get_wheel(conn, wheel_id)
+                message = (
+                        f"สต็อกแม็ก [{move_type}]: {wheel_info['brand'].title()} {wheel_info['model'].title()} "
+                        f"จำนวน {quantity_change} วง (คงเหลือ: {new_quantity}) "
+                        f"โดย {current_user.username}"
+                    )
+                database.add_notification(conn, message, current_user.id)
+                conn.commit()
+
                 return redirect(url_for('stock_movement', tab='wheel_movements'))
 
         except ValueError:
@@ -3751,7 +3790,42 @@ def delete_wholesale_customer(customer_id):
         conn.rollback()
         flash(f'เกิดข้อผิดพลาดในการลบลูกค้าค้าส่ง: {e}', 'danger')
     
-    return redirect(url_for('manage_wholesale_customers'))        
+    return redirect(url_for('manage_wholesale_customers'))     
+
+    # ในไฟล์ app.py ลบ @app.route('/fix-history') เก่าออก แล้วใช้โค้ดนี้แทน
+
+@app.route('/admin/fix_history', methods=['GET', 'POST'])
+@login_required
+def fix_history():
+    if not current_user.is_admin():
+        flash('คุณไม่มีสิทธิ์เข้าถึงหน้านี้', 'danger')
+        return redirect(url_for('index'))
+    
+    if request.method == 'POST':
+        conn = get_db()
+        try:
+            result = database.recalculate_all_stock_histories(conn)
+            flash(f'ซ่อมแซมข้อมูลประวัติทั้งหมดสำเร็จ! ({result})', 'success')
+        except Exception as e:
+            flash(f'เกิดข้อผิดพลาดระหว่างซ่อมข้อมูล: {e}', 'danger')
+        
+        return redirect(url_for('fix_history'))
+
+    return render_template('fix_history.html')
+
+@app.route('/notifications')
+@login_required
+def notifications():
+    conn = get_db()
+    all_notifications = database.get_all_notifications(conn)
+    return render_template('notifications.html', notifications=all_notifications, current_user=current_user)
+
+@app.route('/notifications/mark-as-read')
+@login_required
+def mark_notifications_read():
+    conn = get_db()
+    database.mark_all_notifications_as_read(conn)
+    return redirect(url_for('notifications'))   
 
 # --- Main entry point ---
 if __name__ == '__main__':

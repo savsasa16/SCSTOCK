@@ -1,199 +1,181 @@
 {% extends 'base.html' %}
 
+{% block page_title %}แก้ไขข้อมูลยาง{% endblock %}
+
 {% block content %}
-<h2>แก้ไขข้อมูลยาง</h2>
-
-<div class="form-section">
-    <form action="{{ url_for('edit_tire', tire_id=tire.id) }}" method="post">
-        <div class="form-group">
-            <label for="brand">ยี่ห้อ:</label>
-            <input type="text" id="brand" name="brand" value="{{ tire.brand }}" required>
-        </div>
-        <div class="form-group">
-            <label for="model">รุ่นยาง:</label>
-            <input type="text" id="model" name="model" value="{{ tire.model }}" required>
-        </div>
-        <div class="form-group">
-            <label for="size">เบอร์ยาง:</label>
-            <input type="text" id="size" name="size" value="{{ tire.size }}" required>
-        </div>
-        
-        <div class="form-group">
-            <label for="price_per_item">ราคาต่อเส้น (บาท):</label>
-            <input type="number" id="price_per_item" name="price_per_item" value="{{ '%.2f'|format(tire.price_per_item) }}" step="0.01" required>
-        </div>
-
-        <div class="form-group">
-            <label for="promotion_id">โปรโมชัน:</label>
-            <select id="promotion_id" name="promotion_id" class="form-select">
-                <option value="none" {% if tire.promotion_id is none %}selected{% endif %}>ไม่มีโปรโมชัน</option>
-                {% for promo in all_promotions %}
-                    <option value="{{ promo.id }}" {% if tire.promotion_id == promo.id %}selected{% endif %}>
-                        {{ promo.name }} ({{ promo.type }}: {{ promo.value1 }} {% if promo.value2 is not none %}, {{ promo.value2 }}{% endif %})
-                    </option>
-                {% endfor %}
-            </select>
-        </div>
-
-        <div class="form-group">
-            <label for="year_of_manufacture">ปีผลิต (เช่น 2023):</label>
-            <input type="text" id="year_of_manufacture" name="year_of_manufacture" value="{{ tire.year_of_manufacture if tire.year_of_manufacture else '' }}">
-        </div>
-
-        <h3>ต้นทุนและราคาขายส่ง (ไม่บังคับ)</h3>
-        <div class="form-group">
-            <label for="cost_sc">ทุน SC (บาท/เส้น):</label>
-            <input type="number" id="cost_sc" name="cost_sc" value="{{ '%.2f'|format(tire.cost_sc) if tire.cost_sc is not none else '' }}" step="0.01">
-        </div>
-        <div class="form-group">
-            <label for="cost_dunlop">ทุน Dunlop (บาท/เส้น):</label>
-            <input type="number" id="cost_dunlop" name="cost_dunlop" value="{{ '%.2f'|format(tire.cost_dunlop) if tire.cost_dunlop is not none else '' }}" step="0.01">
-        </div>
-        <div class="form-group">
-            <label for="cost_online">ทุน Online (บาท/เส้น):</label>
-            <input type="number" id="cost_online" name="cost_online" value="{{ '%.2f'|format(tire.cost_online) if tire.cost_online is not none else '' }}" step="0.01">
-        </div>
-        <div class="form-group">
-            <label for="wholesale_price1">ราคาขายส่ง 1 (บาท/เส้น):</label>
-            <input type="number" id="wholesale_price1" name="wholesale_price1" value="{{ '%.2f'|format(tire.wholesale_price1) if tire.wholesale_price1 is not none else '' }}" step="0.01">
-        </div>
-        <div class="form-group">
-            <label for="wholesale_price2">ราคาขายส่ง 2 (บาท/เส้น):</label>
-            <input type="number" id="wholesale_price2" name="wholesale_price2" value="{{ '%.2f'|format(tire.wholesale_price2) if tire.wholesale_price2 is not none else '' }}" step="0.01">
-        </div>
-
-
-<div class="barcode-management-section">
-    <h3>จัดการ Barcode ID สำหรับยางเส้นนี้</h3>
-    <div id="barcodeStatus" class="flash-message" style="display:none;"></div>
-
-    <div class="form-group">
-        <label for="new_tire_barcode">เพิ่ม Barcode ID ใหม่:</label>
-        <input type="text" id="new_tire_barcode" placeholder="ยิงหรือพิมพ์ Barcode ID ใหม่">
-        <button id="add_tire_barcode_btn" class="btn btn-primary btn-sm" style="margin-top: 10px;">เพิ่ม Barcode</button>
+<div class="card shadow-sm">
+    <div class="card-header">
+        <h4 class="mb-0">แก้ไขข้อมูลยาง: {{ tire.brand }} {{ tire.model }} ({{ tire.size }})</h4>
     </div>
+    <div class="card-body">
+        <form action="{{ url_for('edit_tire', tire_id=tire.id) }}" method="post">
+            <h5 class="mb-3">ข้อมูลหลัก</h5>
+            <div class="row g-3">
+                <div class="col-md-4">
+                    <label for="brand" class="form-label">ยี่ห้อ*</label>
+                    <input type="text" id="brand" name="brand" class="form-control" value="{{ tire.brand }}" required>
+                </div>
+                <div class="col-md-4">
+                    <label for="model" class="form-label">รุ่นยาง*</label>
+                    <input type="text" id="model" name="model" class="form-control" value="{{ tire.model }}" required>
+                </div>
+                <div class="col-md-4">
+                    <label for="size" class="form-label">เบอร์ยาง*</label>
+                    <input type="text" id="size" name="size" class="form-control" value="{{ tire.size }}" required>
+                </div>
+                <div class="col-md-4">
+                    <label for="price_per_item" class="form-label">ราคาต่อเส้น (บาท)*</label>
+                    <input type="number" id="price_per_item" name="price_per_item" class="form-control" value="{{ '%.2f'|format(tire.price_per_item) }}" step="0.01" required>
+                </div>
+                <div class="col-md-4">
+                    <label for="year_of_manufacture" class="form-label">ปีผลิต</label>
+                    <input type="text" id="year_of_manufacture" name="year_of_manufacture" class="form-control" value="{{ tire.year_of_manufacture if tire.year_of_manufacture else '' }}">
+                </div>
+                <div class="col-md-4">
+                    <label for="promotion_id" class="form-label">โปรโมชัน</label>
+                    <select id="promotion_id" name="promotion_id" class="form-select">
+                        <option value="none" {% if tire.promotion_id is none %}selected{% endif %}>ไม่มีโปรโมชัน</option>
+                        {% for promo in all_promotions %}
+                            <option value="{{ promo.id }}" {% if tire.promotion_id == promo.id %}selected{% endif %}>
+                                {{ promo.name }}
+                            </option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
 
-    <h4>Barcode ID ที่ผูกอยู่:</h4>
-    <ul id="tire_barcodes_list" class="list-group">
-        {% if tire_barcodes %}
-            {% for barcode_item in tire_barcodes %}
-            <li class="list-group-item" data-barcode="{{ barcode_item.barcode_string }}">
-                {{ barcode_item.barcode_string }}
-                {% if barcode_item.is_primary_barcode %}
-                    <span class="badge badge-primary" style="margin-left: 5px;">หลัก</span>
-                {% endif %}
-                <button class="btn btn-danger btn-sm delete-barcode-btn" data-barcode="{{ barcode_item.barcode_string }}">ลบ</button>
-            </li>
-            {% endfor %}
-        {% else %}
-            <li class="list-group-item">ยังไม่มี Barcode ID ผูกอยู่</li>
-        {% endif %}
-    </ul>
-		</div>
-        
-		<button type="submit" class="btn btn-primary">บันทึกการแก้ไข</button>
-        <a href="{{ url_for('index', tab='tires') }}" class="btn btn-secondary">ยกเลิก</a>
-    </form>
+            <hr class="my-4">
+            <h5 class="mb-3">ต้นทุนและราคาขายส่ง (ไม่บังคับ)</h5>
+            <div class="row g-3">
+                <div class="col-md-4">
+                    <label for="cost_sc" class="form-label">ทุน SC</label>
+                    <input type="number" id="cost_sc" name="cost_sc" class="form-control" value="{{ '%.2f'|format(tire.cost_sc) if tire.cost_sc is not none else '' }}" step="0.01">
+                </div>
+                <div class="col-md-4">
+                    <label for="cost_dunlop" class="form-label">ทุน Dunlop</label>
+                    <input type="number" id="cost_dunlop" name="cost_dunlop" class="form-control" value="{{ '%.2f'|format(tire.cost_dunlop) if tire.cost_dunlop is not none else '' }}" step="0.01">
+                </div>
+                <div class="col-md-4">
+                    <label for="cost_online" class="form-label">ทุน Online</label>
+                    <input type="number" id="cost_online" name="cost_online" class="form-control" value="{{ '%.2f'|format(tire.cost_online) if tire.cost_online is not none else '' }}" step="0.01">
+                </div>
+                <div class="col-md-6">
+                    <label for="wholesale_price1" class="form-label">ราคาขายส่ง 1</label>
+                    <input type="number" id="wholesale_price1" name="wholesale_price1" class="form-control" value="{{ '%.2f'|format(tire.wholesale_price1) if tire.wholesale_price1 is not none else '' }}" step="0.01">
+                </div>
+                <div class="col-md-6">
+                    <label for="wholesale_price2" class="form-label">ราคาขายส่ง 2</label>
+                    <input type="number" id="wholesale_price2" name="wholesale_price2" class="form-control" value="{{ '%.2f'|format(tire.wholesale_price2) if tire.wholesale_price2 is not none else '' }}" step="0.01">
+                </div>
+            </div>
+            
+            <div class="mt-4">
+                <button type="submit" class="btn btn-primary"><i class="fas fa-save me-2"></i>บันทึกการแก้ไข</button>
+                <a href="{{ url_for('index', tab='tires') }}" class="btn btn-secondary"><i class="fas fa-times me-2"></i>ยกเลิก</a>
+            </div>
+        </form>
+    </div>
 </div>
 
-<style>
-    /* เพิ่ม CSS ที่จำเป็นสำหรับส่วนนี้ */
-    .barcode-management-section {
-        background-color: var(--bg-white);
-        padding: 20px;
-        border-radius: var(--border-radius-md);
-        box-shadow: var(--shadow-light);
-        margin-top: 30px;
-    }
-    .barcode-management-section h3, .barcode-management-section h4 {
-        color: var(--primary-color);
-        margin-bottom: 15px;
-        border-bottom: 1px solid var(--border-color);
-        padding-bottom: 10px;
-        font-weight: 600;
-    }
-    .barcode-management-section .list-group {
-        list-style: none;
-        padding: 0;
-    }
-    .barcode-management-section .list-group-item {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        padding: 10px 15px;
-        border: 1px solid var(--border-color);
-        border-radius: var(--border-radius);
-        margin-bottom: 8px;
-        background-color: var(--bg-light);
-    }
-    .barcode-management-section .list-group-item:hover {
-        background-color: var(--bg-hover-light);
-    }
-    .barcode-management-section .list-group-item .btn-danger {
-        padding: 5px 10px;
-        font-size: 0.8em;
-        margin-left: 10px;
-    }
-    .barcode-management-section .badge {
-        background-color: var(--accent-color);
-        color: white;
-        padding: 3px 8px;
-        border-radius: 12px;
-        font-size: 0.75em;
-    }
-</style>
+<div class="card shadow-sm mt-4">
+    <div class="card-header">
+        <h5 class="mb-0">จัดการ Barcode ID</h5>
+    </div>
+    <div class="card-body">
+        <div id="barcodeStatus"></div>
+        <div class="mb-3">
+            <label for="new_tire_barcode" class="form-label">เพิ่ม Barcode ID ใหม่:</label>
+            <div class="input-group">
+                <input type="text" id="new_tire_barcode" class="form-control" placeholder="ยิงหรือพิมพ์ Barcode ID ใหม่">
+                <button id="add_tire_barcode_btn" class="btn btn-outline-success" type="button">เพิ่ม Barcode</button>
+            </div>
+        </div>
 
+        <h6>Barcode ID ที่ผูกอยู่:</h6>
+        <ul id="tire_barcodes_list" class="list-group">
+            </ul>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
 <script>
     document.addEventListener('DOMContentLoaded', function() {
-        // ส่วนสำหรับการจัดการ Barcode ID ในหน้า edit_tire
-        const tireId = {{ tire.id }}; // ดึง ID ของยางจาก Jinja2
+        const tireId = {{ tire.id }};
         const newBarcodeInput = document.getElementById('new_tire_barcode');
         const addBarcodeBtn = document.getElementById('add_tire_barcode_btn');
         const tireBarcodesList = document.getElementById('tire_barcodes_list');
         const barcodeStatusDiv = document.getElementById('barcodeStatus');
 
         function showBarcodeStatus(message, type = 'info') {
-            barcodeStatusDiv.textContent = message;
-            barcodeStatusDiv.className = `flash-message flash-${type}`;
-            barcodeStatusDiv.style.display = 'block';
-            setTimeout(() => { barcodeStatusDiv.textContent = ''; barcodeStatusDiv.style.display = 'none'; }, 3000);
+            barcodeStatusDiv.innerHTML = `<div class="alert alert-${type} alert-dismissible fade show" role="alert">
+                                            ${message}
+                                            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                                          </div>`;
         }
 
         function renderBarcodes(barcodes) {
-            tireBarcodesList.innerHTML = ''; // Clear existing list
-            if (barcodes.length === 0) {
-                tireBarcodesList.innerHTML = '<li class="list-group-item">ยังไม่มี Barcode ID ผูกอยู่</li>';
+            tireBarcodesList.innerHTML = '';
+            if (!barcodes || barcodes.length === 0) {
+                tireBarcodesList.innerHTML = '<li class="list-group-item text-muted">ยังไม่มี Barcode ID ผูกอยู่</li>';
                 return;
             }
             barcodes.forEach(barcode_item => {
                 const li = document.createElement('li');
-                li.className = 'list-group-item';
-                li.dataset.barcode = barcode_item.barcode_string;
-
-                let primaryBadge = '';
-                if (barcode_item.is_primary_barcode) {
-                    primaryBadge = '<span class="badge badge-primary" style="margin-left: 5px;">หลัก</span>';
-                }
+                li.className = 'list-group-item d-flex justify-content-between align-items-center';
+                
+                const primaryBadge = barcode_item.is_primary_barcode 
+                    ? '<span class="badge text-bg-primary ms-2">หลัก</span>' 
+                    : '';
 
                 li.innerHTML = `
-                    <span>${barcode_item.barcode_string} <span class="math-inline">\{primaryBadge\}</span\>
-<button class="btn btn-danger btn-sm delete-barcode-btn" data-barcode="{barcode_item.barcode_string}">ลบ</button>
-`;
-tireBarcodesList.appendChild(li);
-});
-addDeleteBarcodeEventListeners(); // Re-attach event listeners after re-rendering
-}
-
-        // Function to fetch updated barcodes from backend
-        function fetchBarcodes() {
-            fetch(`/api/tire/{{ tire.id }}/barcodes`) // Assuming you create a GET endpoint to fetch barcodes.
-                                                  // For now, render them from tire_barcodes passed by Flask.
-                                                  // If you want real-time updates, you might need a GET /api/tire/ID/barcodes
-                                                  // but for this step, just re-rendering the list should be enough.
-                                                  // We'll rely on the original tire_barcodes from Flask.
+                    <span>${barcode_item.barcode_string} ${primaryBadge}</span>
+                    <button class="btn btn-danger btn-sm delete-barcode-btn" data-barcode="${barcode_item.barcode_string}">
+                        <i class="fas fa-trash-alt"></i>
+                    </button>
+                `;
+                tireBarcodesList.appendChild(li);
+            });
+            addDeleteBarcodeEventListeners();
         }
 
-        // Event listener for adding a new barcode
+        async function fetchBarcodesAndRender() {
+            try {
+                const response = await fetch(`/api/tire/${tireId}/barcodes`);
+                const data = await response.json();
+                if (data.success) {
+                    renderBarcodes(data.barcodes);
+                } else {
+                    showBarcodeStatus(data.message || 'ไม่สามารถโหลดรายการบาร์โค้ดได้', 'danger');
+                }
+            } catch (error) {
+                console.error('Error fetching barcodes:', error);
+                showBarcodeStatus('เกิดข้อผิดพลาดในการเชื่อมต่อเพื่อโหลดบาร์โค้ด', 'danger');
+            }
+        }
+
+        function addDeleteBarcodeEventListeners() {
+            document.querySelectorAll('.delete-barcode-btn').forEach(button => {
+                button.onclick = function() {
+                    const barcodeToDelete = this.dataset.barcode;
+                    if (confirm(`คุณแน่ใจหรือไม่ว่าต้องการลบ Barcode ID: ${barcodeToDelete} ?`)) {
+                        fetch(`/api/tire/${tireId}/barcodes`, {
+                            method: 'DELETE',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ barcode_string: barcodeToDelete })
+                        })
+                        .then(response => response.json())
+                        .then(data => {
+                            showBarcodeStatus(data.message, data.success ? 'success' : 'danger');
+                            if (data.success) {
+                                fetchBarcodesAndRender(); // Re-render the list on success
+                            }
+                        });
+                    }
+                };
+            });
+        }
+        
         addBarcodeBtn.addEventListener('click', function() {
             const newBarcode = newBarcodeInput.value.trim();
             if (!newBarcode) {
@@ -208,57 +190,16 @@ addDeleteBarcodeEventListeners(); // Re-attach event listeners after re-renderin
             })
             .then(response => response.json())
             .then(data => {
+                showBarcodeStatus(data.message, data.success ? 'success' : 'danger');
                 if (data.success) {
-                    showBarcodeStatus(data.message, 'success');
-                    newBarcodeInput.value = ''; // Clear input
-                    // Re-render the list (simple approach: reload page or refetch via AJAX if you have a GET API)
-                    // For simplicity in this step, we'll reload the page to get updated list
-                    window.location.reload(); 
-                    // Or, if you prefer not to reload, you'd update 'tire_barcodes' array and call renderBarcodes(tire_barcodes)
-                    // e.g., tire_barcodes.push({ barcode_string: newBarcode, is_primary_barcode: false }); renderBarcodes(tire_barcodes);
-                } else {
-                    showBarcodeStatus(data.message, 'danger');
+                    newBarcodeInput.value = '';
+                    fetchBarcodesAndRender(); // Re-render the list on success
                 }
-            })
-            .catch(error => {
-                console.error('Error adding barcode:', error);
-                showBarcodeStatus('เกิดข้อผิดพลาดในการเพิ่ม Barcode ID', 'danger');
             });
         });
 
-        // Event listener for deleting a barcode
-        function addDeleteBarcodeEventListeners() {
-            document.querySelectorAll('.delete-barcode-btn').forEach(button => {
-                button.onclick = function() {
-                    const barcodeToDelete = this.dataset.barcode;
-                    if (confirm(`คุณแน่ใจหรือไม่ว่าต้องการลบ Barcode ID: ${barcodeToDelete} ?`)) {
-                        fetch(`/api/tire/${tireId}/barcodes`, {
-                            method: 'DELETE',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ barcode_string: barcodeToDelete })
-                        })
-                        .then(response => response.json())
-                        .then(data => {
-                            if (data.success) {
-                                showBarcodeStatus(data.message, 'success');
-                                // Re-render the list (simple approach: reload page)
-                                window.location.reload();
-                                // Or, filter from 'tire_barcodes' array and call renderBarcodes
-                                // e.g., tire_barcodes = tire_barcodes.filter(item => item.barcode_string !== barcodeToDelete); renderBarcodes(tire_barcodes);
-                            } else {
-                                showBarcodeStatus(data.message, 'danger');
-                            }
-                        })
-                        .catch(error => {
-                            console.error('Error deleting barcode:', error);
-                            showBarcodeStatus('เกิดข้อผิดพลาดในการลบ Barcode ID', 'danger');
-                        });
-                    }
-                };
-            });
-        }
-
-        addDeleteBarcodeEventListeners(); // Attach event listeners on initial load
+        // Initial load of barcodes
+        fetchBarcodesAndRender();
     });
 </script>
 {% endblock %}

@@ -1,133 +1,137 @@
 {% extends 'base.html' %}
 
-{% block title %}รายการสินค้าที่ถูกลบ{% endblock %}
+{% block page_title %}รายการสินค้าที่ถูกลบ{% endblock %}
 
 {% block content %}
-<h2 class="text-danger">รายการสินค้าที่ถูกลบ (สำหรับ Admin)</h2>
+<div class="card shadow-sm">
+    <div class="card-header">
+        <h4 class="mb-0"><i class="fas fa-trash-alt me-2 text-danger"></i>รายการสินค้าที่ถูกลบ (สำหรับ Admin)</h4>
+    </div>
+    <div class="card-body">
+        <ul class="nav nav-tabs" id="deletedItemsTab" role="tablist">
+            <li class="nav-item" role="presentation">
+                <button class="nav-link active" id="tires-tab" data-bs-toggle="tab" data-bs-target="#deleted-tires-pane" type="button" role="tab" aria-controls="deleted-tires-pane" aria-selected="true">
+                    <i class="fas fa-tire me-2"></i>ยางที่ถูกลบ
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="wheels-tab" data-bs-toggle="tab" data-bs-target="#deleted-wheels-pane" type="button" role="tab" aria-controls="deleted-wheels-pane" aria-selected="false">
+                    <i class="fas fa-compact-disc me-2"></i>แม็กที่ถูกลบ
+                </button>
+            </li>
+        </ul>
 
-<div class="tabs">
-    <button class="tab-button active" data-tab="deleted_tires">ยางที่ถูกลบ</button>
-    <button class="tab-button" data-tab="deleted_wheels">แม็กที่ถูกลบ</button>
-</div>
+        <div class="tab-content pt-3" id="deletedItemsTabContent">
+            <div class="tab-pane fade show active" id="deleted-tires-pane" role="tabpanel" aria-labelledby="tires-tab">
+                <h5>ยางที่ถูกลบ</h5>
+                {% if deleted_tires %}
+                    <div class="table-responsive">
+                        <table class="table table-striped table-hover table-sm">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>ID</th>
+                                    <th>ยี่ห้อ</th>
+                                    <th>รุ่น</th>
+                                    <th>เบอร์ยาง</th>
+                                    <th>สต็อกเดิม</th>
+                                    <th>ปีผลิต</th>
+                                    <th class="text-center">จัดการ</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for tire in deleted_tires %}
+                                    <tr>
+                                        <td>{{ tire.id }}</td>
+                                        <td>{{ tire.brand }}</td>
+                                        <td>{{ tire.model }}</td>
+                                        <td>{{ tire.size }}</td>
+                                        <td>{{ tire.quantity }}</td>
+                                        <td>{{ tire.year_of_manufacture if tire.year_of_manufacture else '-' }}</td>
+                                        <td class="text-center">
+                                            <form action="{{ url_for('restore_tire_action', tire_id=tire.id) }}" method="POST" class="d-inline">
+                                                <button type="submit" class="btn btn-success btn-sm" onclick="return confirm('คุณต้องการกู้คืนยาง {{ tire.brand }} {{ tire.model }} {{ tire.size }} ใช่หรือไม่?');">
+                                                    <i class="fas fa-trash-restore me-1"></i>กู้คืน
+                                                </button>
+                                            </form>
+                                        </td>
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                {% else %}
+                    <div class="alert alert-info">ไม่พบยางที่ถูกลบ</div>
+                {% endif %}
+            </div>
 
-<div id="deleted_tires" class="tab-content active">
-    <h3>ยางที่ถูกลบ</h3>
-    {% if deleted_tires %}
-        <div class="table-responsive">
-            <table>
-                <thead>
-                    <tr>
-                        <th>ID</th>
-                        <th>ยี่ห้อยาง</th>
-                        <th>รุ่นยาง</th>
-                        <th>เบอร์ยาง</th>
-                        <th>สต็อกเดิม</th>
-                        <th>ปีผลิต</th>
-                        <th>จัดการ</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for tire in deleted_tires %}
-                        <tr>
-                            <td>{{ tire.id }}</td>
-                            <td>{{ tire.brand }}</td>
-                            <td>{{ tire.model }}</td>
-                            <td>{{ tire.size }}</td>
-                            <td>{{ tire.quantity }}</td>
-                            <td>{{ tire.year_of_manufacture if tire.year_of_manufacture else '-' }}</td>
-                            <td>
-                                <form action="{{ url_for('restore_tire_action', tire_id=tire.id) }}" method="POST" style="display:inline;">
-                                    <button type="submit" class="btn btn-success btn-small" onclick="return confirm('คุณต้องการกู้คืนยาง {{ tire.brand }} {{ tire.model }} {{ tire.size }} ใช่หรือไม่?');">
-                                        กู้คืน
-                                    </button>
-                                </form>
-                            </td>
-                        </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
+            <div class="tab-pane fade" id="deleted-wheels-pane" role="tabpanel" aria-labelledby="wheels-tab">
+                <h5>แม็กที่ถูกลบ</h5>
+                {% if deleted_wheels %}
+                    <div class="table-responsive">
+                        <table class="table table-striped table-hover table-sm">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>ID</th>
+                                    <th>ยี่ห้อ</th>
+                                    <th>ลาย</th>
+                                    <th>ขนาด</th>
+                                    <th>PCD</th>
+                                    <th>สต็อกเดิม</th>
+                                    <th class="text-center">จัดการ</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for wheel in deleted_wheels %}
+                                    <tr>
+                                        <td>{{ wheel.id }}</td>
+                                        <td>{{ wheel.brand }}</td>
+                                        <td>{{ wheel.model }}</td>
+                                        <td>{{ "%.1f"|format(wheel.diameter) }}x{{ "%.1f"|format(wheel.width) }}</td>
+                                        <td>{{ wheel.pcd }}</td>
+                                        <td>{{ wheel.quantity }}</td>
+                                        <td class="text-center">
+                                            <form action="{{ url_for('restore_wheel_action', wheel_id=wheel.id) }}" method="POST" class="d-inline">
+                                                <button type="submit" class="btn btn-success btn-sm" onclick="return confirm('คุณต้องการกู้คืนแม็ก {{ wheel.brand }} {{ wheel.model }} ขอบ {{ "%.1f"|format(wheel.diameter) }} ใช่หรือไม่?');">
+                                                    <i class="fas fa-trash-restore me-1"></i>กู้คืน
+                                                </button>
+                                            </form>
+                                        </td>
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                {% else %}
+                    <div class="alert alert-info">ไม่พบแม็กที่ถูกลบ</div>
+                {% endif %}
+            </div>
         </div>
-    {% else %}
-        <p>ไม่พบยางที่ถูกทำเครื่องหมายว่าถูกลบ</p>
-    {% endif %}
+    </div>
 </div>
+{% endblock %}
 
-<div id="deleted_wheels" class="tab-content">
-    <h3>แม็กที่ถูกลบ</h3>
-    {% if deleted_wheels %}
-        <div class="table-responsive">
-            <table>
-                <thead>
-                    <tr>
-                        <th>ID</th>
-                        <th>ยี่ห้อแม็ก</th>
-                        <th>ลาย</th>
-                        <th>ขนาด</th>
-                        <th>PCD</th>
-                        <th>สต็อกเดิม</th>
-                        <th>จัดการ</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for wheel in deleted_wheels %}
-                        <tr>
-                            <td>{{ wheel.id }}</td>
-                            <td>{{ wheel.brand }}</td>
-                            <td>{{ wheel.model }}</td>
-                            <td>{{ "%.1f"|format(wheel.diameter) }}x{{ "%.1f"|format(wheel.width) }}</td>
-                            <td>{{ wheel.pcd }}</td>
-                            <td>{{ wheel.quantity }}</td>
-                            <td>
-                                <form action="{{ url_for('restore_wheel_action', wheel_id=wheel.id) }}" method="POST" style="display:inline;">
-                                    <button type="submit" class="btn btn-success btn-small" onclick="return confirm('คุณต้องการกู้คืนแม็ก {{ wheel.brand }} {{ wheel.model }} ขอบ {{ "%.1f"|format(wheel.diameter) }} ใช่หรือไม่?');">
-                                        กู้คืน
-                                    </button>
-                                </form>
-                            </td>
-                        </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        </div>
-    {% else %}
-        <p>ไม่พบแม็กที่ถูกทำเครื่องหมายว่าถูกลบ</p>
-    {% endif %}
-</div>
-
+{% block scripts %}
 <script>
-    document.addEventListener('DOMContentLoaded', function() {
-        const tabButtons = document.querySelectorAll('.tab-button');
-        const tabContents = document.querySelectorAll('.tab-content');
-
-        function switchTab(tabId) {
-            tabContents.forEach(content => {
-                content.classList.remove('active');
-            });
-            tabButtons.forEach(button => {
-                button.classList.remove('active');
-            });
-
-            const targetContent = document.getElementById(tabId);
-            const targetButton = document.querySelector(`.tab-button[data-tab="${tabId}"]`);
-            if (targetContent) targetContent.classList.add('active');
-            if (targetButton) targetButton.classList.add('active');
-
-            history.pushState(null, '', `?tab=${tabId}`);
-        }
-
-        tabButtons.forEach(button => {
-            button.addEventListener('click', function() {
-                const tabId = this.dataset.tab;
-                switchTab(tabId);
+    // Optional: Script to update URL hash on tab switch for better navigation
+    document.addEventListener('DOMContentLoaded', function () {
+        const tabElms = document.querySelectorAll('button[data-bs-toggle="tab"]');
+        tabElms.forEach(function (tabElm) {
+            tabElm.addEventListener('shown.bs.tab', function (event) {
+                const url = new URL(window.location);
+                url.searchParams.set('tab', event.target.id);
+                window.history.pushState({}, '', url);
             });
         });
 
+        // On page load, check for tab parameter and activate it
         const urlParams = new URLSearchParams(window.location.search);
-        const activeTabFromUrl = urlParams.get('tab');
-        if (activeTabFromUrl) {
-            switchTab(activeTabFromUrl);
-        } else {
-            switchTab('deleted_tires'); 
+        const tabToActivate = urlParams.get('tab');
+        if (tabToActivate) {
+            const tabTrigger = document.querySelector(`#${tabToActivate}`);
+            if (tabTrigger) {
+                const bsTab = new bootstrap.Tab(tabTrigger);
+                bsTab.show();
+            }
         }
     });
 </script>

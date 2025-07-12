@@ -1,123 +1,117 @@
 {% extends 'base.html' %}
 
+{% block page_title %}รายละเอียดแม็ก: {{ wheel.brand }} {{ wheel.model }}{% endblock %}
+
 {% block content %}
-<h2>รายละเอียดแม็ก: {{ wheel.brand }} {{ wheel.model }} ({{ "%.1f"|format(wheel.diameter) }} นิ้ว)</h2>
+<h2 class="mb-4">รายละเอียดแม็ก: {{ wheel.brand }} {{ wheel.model }} ({{ "%.1f"|format(wheel.diameter) }} นิ้ว)</h2>
 
-<div class="form-section detail-page">
-    <div class="detail-image-container">
-        {% if wheel.image_filename %}
-            <img src="{{ wheel.image_filename }}" 
-                 alt="{{ wheel.brand }} {{ wheel.model }}" 
-                 class="img-fluid wheel-image">
-        {% else %}
-            <img src="{{ url_for('static', filename='images/placeholder.png') }}" 
-                 alt="No Image" 
-                 class="img-fluid wheel-image">
-            <p class="text-center text-muted mt-3">ไม่มีรูปภาพสำหรับแม็กนี้</p>
-        {% endif %}
-    </div>
-    
-    <div class="detail-info-container">
-        {# ใช้ div แทน p และเพิ่ม class เพื่อจัด Layout #}
-        <div class="wheel-specs-grid"> {# เพิ่ม div ใหม่สำหรับ grid/flexbox layout #}
-            <div class="spec-item"><strong>ยี่ห้อ:</strong> <span>{{ wheel.brand }}</span></div>
-            <div class="spec-item"><strong>ลาย (รุ่น):</strong> <span>{{ wheel.model }}</span></div>
-            <div class="spec-item"><strong>ขอบ:</strong> <span>{{ "%.1f"|format(wheel.diameter) }} นิ้ว</span></div>
-            <div class="spec-item"><strong>รู (PCD):</strong> <span>{{ wheel.pcd }}</span></div>
-            <div class="spec-item"><strong>กว้าง:</strong> <span>{{ "%.1f"|format(wheel.width) }} นิ้ว</span></div>
-            <div class="spec-item"><strong>ET (Offset):</strong> <span>{{ wheel.et if wheel.et is not none else '-' }}</span></div>
-            <div class="spec-item"><strong>สี:</strong> <span>{{ wheel.color if wheel.color is not none else '-' }}</span></div>
-            <div class="spec-item"><strong>จำนวนในสต็อก:</strong> <span class="badge bg-info">{{ wheel.quantity }} วง</span></div>
-        </div>
-
-        <hr class="my-4"> {# เพิ่มเส้นแบ่งเพื่อแยกข้อมูลสเปคกับราคา #}
-
-        <div class="wheel-prices-grid"> {# เพิ่ม div ใหม่สำหรับราคา #}
-            <div class="price-item">
-                <strong>ทุน:</strong>
-                {% if wheel.cost is not none %}
-                    <span>{{ "%.2f"|format(wheel.cost) }}</span>
+<div class="card shadow-sm mb-4">
+    <div class="card-body">
+        <div class="row g-4">
+            <div class="col-lg-4 text-center">
+                {% if wheel.image_filename %}
+                    <a href="{{ wheel.image_filename }}" target="_blank">
+                        <img src="{{ wheel.image_filename }}" alt="{{ wheel.brand }} {{ wheel.model }}" class="img-fluid rounded shadow-sm">
+                    </a>
                 {% else %}
-                    <span>ไม่ระบุ</span>
+                    <div class="d-flex align-items-center justify-content-center bg-light rounded text-muted" style="min-height: 250px;">
+                        <i class="fas fa-image fa-4x"></i>
+                    </div>
+                    <p class="text-center text-muted mt-2">ไม่มีรูปภาพ</p>
                 {% endif %}
             </div>
-            <div class="price-item"><strong>ทุน Online:</strong> <span>{{ "%.2f"|format(wheel.cost_online) if wheel.cost_online is not none else '-' }}</span></div>
-            <div class="price-item"><strong>ราคาขายส่ง 1:</strong> <span>{{ "%.2f"|format(wheel.wholesale_price1) if wheel.wholesale_price1 is not none else '-' }}</span></div>
-            <div class="price-item"><strong>ราคาขายส่ง 2:</strong> <span>{{ "%.2f"|format(wheel.wholesale_price2) if wheel.wholesale_price2 is not none else '-' }}</span></div>
-            <div class="price-item main-price"><strong>ราคาขายปลีก:</strong> <span>{{ "%.2f"|format(wheel.retail_price) }}</span></div>
-        </div>
+            <div class="col-lg-8">
+                <h4>คุณสมบัติ</h4>
+                <div class="row g-3">
+                    <div class="col-md-6"><strong>ยี่ห้อ:</strong> <span>{{ wheel.brand }}</span></div>
+                    <div class="col-md-6"><strong>ลาย (รุ่น):</strong> <span>{{ wheel.model }}</span></div>
+                    <div class="col-md-6"><strong>ขอบ:</strong> <span>{{ "%.1f"|format(wheel.diameter) }} นิ้ว</span></div>
+                    <div class="col-md-6"><strong>กว้าง:</strong> <span>{{ "%.1f"|format(wheel.width) }} นิ้ว</span></div>
+                    <div class="col-md-6"><strong>รู (PCD):</strong> <span>{{ wheel.pcd }}</span></div>
+                    <div class="col-md-6"><strong>ET (Offset):</strong> <span>{{ wheel.et if wheel.et is not none else '-' }}</span></div>
+                    <div class="col-md-6"><strong>สี:</strong> <span>{{ wheel.color if wheel.color is not none else '-' }}</span></div>
+                    <div class="col-md-6"><strong>จำนวนในสต็อก:</strong> <span class="badge text-bg-info fs-6">{{ wheel.quantity }} วง</span></div>
+                </div>
 
-        <div class="btn-group" style="justify-content: flex-start; margin-top: 20px;">
-            <a href="{{ url_for('edit_wheel', wheel_id=wheel.id) }}" class="btn btn-warning">แก้ไขข้อมูลแม็ก</a>
+                <hr class="my-4">
+                <h4>ราคา</h4>
+                <div class="row g-3">
+                    <div class="col-6 col-lg-3"><strong>ทุน:</strong> <span>{{ "%,.2f"|format(wheel.cost) if wheel.cost is not none else '-' }}</span></div>
+                    <div class="col-6 col-lg-3"><strong>ทุน Online:</strong> <span>{{ "%,.2f"|format(wheel.cost_online) if wheel.cost_online is not none else '-' }}</span></div>
+                    <div class="col-6 col-lg-3"><strong>ขายส่ง 1:</strong> <span>{{ "%,.2f"|format(wheel.wholesale_price1) if wheel.wholesale_price1 is not none else '-' }}</span></div>
+                    <div class="col-6 col-lg-3"><strong>ขายส่ง 2:</strong> <span>{{ "%,.2f"|format(wheel.wholesale_price2) if wheel.wholesale_price2 is not none else '-' }}</span></div>
+                    <div class="col-12 mt-3">
+                        <strong class="fs-5">ราคาขายปลีก:</strong> 
+                        <span class="fs-4 text-primary fw-bold">{{ '{:,.2f}'.format(wheel.retail_price) }} บาท</span>
+                    </div>
+                </div>
+                
+                <div class="mt-4">
+                    <a href="{{ url_for('edit_wheel', wheel_id=wheel.id) }}" class="btn btn-warning"><i class="fas fa-edit me-2"></i>แก้ไขข้อมูลแม็ก</a>
+                </div>
+            </div>
         </div>
     </div>
 </div>
 
-{# ส่วนเพิ่ม/แสดงข้อมูลรถยนต์ที่รองรับยังคงเดิม #}
-<div class="form-section" style="margin-top: 2rem;">
-    <h3>เพิ่มข้อมูลรถยนต์ที่รองรับ</h3>
-    <form action="{{ url_for('add_fitment', wheel_id=wheel.id) }}" method="post">
-        <div class="form-row">
-            <div class="form-group third-width">
-                <label for="fitment_brand">ยี่ห้อรถ: <span style="color:red;">*</span></label>
-                <input type="text" id="fitment_brand" name="brand" required>
+<div class="card shadow-sm mb-4">
+    <div class="card-header">
+        <h5 class="mb-0">เพิ่มข้อมูลรถยนต์ที่รองรับ</h5>
+    </div>
+    <div class="card-body">
+        <form action="{{ url_for('add_fitment', wheel_id=wheel.id) }}" method="post">
+            <div class="row g-3 align-items-end">
+                <div class="col-md-3"><label for="fitment_brand" class="form-label">ยี่ห้อรถ*</label><input type="text" class="form-control" id="fitment_brand" name="brand" required></div>
+                <div class="col-md-3"><label for="fitment_model" class="form-label">รุ่นรถ*</label><input type="text" class="form-control" id="fitment_model" name="model" required></div>
+                <div class="col-md-2"><label for="fitment_year_start" class="form-label">ปีเริ่มต้น*</label><input type="number" class="form-control" id="fitment_year_start" name="year_start" min="1900" max="{{ get_bkk_time().year + 5 }}" required></div>
+                <div class="col-md-2"><label for="fitment_year_end" class="form-label">ปีสิ้นสุด</label><input type="number" class="form-control" id="fitment_year_end" name="year_end" min="1900" max="{{ get_bkk_time().year + 5 }}"></div>
+                <div class="col-md-2"><button type="submit" class="btn btn-primary w-100">เพิ่ม</button></div>
             </div>
-            <div class="form-group third-width">
-                <label for="fitment_model">รุ่นรถ: <span style="color:red;">*</span></label>
-                <input type="text" id="fitment_model" name="model" required>
-            </div>
-            <div class="form-group third-width">
-                <label for="fitment_year_start">ปีเริ่มต้น: <span style="color:red;">*</span></label>
-                <input type="number" id="fitment_year_start" name="year_start" min="1900" max="{{ current_year + 5 }}" required>
-            </div>
-        </div>
-        <div class="form-row">
-            <div class="form-group third-width">
-                <label for="fitment_year_end">ปีสิ้นสุด (ถ้ามี):</label>
-                <input type="number" id="fitment_year_end" name="year_end" min="1900" max="{{ current_year + 5 }}">
-            </div>
-        </div>
-        <button type="submit" class="btn btn-primary">เพิ่มการรองรับ</button>
-    </form>
+        </form>
+    </div>
 </div>
 
-<div class="form-section">
-    <h3>รถยนต์ที่รองรับ</h3>
-    {% if fitments %}
-    <div class="table-responsive">
-        <table>
-            <thead>
-                <tr>
-                    <th>ยี่ห้อรถ</th>
-                    <th>รุ่นรถ</th>
-                    <th>ปีเริ่มต้น</th>
-                    <th>ปีสิ้นสุด</th>
-                    <th>การดำเนินการ</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for fitment in fitments %}
+<div class="card shadow-sm">
+    <div class="card-header">
+        <h5 class="mb-0">รถยนต์ที่รองรับ</h5>
+    </div>
+    <div class="card-body">
+        {% if fitments %}
+        <div class="table-responsive">
+            <table class="table table-striped table-hover table-sm">
+                <thead class="table-light">
                     <tr>
-                        <td>{{ fitment.brand }}</td>
-                        <td>{{ fitment.model }}</td>
-                        <td>{{ fitment.year_start }}</td>
-                        <td>{{ fitment.year_end if fitment.year_end else '-' }}</td>
-                        <td class="action-buttons">
-                            <form action="{{ url_for('delete_fitment', fitment_id=fitment.id, wheel_id=wheel.id) }}" method="post" onsubmit="return confirm('คุณแน่ใจหรือไม่ว่าต้องการลบข้อมูลการรองรับนี้?');" style="display:inline;">
-                                <button type="submit" class="btn btn-danger btn-small">ลบ</button>
-                            </form>
-                        </td>
+                        <th>ยี่ห้อรถ</th>
+                        <th>รุ่นรถ</th>
+                        <th class="text-center">ปีเริ่มต้น</th>
+                        <th class="text-center">ปีสิ้นสุด</th>
+                        <th class="text-center">จัดการ</th>
                     </tr>
-                {% endfor %}
-            </tbody>
-        </table>
+                </thead>
+                <tbody>
+                    {% for fitment in fitments %}
+                        <tr>
+                            <td>{{ fitment.brand }}</td>
+                            <td>{{ fitment.model }}</td>
+                            <td class="text-center">{{ fitment.year_start }}</td>
+                            <td class="text-center">{{ fitment.year_end if fitment.year_end else '-' }}</td>
+                            <td class="text-center">
+                                <form action="{{ url_for('delete_fitment', fitment_id=fitment.id, wheel_id=wheel.id) }}" method="post" onsubmit="return confirm('ยืนยันการลบ?');" class="d-inline">
+                                    <button type="submit" class="btn btn-danger btn-sm" title="ลบ"><i class="fas fa-trash-alt"></i></button>
+                                </form>
+                            </td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="alert alert-info text-center">ยังไม่มีข้อมูลรถยนต์ที่รองรับสำหรับแม็กนี้</div>
+        {% endif %}
     </div>
-{% else %}
-    <p>ยังไม่มีข้อมูลรถยนต์ที่รองรับสำหรับแม็กนี้</p>
-    {% endif %}
-
-<div class="back-link">
-    <a href="{{ url_for('index', tab='wheels') }}" class="btn btn-secondary">กลับไปหน้าสต็อกแม็ก</a>
 </div>
 
+<div class="mt-4">
+    <a href="{{ url_for('index', tab='wheels') }}" class="btn btn-secondary"><i class="fas fa-arrow-left me-2"></i>กลับไปหน้าสต็อกแม็ก</a>
+</div>
 {% endblock %}

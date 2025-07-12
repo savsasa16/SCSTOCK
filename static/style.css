@@ -1,1265 +1,160 @@
+/* --- Root Variables (ตัวแปรสำหรับปรับแต่งดีไซน์) --- */
 :root {
     /* Colors */
-    --primary-color: #3498db; /* Blue */
-    --primary-dark: #2980b9;
-
-    --secondary-color: #2ecc71; /* Green: นี่คือสีเขียวที่คุณใช้สำหรับ secondary */
-    --secondary-dark: #27ae60; /* เขียวเข้มสำหรับ Secondary Hover */
-
-    --success-color: #28a745; /* <--- กำหนดสีเขียวที่ชัดเจนสำหรับปุ่มสำเร็จ */
-    --success-dark: #218838;  /* <--- สีเขียวเข้มสำหรับ hover ของปุ่มสำเร็จ */
-
-    --accent-color: #f39c12; /* Orange */
-    
-    --danger-color: #e74c3c; /* Red: สำหรับปุ่มอันตราย หรือข้อความเตือน */
-    --danger-dark: #c0392b;
-
-    --gray-color: #6c757d;    /* <--- เพิ่มสีเทาสำหรับปุ่ม Secondary ถ้าต้องการให้เป็นสีเทา */
-    --gray-dark: #5a6268;     /* <--- เทาเข้มสำหรับ hover ของปุ่ม Secondary */
+    --bs-primary-rgb: 52, 152, 219; /* Override Bootstrap Primary (Blue) */
+    --bs-secondary-rgb: 108, 117, 125; /* Override Bootstrap Secondary (Gray) */
+    --bs-success-rgb: 40, 167, 69;   /* Override Bootstrap Success (Green) */
+    --bs-danger-rgb: 220, 53, 69;    /* Override Bootstrap Danger (Red) */
+    --bs-info-rgb: 0, 180, 245;      /* Override Bootstrap Info (Sky Blue for Promo) */
 
     --text-dark: #2c3e50;
-    --text-light: #555;
-    --text-white: #ffffff;
-    --text-muted: #7f8c8d;
-
-    --bg-light: #f9fbfd;
-    --bg-white: #ffffff;
-    --bg-hover-light: #eaf2f8;
-    --bg-stripe: #fdfdfd;
-
-    /* Borders & Shadows */
-    --border-color: #e0e0e0; /* Standard border */
-    --border-color-light: #f0f0f0; /* Lighter border for subtle divisions */
+    --bg-light: #f9fafd;
+    --border-color: #dee2e6;
     --shadow-light: 0 2px 8px rgba(0, 0, 0, 0.08);
-    --shadow-medium: 0 5px 15px rgba(0, 0, 0, 0.1);
-    --shadow-strong: 0 8px 25px rgba(0, 0, 0, 0.15);
-
-    /* Spacing */
-    --spacing-xs: 5px;
-    --spacing-sm: 10px;
-    --spacing-md: 15px;
-    --spacing-lg: 20px;
-    --spacing-xl: 30px;
-    --spacing-xxl: 40px;
 
     /* Border Radii */
-    --border-radius-sm: 4px;
-    --border-radius-md: 16px; /* เปลี่ยนจาก 8px เป็น 16px เพื่อให้โค้งมนมากขึ้น */
-    --border-radius-lg: 12px;
-    --border-radius-xl: 16px;
+    --bs-border-radius: 0.5rem;      /* 8px */
+    --bs-border-radius-sm: 0.25rem;  /* 4px */
+    --bs-border-radius-lg: 1rem;       /* 16px */
+    --bs-border-radius-xl: 1.25rem;
 
     /* Transitions */
     --transition-speed: 0.3s;
     --transition-ease: ease;
-    --transition-bounce: cubic-bezier(0.68, -0.55, 0.27, 1.55);
-
-    /* Font Sizes (Base & Heading Scale) */
-    --font-size-base: 16px;
-    --font-size-sm: 0.9em;
-    --font-size-lg: 1.15em;
-    --font-size-h1: 2.5em; /* clamp for fluid typography */
-    --font-size-h2: 2.2em;
-    --font-size-h3: 1.8em;
-    --font-size-h4: 1.4em;
 }
 
 /* --- Base Typography & Layout --- */
-html {
-    box-sizing: border-box; /* Ensures padding and border are included in element's total width and height */
-}
-
-*, *::before, *::after {
-    box-sizing: inherit; /* Inherit box-sizing for all elements */
-}
-
 body {
-    font-family: 'Prompt', sans-serif, 'Segoe UI', Tahoma, Geneva, Verdana;
-    margin: 0;
-    padding: 0;
+    font-family: 'Prompt', sans-serif;
     background-color: var(--bg-light);
-    color: var(--text-light);
-    line-height: 1.6; /* Slightly tighter line height for better readability */
-    font-size: var(--font-size-base);
-    -webkit-font-smoothing: antialiased; /* Smoother fonts on WebKit */
-    -moz-osx-font-smoothing: grayscale; /* Smoother fonts on Firefox */
+    color: #555;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
 }
 
-.container {
-    max-width: 1300px; /* Slightly wider max-width */
-    margin: var(--spacing-xl) auto; /* Top/bottom margin, auto left/right */
-    padding: var(--spacing-xxl); /* Generous padding */
-    background-color: var(--bg-white);
-    border-radius: var(--border-radius-lg);
-    box-shadow: var(--shadow-medium);
-    transition: all var(--transition-speed) var(--transition-ease);
-}
-
-h1, h2, h3, h4 {
-    color: var(--text-dark);
-    margin-bottom: var(--spacing-lg);
+/* --- Custom Component Styles (ใช้ร่วมกัน) --- */
+.custom-tabs .nav-link {
     font-weight: 600;
-    line-height: 1.2;
 }
-
-h1 { font-size: clamp(2em, 5vw, var(--font-size-h1)); } /* Fluid font size for H1 */
-h2 {
-    font-size: clamp(1.8em, 4vw, var(--font-size-h2)); /* Fluid font size for H2 */
-    border-bottom: 2px solid var(--border-color);
-    padding-bottom: var(--spacing-sm);
-    margin-top: var(--spacing-xxl);
-}
-h3 {
-    font-size: clamp(1.5em, 3.5vw, var(--font-size-h3)); /* Fluid font size for H3 */
-    margin-top: var(--spacing-xl);
-    margin-bottom: var(--spacing-md);
-}
-h4 {
-    font-size: clamp(1.2em, 3vw, var(--font-size-h4)); /* Fluid font size for H4 */
-    margin-top: var(--spacing-lg);
-    margin-bottom: var(--spacing-sm);
-    color: var(--primary-dark); /* Highlight brands */
-}
-
-
-/* --- Navigation Bar --- */
-.navbar {
-    background-color: var(--text-dark);
-    padding: var(--spacing-md) var(--spacing-xl);
-    box-shadow: var(--shadow-medium);
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    flex-wrap: wrap; /* Allow wrapping on smaller screens */
-    gap: var(--spacing-md); /* Gap between brand and links */
-}
-
-.navbar-brand a {
-    color: var(--text-white);
-    text-decoration: none;
-    font-size: 1.5em;
-    font-weight: 700;
-    padding: 0; /* Remove default link padding */
-}
-
-.navbar-brand a:hover {
-    background-color: transparent; /* No background change on hover for brand */
-    transform: none; /* No transform on hover for brand */
-    color: var(--primary-color); /* Just color change */
-}
-
-.navbar-links {
-    display: flex;
-    flex-wrap: wrap; /* Allow links to wrap */
-    gap: var(--spacing-sm); /* Gap between links */
-    align-items: center;
-    margin-left: auto; /* Push links to the right */
-}
-
-.navbar-links a {
-    color: var(--text-white);
-    text-decoration: none;
-    padding: var(--spacing-sm) var(--spacing-md);
-    border-radius: var(--border-radius-sm);
-    transition: background-color var(--transition-speed) var(--transition-ease), transform 0.2s var(--transition-ease);
-    font-weight: 500;
-    font-size: var(--font-size-sm); /* Slightly smaller font for more links */
-}
-
-.navbar-links a:hover {
-    background-color: var(--primary-dark);
-    transform: translateY(-2px);
-}
-
-.navbar-links .user-info {
-    color: rgba(255, 255, 255, 0.8);
-    font-size: var(--font-size-sm);
-    margin-left: var(--spacing-md);
-    white-space: nowrap; /* Prevent username from breaking */
-}
-
-/* --- Flash Messages --- */
-.flash-messages {
-    list-style: none;
-    padding: 0;
-    margin: var(--spacing-lg) 0;
-    width: 100%;
-    box-sizing: border-box;
-}
-
-.flash-message {
-    padding: var(--spacing-md) var(--spacing-lg);
-    margin-bottom: var(--spacing-sm);
-    border-radius: var(--border-radius-md);
-    font-weight: 500;
-    color: var(--text-white);
-    box-shadow: var(--shadow-light);
-    display: flex;
-    align-items: center;
-    opacity: 1; /* Initial opacity for transition */
-    transition: opacity 0.6s ease-out, height 0.6s ease-out, padding 0.6s ease-out, margin-bottom 0.6s ease-out;
-}
-
-.flash-message::before {
-    font-family: 'Font Awesome 5 Free';
-    font-weight: 900;
-    margin-right: var(--spacing-sm);
-    font-size: 1.2em;
-    flex-shrink: 0; /* Prevent icon from shrinking */
-}
-
-.flash-messages .success { background-color: var(--secondary-color); }
-.flash-messages .success::before { content: '\f00c'; } /* check-circle */
-
-.flash-messages .error, .flash-messages .danger { background-color: var(--danger-color); }
-.flash-messages .error::before, .flash-messages .danger::before { content: '\f06a'; } /* exclamation-circle */
-
-.flash-messages .warning { background-color: var(--accent-color); color: var(--text-dark); }
-.flash-messages .warning::before { content: '\f071'; } /* exclamation-triangle */
-
-.flash-messages .info { background-color: var(--primary-color); }
-.flash-messages .info::before { content: '\f05a'; } /* info-circle */
-
-
-/* --- Tabs Styling --- */
-.tabs {
-    display: flex;
-    margin-bottom: var(--spacing-sm);
-    border-bottom: 2px solid var(--border-color);
-    overflow-x: auto; /* Allow horizontal scroll for many tabs */
-    -webkit-overflow-scrolling: touch;
-    white-space: nowrap; /* Keep tab buttons on one line */
-}
-
-.tab-button {
-    background-color: var(--bg-white);
-    border: none;
-    padding: var(--spacing-md) var(--spacing-xl);
-    cursor: pointer;
-    font-size: var(--font-size-lg);
+.brand-group-container .brand-header {
     font-weight: 600;
-    color: var(--text-light);
-    border-top-left-radius: var(--border-radius-md);
-    border-top-right-radius: var(--border-radius-md);
-    transition: all var(--transition-speed) var(--transition-ease);
-    outline: none;
-    flex-shrink: 0; /* Prevent shrinking when many tabs */
+    font-size: 1.1rem;
 }
-
-.tab-button:hover {
-    background-color: var(--bg-hover-light);
-    color: var(--primary-color);
+.summary-row td {
+    font-weight: bold;
 }
-
-.tab-button.active {
-    background-color: var(--primary-color);
-    color: var(--text-white);
-    border-bottom: 2px solid var(--primary-color); /* Overlap border */
-    box-shadow: var(--shadow-light);
-    transform: translateY(-2px);
+.summary-row .summary-brand-text {
+    font-size: 1.05em;
 }
-
-.tab-content {
-    /* display: none; */ /* <--- ลบบรรทัดนี้ออก หรือคอมเมนต์มันไปเลย */
-    padding: var(--spacing-xl) var(--spacing-lg); /* ปรับ padding */
-    border-radius: var(--border-radius-md);
-    box-shadow: var(--shadow-light);
-    border: 1px solid var(--border-color);
-    margin-bottom: var(--spacing-xxl); /* ระยะห่างด้านล่างของ tab content */
-}
-
-.tab-content.active {
-    display: block;
-}
-
-/* --- Form Styles --- */
-.form-section {
-    background-color: var(--bg-white);
-    padding: var(--spacing-xl);
-    border-radius: var(--border-radius-md);
-    box-shadow: var(--shadow-light);
-    margin-bottom: var(--spacing-xxl);
-    border: 1px solid var(--border-color);
-}
-
-.form-row {
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--spacing-xl); /* Generous gap between form groups */
-    margin-bottom: var(--spacing-lg);
-    align-items: flex-end; /* Align labels and inputs */
-}
-
-.form-group {
-    flex: 1; /* Allows it to grow and shrink */
-    min-width: 280px; /* Increased min-width for better input display */
-    margin-bottom: var(--spacing-md);
-}
-
-.form-group.half-width {
-    flex-basis: calc(50% - (var(--spacing-xl) / 2)); /* Account for gap */
-}
-
-.form-group.quarter-width {
-    flex-basis: calc(25% - (var(--spacing-xl) * 3 / 4)); /* Account for gap */
-}
-
-label {
-    display: block;
-    margin-bottom: var(--spacing-xs);
-    font-weight: 600;
-    color: var(--text-dark);
-    font-size: var(--font-size-sm);
-}
-
-input[type="text"],
-input[type="number"],
-input[type="email"],
-input[type="password"],
-input[type="date"],
-input[type="file"],
-select,
-textarea {
-    width: 100%;
-    padding: var(--spacing-sm) var(--spacing-md);
-    border: 1px solid var(--border-color);
-    border-radius: var(--border-radius-md);
-    box-sizing: border-box; /* Ensure padding and border are included in width */
-    font-size: var(--font-size-base);
-    color: var(--text-dark);
-    background-color: #fcfcfc;
-    transition: border-color var(--transition-speed) var(--transition-ease), box-shadow var(--transition-speed) var(--transition-ease);
-}
-
-input[type="text"]:focus, input[type="number"]:focus, input[type="email"]:focus,
-input[type="password"]:focus, input[type="date"]:focus, input[type="file"]:focus,
-select:focus, textarea:focus {
-    border-color: var(--primary-color);
-    outline: none; /* Remove default outline */
-    box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.25); /* Custom focus indicator */
-}
-
-
-/* --- Buttons --- */
-.btn {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    padding: var(--spacing-sm) var(--spacing-xl);
-    border: none;
-    border-radius: var(--border-radius-md);
-    cursor: pointer;
-    font-size: var(--font-size-base);
-    font-weight: 600;
-    text-align: center;
-    text-decoration: none;
-    transition: all var(--transition-speed) var(--transition-ease);
-    min-width: 130px; /* Slightly wider minimum width for consistency */
-    white-space: nowrap; /* Prevent button text from breaking */
-}
-
-.btn i {
-    margin-right: var(--spacing-sm);
-    font-size: 1.1em; /* Slightly larger icon */
-}
-
-.btn-primary { background-color: var(--primary-color); color: var(--text-white); }
-.btn-primary:hover { background-color: var(--primary-dark); transform: translateY(-2px); box-shadow: var(--shadow-medium); }
-
-.btn-danger {
-	background-color: var(--danger-color); color: var(--text-white); }
-.btn-danger:hover { background-color: var(--danger-dark); transform: translateY(-2px); box-shadow: var(--shadow-medium); }
-
-.btn-success {
-	background-color: var(--success-color); /* แก้ไข: ใช้สีเขียวที่ถูกต้อง */
-	color: var(--text-white);
-	border: none;
-}
-
-.btn-secondary {
-    background-color: var(--gray-color); /* <--- ใช้ gray-color ที่ประกาศใน :root เพื่อให้เป็นสีเทา */
-    color: var(--text-white);
-    border: none;
-}
-
-.btn-secondary:hover {
-    background-color: var(--gray-dark);
-}
-
-.btn-success:hover {
-	background-color: var(--success-dark);
-}
-
-.btn-outline { background-color: transparent; border: 2px solid var(--primary-color); color: var(--primary-color); }
-.btn-outline:hover { background-color: var(--primary-color); color: var(--text-white); transform: translateY(-2px); box-shadow: var(--shadow-medium); }
-
-.btn-sm {
-    padding: var(--spacing-xs) var(--spacing-md);
-    font-size: var(--font-size-sm);
-    min-width: unset; /* Remove min-width for small buttons */
-}
-.btn-sm i {
-    margin-right: var(--spacing-xs);
-}
-
-/* --- เพิ่มเติมสำหรับปุ่มแก้ไขและลบในตาราง --- */
-.btn-warning.btn-small { /* ปุ่มแก้ไข */
-    background-color: var(--accent-color); /* สีส้ม */
-    color: var(--text-white); /* เปลี่ยนเป็นสีขาวตามที่ต้องการ */
-    border: 1px solid var(--accent-color);
-    border-radius: var(--border-radius-md); /* ใช้ค่าจาก global variable */
-    padding: 5px 10px;
-    font-size: 0.85em;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    min-width: 70px; /* กำหนดความกว้างขั้นต่ำเพื่อให้ปุ่มมีขนาดใกล้เคียงกัน */
-    transition: all var(--transition-speed) var(--transition-ease);
-}
-.btn-warning.btn-small:hover {
-    background-color: #e09200; /* ส้มเข้มขึ้นเมื่อ hover */
-    border-color: #e09200;
-    transform: translateY(-1px);
-    box-shadow: var(--shadow-light);
-}
-.btn-warning.btn-small i {
-    margin-right: 5px; /* ระยะห่างระหว่างไอคอนกับข้อความ */
-}
-
-/* .btn-danger-small ถูกกำหนดไว้ใน daily_stock_report.html แล้ว */
-/* แต่เราจะย้ายมาไว้ที่นี่เพื่อให้เป็นส่วนหนึ่งของ style.css หลัก */
-/* และเพิ่มไอคอนให้ด้วย */
-.btn-danger-small {
-    background-color: var(--danger-color); /* สีแดง */
-    color: var(--text-white);
-    padding: 5px 10px;
-    font-size: 0.85em;
-    border: 1px solid var(--danger-color);
-    border-radius: var(--border-radius-md); /* ใช้ค่าจาก global variable */
-    text-decoration: none;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    min-width: 70px; /* กำหนดความกว้างขั้นต่ำเพื่อให้ปุ่มมีขนาดใกล้เคียงกัน */
-    transition: all var(--transition-speed) var(--transition-ease);
-}
-.btn-danger-small:hover {
-    background-color: var(--danger-dark); /* สีแดงเข้มขึ้นเมื่อ hover */
-    border-color: var(--danger-dark);
-    transform: translateY(-1px);
-    box-shadow: var(--shadow-light);
-}
-.btn-danger-small i {
-    margin-right: 5px; /* ระยะห่างระหว่างไอคอนกับข้อความ */
-}
-
-
-/* --- Table Styles --- */
-.table-responsive {
-    overflow-x: auto; /* Enables horizontal scrolling for tables */
-    margin-top: var(--spacing-xl);
-    box-shadow: var(--shadow-light);
-    border-radius: var(--border-radius-md);
-    background-color: var(--bg-white);
-    border: 1px solid var(--border-color);
-    -webkit-overflow-scrolling: touch; /* Smooth scrolling on iOS */
-}
-
-table {
-    width: 100%;
-    border-collapse: separate;
-    border-spacing: 0;
-    min-width: 900px; /* UPDATED: Increased min-width for tables to ensure content fits */
-    font-size: var(--font-size-sm); /* Slightly smaller font for table data */
-}
-
-th, td {
-    padding: var(--spacing-md) var(--spacing-lg);
-    text-align: left;
-    border-bottom: 1px solid var(--border-color-light); /* Lighter border for rows */
-    white-space: nowrap; /* Ensure text in all cells stays on one line */
-    overflow: hidden; /* Hide overflowing text */
-    text-overflow: ellipsis; /* Add ellipsis for overflowing text */
-}
-
-th {
-    background-color: #f8f8f8;
-    color: var(--text-dark);
-    font-weight: 600;
-    text-transform: uppercase;
-    font-size: 0.9em; /* Slightly smaller font for headers to save space */
-    position: sticky;
-    top: 0;
-    z-index: 1;
-    white-space: nowrap; /* FIXED: Prevent header text from breaking */
-    word-break: normal; /* FIXED: Ensure normal word breaking, not character breaking */
-}
-
-tr:nth-child(even) { background-color: var(--bg-stripe); } /* zebra striping */
-tr:hover { background-color: var(--bg-hover-light); } /* Hover effect */
-
-td.action-buttons {
-    display: flex;
-    gap: 5px;
-    flex-wrap: nowrap; /* Ensure buttons stay on one line */
-    min-width: 120px; /* Ensure enough space for buttons */
-}
-
-/* Specific styling for quantity column */
-td .text-danger { color: var(--danger-color); font-weight: 600; }
-td .text-warning { color: var(--accent-color); font-weight: 600; }
-
 .promo-badge {
-    background-color: var(--secondary-color);
-    color: var(--text-white);
-    padding: 3px 8px;
-    border-radius: var(--border-radius-sm);
-    font-size: 0.8em;
     font-weight: 600;
-    white-space: nowrap;
-    display: inline-block; /* Ensure padding works */
+    cursor: help;
 }
-
-.price-for-4.promo-price {
-    color: var(--danger-color); /* Red for discounted price */
-    font-weight: 600;
-}
-
-
-/* --- Links --- */
-a {
-    color: var(--primary-color);
-    text-decoration: none;
-    transition: color var(--transition-speed) var(--transition-ease);
-}
-a:hover {
-    color: var(--primary-dark);
-    text-decoration: underline;
-}
-
-/* --- No data message --- */
-p.no-data {
-    text-align: center;
-    padding: var(--spacing-xl);
-    color: var(--text-muted);
-    font-style: italic;
-    background-color: #f0f0f0;
-    border-radius: var(--border-radius-md);
-    margin-top: var(--spacing-lg);
-}
-
-
-/* --- Responsive Adjustments (Mobile First Approach) --- */
-
-/* Extra small devices (phones, 320px and up) */
-@media (max-width: 480px) {
-    body { font-size: 14px; }
-    .container { margin: var(--spacing-sm); padding: var(--spacing-md); }
-    h1 { font-size: 1.8em; }
-    h2 { font-size: 1.5em; margin-top: var(--spacing-xl); }
-    h3 { font-size: 1.3em; margin-top: var(--spacing-lg); }
-    .navbar { padding: var(--spacing-sm); flex-direction: column; align-items: flex-start; }
-    .navbar-links { width: 100%; justify-content: space-around; margin-left: 0; }
-    .navbar-links a { padding: var(--spacing-xs) var(--spacing-sm); font-size: 0.85em; flex-basis: auto; }
-    .navbar-links .user-info { margin: var(--spacing-sm) 0; text-align: center; width: 100%; }
-    .flash-message { padding: var(--spacing-sm) var(--spacing-md); font-size: 0.9em; }
-    .flash-message::before { font-size: 1em; }
-    .tabs { flex-wrap: wrap; justify-content: center; }
-    .tab-button { flex: 1 1 45%; font-size: 0.95em; padding: var(--spacing-sm) var(--spacing-md); margin-bottom: var(--spacing-xs); }
-    .form-section { padding: var(--spacing-md); }
-    .form-row { flex-direction: column; gap: var(--spacing-md); }
-    .form-group, .form-group.half-width, .form-group.quarter-width {
-        flex-basis: 100%; min-width: unset; margin-bottom: var(--spacing-md);
-    }
-    input[type="text"], input[type="number"], select, textarea { padding: var(--spacing-sm); }
-    .btn { padding: var(--spacing-sm) var(--spacing-md); font-size: 0.9em; min-width: unset; }
-    th, td { padding: var(--spacing-sm) var(--spacing-md); font-size: 0.8em; }
-    td.action-buttons {
-        flex-direction: column; /* Stack buttons vertically for smaller screens */
-        min-width: 80px; /* ลด min-width สำหรับหน้าจอมือถือ */
-        padding: 5px; /* ลด padding */
-    }
-    .btn-small {
-        padding: 4px 6px; /* ลด padding ปุ่มให้เล็กลงอีก */
-        font-size: 0.75em; /* ลดขนาด font ปุ่ม */
-        min-width: unset;
-    }
-    .btn-small i {
-        margin-right: 3px; /* ลดระยะห่างไอคอน */
-    }
-
-    /* ปรับความกว้างคอลัมน์ในตารางสำหรับหน้าจอเล็กมาก */
-    .report-section table th:nth-child(1), .report-section table td:nth-child(1) { width: 60px; } /* เวลา */
-    .report-section table th:nth-child(2), .report-section table td:nth-child(2) { width: 60px; } /* ประเภท */
-    .report-section table th:nth-child(3), .report-section table td:nth-child(3) { width: 40px; } /* จำนวน */
-    .report-section table th:nth-child(4), .report-section table td:nth-child(4) { width: 50px; } /* คงเหลือ */
-    .report-section table th:nth-child(5), .report-section table td:nth-child(5) { width: 80px; } /* ยี่ห้อ */
-    .report-section table th:nth-child(6), .report-section table td:nth-child(6) { width: 90px; } /* รุ่น/ลาย */
-    .report-section table th:nth-child(7), .report-section table td:nth-child(7) { width: 90px; } /* เบอร์ยาง/ขอบ */
-    .report-section table th:nth-child(8), .report-section table td:nth-child(8) { width: 120px; } /* หมายเหตุ */
-    .report-section table th:nth-child(9), .report-section table td:nth-child(9) { width: 70px; } /* พนักงาน */
-    .report-section table th:nth-child(10), .report-section table td:nth-child(10) { width: 70px; } /* หลักฐาน */
-    .report-section table th:last-child, .report-section table td:last-child { width: 100px; } /* จัดการ (ปรับให้พอดี 2 ปุ่มแนวตั้ง) */
-
-    /* สำหรับตารางแม็ก เพิ่ม ET และ สี */
-    .report-section table:last-of-type th:nth-child(7), .report-section table:last-of-type td:nth-child(7) { width: 50px; } /* ขอบ */
-    .report-section table:last-of-type th:nth-child(8), .report-section table:last-of-type td:nth-child(8) { width: 60px; } /* รู */
-    .report-section table:last-of-type th:nth-child(9), .report-section table:last-of-type td:nth-child(9) { width: 50px; } /* ET */
-    .report-section table:last-of-type th:nth-child(10), .report-section table:last-of-type td:nth-child(10) { width: 60px; } /* สี */
-    .report-section table:last-of-type th:nth-child(11), .report-section table:last-of-type td:nth-child(11) { width: 120px; } /* หมายเหตุ */
-    .report-section table:last-of-type th:nth-child(12), .report-section table:last-of-type td:nth-child(12) { width: 70px; } /* พนักงาน */
-    .report-section table:last-of-type th:nth-child(13), .report-section table:last-of-type td:nth-child(13) { width: 70px; } /* หลักฐาน */
-    .report-section table:last-of-type th:last-child, .report-section table:last-of-type td:last-child { width: 100px; } /* จัดการ */
-    }
-
-    /* Small devices (phones, 481px to 768px) */
-    @media (min-width: 481px) and (max-width: 768px) {
-        body { font-size: 15px; }
-        .container { margin: var(--spacing-lg) auto; padding: var(--spacing-xl); }
-        .navbar-links { justify-content: flex-end; } /* Align links to right */
-        .tabs { justify-content: flex-start; flex-wrap: nowrap; }
-        .tab-button { flex-basis: auto; font-size: 1em; padding: var(--spacing-md) var(--spacing-xl); }
-        .form-row { gap: var(--spacing-md); }
-        .form-group.half-width { flex-basis: calc(50% - (var(--spacing-md) / 2)); }
-        .form-group.quarter-width { flex-basis: calc(33.33% - (var(--spacing-md) * 2 / 3)); } /* Three columns */
-        th, td { padding: var(--spacing-sm) var(--spacing-md); font-size: 0.85em; }
-        td.action-buttons { flex-direction: row; } /* Keep buttons horizontal if possible */
-
-        /* ปรับความกว้างคอลัมน์ในตารางสำหรับหน้าจอขนาดกลาง */
-        .report-section table th:nth-child(1), .report-section table td:nth-child(1) { width: 70px; } /* เวลา */
-        .report-section table th:nth-child(2), .report-section table td:nth-child(2) { width: 60px; } /* ประเภท */
-        .report-section table th:nth-child(3), .report-section table td:nth-child(3) { width: 50px; } /* จำนวน */
-        .report-section table th:nth-child(4), .report-section table td:nth-child(4) { width: 60px; } /* คงเหลือ */
-        .report-section table th:nth-child(5), .report-section table td:nth-child(5) { width: 90px; } /* ยี่ห้อ */
-        .report-section table th:nth-child(6), .report-section table td:nth-child(6) { width: 100px; } /* รุ่น/ลาย */
-        .report-section table th:nth-child(7), .report-section table td:nth-child(7) { width: 100px; } /* เบอร์ยาง/ขอบ */
-        .report-section table th:nth-child(8), .report-section table td:nth-child(8) { width: 140px; } /* หมายเหตุ */
-        .report-section table th:nth-child(9), .report-section table td:nth-child(9) { width: 70px; } /* พนักงาน */
-        .report-section table th:nth-child(10), .report-section table td:nth-child(10) { width: 70px; } /* หลักฐาน */
-        .report-section table th:last-child, .report-section table td:last-child { width: 130px; } /* จัดการ */
-
-        /* สำหรับตารางแม็ก เพิ่ม ET และ สี */
-        .report-section table:last-of-type th:nth-child(7), .report-section table:last-of-type td:nth-child(7) { width: 60px; } /* ขอบ */
-        .report-section table:last-of-type th:nth-child(8), .report-section table:last-of-type td:nth-child(8) { width: 70px; } /* รู */
-        .report-section table:last-of-type th:nth-child(9), .report-section table:last-of-type td:nth-child(9) { width: 60px; } /* ET */
-        .report-section table:last-of-type th:nth-child(10), .report-section table:last-of-type td:nth-child(10) { width: 70px; } /* สี */
-        .report-section table:last-of-type th:nth-child(11), .report-section table:last-of-type td:nth-child(11) { width: 140px; } /* หมายเหตุ */
-        .report-section table:last-of-type th:nth-child(12), .report-section table:last-of-type td:nth-child(12) { width: 70px; } /* พนักงาน */
-        .report-section table:last-of-type th:nth-child(13), .report-section table:last-of-type td:nth-child(13) { width: 70px; } /* หลักฐาน */
-        .report-section table:last-of-type th:last-child, .report-section table:last-of-type td:last-child { width: 130px; } /* จัดการ */
-    }
-
-    /* Medium devices (tablets, 769px to 992px) */
-    @media (min-width: 769px) and (max-width: 992px) {
-        .container { padding: var(--spacing-xxl); }
-        .form-row { gap: var(--spacing-lg); }
-        .form-group.half-width { flex-basis: calc(50% - (var(--spacing-lg) / 2)); }
-        .form-group.quarter-width { flex-basis: calc(25% - (var(--spacing-lg) * 3 / 4)); }
-        /* ปรับความกว้างคอลัมน์ในตารางสำหรับหน้าจอขนาดใหญ่ขึ้น */
-        .report-section table th:nth-child(1), .report-section table td:nth-child(1) { width: 90px; } /* เวลา */
-        .report-section table th:nth-child(2), .report-section table td:nth-child(2) { width: 80px; } /* ประเภท */
-        .report-section table th:nth-child(3), .report-section table td:nth-child(3) { width: 70px; } /* จำนวน */
-        .report-section table th:nth-child(4), .report-section table td:nth-child(4) { width: 80px; } /* คงเหลือ */
-        .report-section table th:nth-child(5), .report-section table td:nth-child(5) { width: 110px; } /* ยี่ห้อ */
-        .report-section table th:nth-child(6), .report-section table td:nth-child(6) { width: 130px; } /* รุ่น/ลาย */
-        .report-section table th:nth-child(7), .report-section table td:nth-child(7) { width: 130px; } /* เบอร์ยาง/ขอบ */
-        .report-section table th:nth-child(8), .report-section table td:nth-child(8) { width: 180px; } /* หมายเหตุ */
-        .report-section table th:nth-child(9), .report-section table td:nth-child(9) { width: 90px; } /* พนักงาน */
-        .report-section table th:nth-child(10), .report-section table td:nth-child(10) { width: 90px; } /* หลักฐาน */
-        .report-section table th:last-child, .report-section table td:last-child { width: 160px; } /* จัดการ */
-
-        /* สำหรับตารางแม็ก เพิ่ม ET และ สี */
-        .report-section table:last-of-type th:nth-child(7), .report-section table:last-of-type td:nth-child(7) { width: 70px; } /* ขอบ */
-        .report-section table:last-of-type th:nth-child(8), .report-section table:last-of-type td:nth-child(8) { width: 80px; } /* รู */
-        .report-section table:last-of-type th:nth-child(9), .report-section table:last-of-type td:nth-child(9) { width: 70px; } /* ET */
-        .report-section table:last-of-type th:nth-child(10), .report-section table:last-of-type td:nth-child(10) { width: 80px; } /* สี */
-        .report-section table:last-of-type th:nth-child(11), .report-section table:last-of-type td:nth-child(11) { width: 180px; } /* หมายเหตุ */
-        .report-section table:last-of-type th:nth-child(12), .report-section table:last-of-type td:nth-child(12) { width: 90px; } /* พนักงาน */
-        .report-section table:last-of-type th:nth-child(13), .report-section table:last-of-type td:nth-child(13) { width: 90px; } /* หลักฐาน */
-        .report-section table:last-of-type th:last-child, .report-section table:last-of-type td:last-child { width: 160px; } /* จัดการ */
-    }
-
-    /* Large devices (desktops, 993px and up) - Standard Desktop View */
-    @media (min-width: 993px) {
-        .report-section table th:nth-child(1), .report-section table td:nth-child(1) { width: 100px; } /* เวลา */
-        .report-section table th:nth-child(2), .report-section table td:nth-child(2) { width: 90px; } /* ประเภท */
-        .report-section table th:nth-child(3), .report-section table td:nth-child(3) { width: 80px; } /* จำนวน */
-        .report-section table th:nth-child(4), .report-section table td:nth-child(4) { width: 90px; } /* คงเหลือ */
-        .report-section table th:nth-child(5), .report-section table td:nth-child(5) { width: 120px; } /* ยี่ห้อ */
-        .report-section table th:nth-child(6), .report-section table td:nth-child(6) { width: 140px; } /* รุ่น/ลาย */
-        .report-section table th:nth-child(7), .report-section table td:nth-child(7) { width: 140px; } /* เบอร์ยาง/ขอบ */
-        .report-section table th:nth-child(8), .report-section table td:nth-child(8) { width: 200px; } /* หมายเหตุ */
-        .report-section table th:nth-child(9), .report-section table td:nth-child(9) { width: 100px; } /* พนักงาน */
-        .report-section table th:nth-child(10), .report-section table td:nth-child(10) { width: 100px; } /* หลักฐาน */
-        .report-section table th:last-child, .report-section table td:last-child { width: 160px; } /* จัดการ */
-
-        /* สำหรับตารางแม็ก เพิ่ม ET และ สี */
-        .report-section table:last-of-type th:nth-child(7), .report-section table:last-of-type td:nth-child(7) { width: 80px; } /* ขอบ */
-        .report-section table:last-of-type th:nth-child(8), .report-section table:last-of-type td:nth-child(8) { width: 90px; } /* รู */
-        .report-section table:last-of-type th:nth-child(9), .report-section table:last-of-type td:nth-child(9) { width: 80px; } /* ET */
-        .report-section table:last-of-type th:nth-child(10), .report-section table:last-of-type td:nth-child(10) { width: 90px; } /* สี */
-        .report-section table:last-of-type th:nth-child(11), .report-section table:last-of-type td:nth-child(11) { width: 200px; } /* หมายเหตุ */
-        .report-section table:last-of-type th:nth-child(12), .report-section table:last-of-type td:nth-child(12) { width: 100px; } /* พนักงาน */
-        .report-section table:last-of-type th:nth-child(13), .report-section table:last-of-type td:nth-child(13) { width: 100px; } /* หลักฐาน */
-        .report-section table:last-of-type th:last-child, .report-section table:last-of-type td:last-child { width: 160px; } /* จัดการ */
-    }
-	
-	/* --- Admin Dashboard - Tool Grid Styles (NEW) --- */
-.tool-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); /* ปรับให้เป็น responsive grid */
-    gap: var(--spacing-xl); /* ระยะห่างระหว่างการ์ด */
-    margin-top: var(--spacing-xxl); /* ระยะห่างด้านบน */
-}
-
-.tool-card {
-    background-color: var(--bg-white);
-    padding: var(--spacing-xxl);
-    border-radius: var(--border-radius-md);
-    box-shadow: var(--shadow-light);
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    text-align: center;
-    text-decoration: none; /* ลบ underline */
-    color: var(--text-dark);
-    transition: all var(--transition-speed) var(--transition-ease);
-    min-height: 220px; /* กำหนดความสูงขั้นต่ำของการ์ด */
-    justify-content: center; /* จัดเนื้อหาให้อยู่ตรงกลางแนวตั้ง */
-}
-
-.tool-card:hover {
-    box-shadow: var(--shadow-medium);
-    transform: translateY(-5px); /* ยกการ์ดขึ้นเล็กน้อยเมื่อ hover */
-    background-color: var(--bg-hover-light);
-    color: var(--primary-color); /* เปลี่ยนสีข้อความเป็นสีหลัก */
-    text-decoration: none; /* ตรวจสอบให้แน่ใจว่าไม่มี underline */
-}
-
-.tool-card i {
-    font-size: 3.5em; /* ขนาดไอคอนใหญ่ขึ้น */
-    color: var(--primary-color); /* สีไอคอน */
-    margin-bottom: var(--spacing-md);
-    transition: color var(--transition-speed) var(--transition-ease);
-}
-
-.tool-card:hover i {
-    color: var(--primary-dark); /* สีไอคอนเข้มขึ้นเมื่อ hover */
-}
-
-.tool-card h3 {
-    font-size: var(--font-size-h3);
-    margin-top: 0;
-    margin-bottom: var(--spacing-sm);
-    color: var(--text-dark); /* ใช้สีเดียวกับ h3 ปกติ */
-    transition: color var(--transition-speed) var(--transition-ease);
-}
-
-.tool-card:hover h3 {
-    color: var(--primary-color); /* เปลี่ยนสี heading เป็นสีหลักเมื่อ hover */
-}
-
-.tool-card p {
-    font-size: var(--font-size-sm);
-    color: var(--text-muted);
-    margin-bottom: 0;
-    line-height: 1.5;
-}
-
-/* Responsive adjustments for tool grid */
-@media (max-width: 768px) {
-    .tool-grid {
-        grid-template-columns: 1fr; /* บนมือถือให้แสดงเป็นคอลัมน์เดียว */
-        gap: var(--spacing-lg);
-    }
-    .tool-card {
-        padding: var(--spacing-xl);
-        min-height: unset; /* ลบ min-height บนมือถือเพื่อให้ปรับตามเนื้อหา */
-    }
-}
-
-@media (min-width: 769px) and (max-width: 1200px) {
-    .tool-grid {
-        grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); /* ปรับขนาดเล็กน้อยสำหรับแท็บเล็ตใหญ่ */
-        gap: var(--spacing-lg);
-    }
-}
-
-/* --- Dropdown Styles for Navbar (ปรับปรุง) --- */
-.dropdown {
-    position: relative;
-    display: inline-block;
-    /* NEW: เพิ่ม padding ด้านล่าง เพื่อให้มีพื้นที่ "ติด" กับ dropdown-content */
-    /* หรืออาจจะใช้ padding-bottom ที่ตัว dropbtn เองก็ได้ */
-    padding-bottom: 5px; /* เพิ่มพื้นที่ว่างด้านล่างของ container ให้เมาส์เลื่อนผ่านได้ */
-}
-
-.dropbtn {
-    background-color: transparent;
-    color: var(--text-white);
-    padding: var(--spacing-sm) var(--spacing-md);
-    border: none;
-    cursor: pointer;
-    font-size: var(--font-size-sm);
-    font-weight: 500;
-    border-radius: var(--border-radius-sm);
-    transition: background-color var(--transition-speed) var(--transition-ease), transform 0.2s var(--transition-ease);
-    display: flex;
-    align-items: center;
-    gap: var(--spacing-xs);
-    white-space: nowrap; /* ป้องกันข้อความไม่ให้ขึ้นบรรทัดใหม่ */
-}
-
-.dropbtn:hover, .dropbtn:focus { /* เพิ่ม :focus สำหรับการเข้าถึงด้วยคีย์บอร์ด */
-    background-color: var(--primary-dark);
-    transform: translateY(-2px);
-    outline: none; /* ลบ outline เริ่มต้น */
-}
-
-.dropdown-content {
-    display: none;
-    position: absolute;
-    background-color: var(--text-dark);
-    min-width: 180px;
-    box-shadow: var(--shadow-medium);
-    z-index: 100;
-    border-radius: var(--border-radius-sm);
-    overflow: hidden;
-    right: 0;
-    /* แก้ไข: ทำให้ Dropdown อยู่ติดกับปุ่มมากขึ้น */
-    top: 100%; /* ทำให้ Dropdown เริ่มต้นที่ขอบล่างของ Dropdown button */
-    margin-top: 0px; /* NEW: ลบ margin-top เดิมออก หรือใส่ 0 */
-    /* ถ้ายังมีปัญหา ให้ลองใส่ค่าติดลบเล็กน้อย เช่น margin-top: -2px; */
-    
-    opacity: 0;
-    visibility: hidden;
-    transform: translateY(5px); /* ลดการเลื่อนลงเล็กน้อย */
-    transition: opacity var(--transition-speed) var(--transition-ease), transform var(--transition-speed) var(--transition-ease), visibility var(--transition-speed) var(--transition-ease);
-}
-
-.dropdown:hover .dropdown-content,
-.dropdown:focus-within .dropdown-content {
-    display: block;
-    opacity: 1;
-    visibility: visible;
-    transform: translateY(0);
-}
-
-.dropdown-content a {
-    color: var(--text-white);
-    padding: var(--spacing-md) var(--spacing-md);
-    text-decoration: none;
-    display: block;
-    text-align: left;
-    transition: background-color var(--transition-speed) var(--transition-ease);
-    font-weight: 400;
-    font-size: var(--font-size-sm);
+.table .text-nowrap {
     white-space: nowrap;
 }
-
-.dropdown-content a:hover {
-    background-color: var(--primary-color);
-    color: var(--text-white);
-    text-decoration: none;
+.table td img {
+    max-width: 60px;
+    height: auto;
+    border-radius: var(--bs-border-radius-sm);
 }
 
-/* --- Navigation Bar - Responsive Adjustments (ปรับปรุง) --- */
-@media (max-width: 768px) {
-    .navbar {
-        flex-direction: column;
-        align-items: flex-start;
-        padding: var(--spacing-md) var(--spacing-lg); /* ลด padding ด้านข้าง */
+/* Override text-success to make it bold */
+.text-success {
+    color: var(--bs-success) !important;
+    font-weight: 600;
+}
+
+
+/* --- DESKTOP ONLY STYLES (หน้าจอใหญ่กว่า 992px) --- */
+@media (min-width: 992px) {
+
+    /* DESKTOP: Auto-hide Sidebar on Hover */
+
+    /* สถานะปกติ (ยุบอยู่) */
+    .sidebar-fixed {
+        position: fixed;
+        top: 0;
+        left: 0;
+        bottom: 0;
+        width: 80px; /* ความกว้างเมื่อยุบ */
+        z-index: 1030;
+        overflow-x: hidden;
+        transition: width 0.3s ease;
     }
 
-    .navbar-brand {
-        width: 100%;
-        text-align: center;
-        margin-bottom: var(--spacing-md);
+    .sidebar-fixed .sidebar-text {
+        visibility: hidden;
+        opacity: 0;
+        transition: opacity 0.2s ease;
+        white-space: nowrap; /* ป้องกันข้อความตกบรรทัดตอนยุบ */
     }
 
-    .navbar-links {
-        flex-direction: column;
-        align-items: stretch; /* ทำให้ลิงก์เต็มความกว้าง */
-        width: 100%;
-        margin-left: 0;
-        gap: var(--spacing-xs); /* ลดช่องว่างระหว่างลิงก์ */
+    .sidebar-fixed .nav-link {
+        justify-content: center;
+    }
+    .sidebar-fixed .nav-link .me-2 {
+        margin-right: 0 !important;
     }
 
-    .navbar-links a, .dropbtn {
-        width: 100%;
-        text-align: left;
-        padding: var(--spacing-sm) var(--spacing-md); /* ปรับ padding ให้เหมาะสม */
-        justify-content: flex-start; /* ชิดซ้ายสำหรับไอคอนและข้อความ */
-    }
-    
-    .navbar-links .user-info {
-        text-align: center;
-        width: 100%;
-        margin: var(--spacing-sm) 0;
-        padding: var(--spacing-sm) 0;
-        border-top: 1px solid rgba(255, 255, 255, 0.1); /* เพิ่มเส้นแบ่ง */
-        border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    /* สถานะเมื่อเอาเมาส์ไปชี้ (ขยายออก) */
+    .sidebar-fixed:hover {
+        width: 280px; /* ความกว้างเมื่อขยายเต็ม */
     }
 
-    /* Dropdown specific for mobile */
-    .dropdown {
-        width: 100%;
-        padding-bottom: 0; /* ไม่ต้องมี padding-bottom บนมือถือ */
-    }
-
-    .dropdown-content {
-        position: static;
-        width: 100%;
-        box-shadow: none;
-        border-radius: 0;
-        border-top: 1px solid rgba(255, 255, 255, 0.1);
-        opacity: 1;
+    .sidebar-fixed:hover .sidebar-text {
         visibility: visible;
-        transform: translateY(0);
-        margin-top: 0; /* ลบ margin-top ที่เคยใส่ใน desktop ออก */
+        opacity: 1;
+        transition-delay: 0.1s; /* หน่วงเวลาให้ขยายเสร็จก่อนข้อความจะปรากฏ */
     }
-    /* Disable hover effect for dropdown content on touch devices (optional, but good practice) */
-    .dropdown:hover .dropdown-content {
-        display: block; /* keep this for desktop/hover state on wider screens */
+
+    .sidebar-fixed:hover .nav-link {
+        justify-content: flex-start;
+    }
+    .sidebar-fixed:hover .nav-link .me-2 {
+        margin-right: 0.5rem !important; /* เอาระยะห่างกลับมา */
+    }
+
+
+    /* Main Content and Footer Layout for Desktop */
+    .main-content {
+        margin-left: 80px; /* เว้นที่สำหรับ Sidebar ที่ยุบอยู่ */
+        transition: margin-left 0.3s ease;
+    }
+    
+    .main-footer {
+        text-align: center;
+        padding: 1.5rem;
+        margin-top: 2rem;
+        background-color: #ffffff;
+        border-top: 1px solid var(--border-color);
+        margin-left: 80px; /* เว้นที่เหมือน main-content */
+        transition: margin-left 0.3s ease;
+    }
+    
+    /* เมื่อ Sidebar ขยายออก ให้ขยับเนื้อหาและ Footer ตาม */
+    .sidebar-fixed:hover + .main-content {
+        margin-left: 280px;
+    }
+    .sidebar-fixed:hover + .main-content .main-footer {
+        /* Footer อยู่ใน main-content จึงไม่ต้องแก้ */
     }
 }
 
-/* --- Summary Stock Report Specific Styles (NEW/Adjusted) --- */
 
-/* Date Selector Form (Adjusted from .form-section) */
-.date-selector-form {
-    background-color: var(--bg-white);
-    padding: var(--spacing-md) var(--spacing-lg); /* ลด padding เล็กน้อย */
-    border-radius: var(--border-radius-md);
-    box-shadow: var(--shadow-light);
-    margin-bottom: var(--spacing-xl); /* ระยะห่างด้านล่าง */
-    border: 1px solid var(--border-color);
-}
-
-.date-selector-form .form-row {
-    align-items: center; /* จัดให้อยู่กลางแนวตั้ง */
-    gap: var(--spacing-md); /* ลด gap ในฟอร์มเลือกวันที่ */
-    margin-bottom: 0; /* ลบ margin-bottom ที่ไม่จำเป็น */
-}
-
-.date-selector-form .form-group {
-    margin-bottom: 0; /* ลบ margin-bottom ของ form-group */
-}
-
-.date-selector-form .form-group label {
-    font-size: var(--font-size-sm);
-    font-weight: 500;
-    color: var(--text-light);
-}
-
-.date-selector-form .btn {
-    min-width: unset; /* ให้ปุ่มปรับขนาดตามเนื้อหา */
-    padding: var(--spacing-sm) var(--spacing-lg);
-    font-size: var(--font-size-sm);
-}
-
-/* Summary Header */
-.summary-header {
-    text-align: center;
-    margin-bottom: var(--spacing-lg);
-}
-
-.summary-header h2 {
-    font-size: clamp(1.8em, 4vw, var(--font-size-h2));
-    margin-bottom: var(--spacing-sm);
-    border-bottom: none; /* ไม่มีเส้นใต้ */
-    padding-bottom: 0;
-}
-
-.summary-header h3 {
-    font-size: clamp(1.4em, 3vw, var(--font-size-h3));
-    margin-top: 0;
-    color: var(--text-muted);
-    font-weight: 400;
-}
-
-/* Card Styles for Overall Summary (mb-4 is already from Bootstrap-like utility) */
-.card-header {
-    padding: var(--spacing-md) var(--spacing-lg);
-    border-bottom: 1px solid var(--border-color);
-    background-color: var(--primary-color);
-    color: var(--text-white);
-    font-weight: 600;
-    border-top-left-radius: var(--border-radius-md);
-    border-top-right-radius: var(--border-radius-md);
-}
-.card-header.bg-success {
-    background-color: var(--success-color); /* ใช้สี success-color ที่กำหนดไว้ */
-}
-
-.card-body {
-    padding: var(--spacing-lg);
-    background-color: var(--bg-white);
-    border-bottom-left-radius: var(--border-radius-md);
-    border-bottom-right-radius: var(--border-radius-md);
-}
-
-.card-body .row {
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--spacing-lg);
-}
-
-.card-body .col-md-6 {
-    flex: 1 1 calc(50% - (var(--spacing-lg) / 2)); /* 2 คอลัมน์บน desktop */
-    min-width: 250px; /* เพื่อให้ไม่แคบเกินไป */
-}
-
-.card-body h5 {
-    font-size: 1.2em;
-    color: var(--text-dark);
-    margin-bottom: var(--spacing-md);
-}
-
-.card-body p {
-    margin: var(--spacing-xs) 0;
-    font-size: var(--font-size-base);
-    color: var(--text-light);
-}
-.card-body p strong {
-    color: var(--text-dark);
-    font-size: 1.1em;
-}
-
-/* Tab Navigation (nav-tabs is a common Bootstrap class) */
-.nav-tabs {
-    border-bottom: 2px solid var(--border-color);
-    margin-bottom: var(--spacing-lg); /* เพิ่มระยะห่างด้านล่าง */
-}
-
-.nav-item .nav-link {
-    background-color: var(--bg-white);
-    border: 1px solid var(--border-color);
-    border-bottom: none; /* ลบ border ด้านล่างของ nav-link */
-    border-radius: var(--border-radius-md) var(--border-radius-md) 0 0;
-    padding: var(--spacing-md) var(--spacing-xl);
-    font-size: var(--font-size-base);
-    font-weight: 600;
-    color: var(--text-light);
-    margin-right: var(--spacing-sm);
-    transition: all var(--transition-speed) var(--transition-ease);
-    cursor: pointer;
-    text-decoration: none; /* ลบ underline */
-}
-
-.nav-item .nav-link:hover {
-    background-color: var(--bg-hover-light);
-    color: var(--primary-color);
-    border-color: var(--primary-color);
-}
-
-.nav-item .nav-link.active {
-    background-color: var(--primary-color);
-    color: var(--text-white);
-    border-color: var(--primary-color);
-    box-shadow: var(--shadow-light);
-    transform: translateY(-2px);
-}
-
-/* Tab Content */
-.tab-content {
-    background-color: var(--bg-white);
-    padding: var(--spacing-xl) var(--spacing-lg); /* ปรับ padding */
-    border-radius: var(--border-radius-md);
-    box-shadow: var(--shadow-light);
-    border: 1px solid var(--border-color);
-    margin-bottom: var(--spacing-xxl); /* ระยะห่างด้านล่างของ tab content */
-}
-
-.tab-content h3 {
-    margin-top: var(--spacing-md); /* ลด margin-top ของ h3 ใน tab-content */
-    margin-bottom: var(--spacing-lg);
-    border-bottom: 1px solid var(--border-color-light);
-    padding-bottom: var(--spacing-sm);
-    color: var(--text-dark);
-}
-
-.tab-content .card { /* สำหรับสรุปตามช่องทาง */
-    border: 1px solid var(--border-color-light);
-    box-shadow: var(--shadow-light);
-    border-radius: var(--border-radius-md);
-    margin-bottom: var(--spacing-lg);
-    overflow: hidden; /* เพื่อให้ border-radius ทำงานกับการ์ด */
-}
-
-.tab-content .card-header.bg-light {
-    background-color: #f8f8f8;
-    color: var(--text-dark);
-    font-weight: 600;
-}
-
-.tab-content .card-body p {
-    margin: var(--spacing-xs) 0;
-    font-size: var(--font-size-sm);
-}
-
-.tab-content .card-body h6 {
-    margin-top: var(--spacing-md);
-    margin-bottom: var(--spacing-sm);
-    color: var(--primary-dark);
-    font-size: 1em;
-}
-
-.tab-content .list-group-item {
-    padding: var(--spacing-sm) var(--spacing-md);
-    border-color: var(--border-color-light);
-    background-color: transparent;
-    font-size: var(--font-size-sm);
-    color: var(--text-light);
-}
-
-/* Summary Tables within Item Reports (สรุปยาง/แม็กรายรุ่น) */
-.brand-frame {
-    background-color: var(--bg-white); /* พื้นหลังของแต่ละยี่ห้อ */
-    padding: var(--spacing-lg); /* padding ภายในกรอบยี่ห้อ */
-    border-radius: var(--border-radius-md);
-    box-shadow: var(--shadow-light);
-    margin-bottom: var(--spacing-xl); /* ระยะห่างระหว่างกรอบยี่ห้อ */
-    border: 1px solid var(--border-color);
-}
-
-.brand-frame h4 {
-    margin-top: 0;
-    margin-bottom: var(--spacing-md);
-    color: var(--text-dark); /* สี Heading ของยี่ห้อ */
-    border-bottom: 1px solid var(--border-color-light);
-    padding-bottom: var(--spacing-sm);
-    font-weight: 600;
-}
-
-.summary-table {
-    width: 100%;
-    border-collapse: collapse;
-    margin-top: var(--spacing-sm);
-    font-size: var(--font-size-sm); /* ขนาดฟอนต์สำหรับตารางสรุปย่อย */
-    min-width: 800px; /* กำหนด min-width สำหรับตารางย่อยด้วย */
-}
-
-.summary-table th, .summary-table td {
-    border: 1px solid var(--border-color-light);
-    padding: var(--spacing-sm) var(--spacing-md);
-    text-align: left;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
-
-.summary-table th {
-    background-color: #f0f0f0; /* สีพื้นหลัง header ของตารางสรุปย่อย */
-    color: var(--text-dark);
-    font-weight: 600;
-    text-transform: uppercase;
-}
-
-.summary-table tbody tr:nth-child(even) { background-color: var(--bg-stripe); }
-.summary-table tbody tr:hover { background-color: var(--bg-hover-light); }
-
-/* Colors for quantities in summary tables */
-.text-success { color: var(--success-color); }
-.text-danger { color: var(--danger-color); }
-.text-info { color: var(--primary-color); } /* ใช้ primary-color เป็นสี info */
-
-/* Total Summary Section (ด้านล่างสุด) */
-.total-summary-section {
-    background-color: var(--bg-white);
-    padding: var(--spacing-xl);
-    border-radius: var(--border-radius-md);
-    box-shadow: var(--shadow-medium);
-    margin-top: var(--spacing-xxl);
-    border: 1px solid var(--border-color);
-}
-
-.total-summary-section h3 {
-    margin-top: 0;
-    margin-bottom: var(--spacing-lg);
-    border-bottom: 1px solid var(--border-color-light);
-    padding-bottom: var(--spacing-sm);
-    color: var(--text-dark);
-    font-weight: 600;
-}
-
-.total-summary-section .form-row {
-    gap: var(--spacing-lg); /* ปรับ gap */
-    margin-bottom: var(--spacing-lg);
-}
-
-.total-summary-section .form-group {
-    min-width: 180px; /* กำหนด min-width เพื่อให้จัดเรียงสวยงาม */
-    text-align: center;
-    border: 1px solid var(--border-color-light);
-    border-radius: var(--border-radius-sm);
-    padding: var(--spacing-md);
-    background-color: #fbfbfb;
-}
-
-.total-summary-section .form-group strong {
-    font-size: 1.2em;
-    display: block; /* ทำให้ตัวเลขขึ้นบรรทัดใหม่ */
-    margin-top: var(--spacing-xs);
-}
-
-.total-summary-section .brand-summary-card {
-    text-align: left; /* จัดชิดซ้ายภายใน card */
-    padding: var(--spacing-md);
-    border: 1px solid var(--border-color-light);
-    border-radius: var(--border-radius-md);
-    background-color: var(--bg-light);
-    color: var(--text-dark);
-    font-size: var(--font-size-sm);
-}
-
-.total-summary-section .brand-summary-card strong {
-    font-size: 1em;
-    display: inline; /* ไม่ต้องขึ้นบรรทัดใหม่ */
-    margin-left: var(--spacing-xs);
-}
-
-.total-summary-section .no-data-summary {
-    background-color: #f0f0f0;
-    border-radius: var(--border-radius-md);
-    padding: var(--spacing-md);
-    margin-top: var(--spacing-md);
-    text-align: center;
-}
-.total-summary-section .no-data-summary p {
-    margin: 0;
-    font-style: italic;
-    color: var(--text-muted);
-}
-
-
-/* --- Responsive Adjustments (Mobile First Approach) --- */
-
-/* Mobile adjustments specific for summary page */
-@media (max-width: 768px) {
-    .date-selector-form .form-row {
-        flex-direction: column;
-        align-items: stretch;
+/* --- MOBILE ONLY STYLES (หน้าจอเล็กกว่า 992px) --- */
+@media (max-width: 991.98px) {
+    /* Reset layout for mobile, letting Bootstrap's offcanvas work */
+    .main-content,
+    .main-footer {
+        margin-left: 0; /* บนมือถือต้องไม่มีระยะห่างด้านซ้าย */
     }
-    .date-selector-form .form-group {
-        width: 100%;
-        flex-basis: auto;
-    }
-    .card-body .col-md-6 {
-        flex: 1 1 100%; /* แสดง 1 คอลัมน์บนมือถือ */
-    }
-    .nav-item .nav-link {
-        margin-right: var(--spacing-xs);
-        padding: var(--spacing-sm) var(--spacing-md);
-        font-size: 0.9em;
-    }
-    .summary-table {
-        min-width: 600px; /* ลด min-width บนมือถือแต่ยังคงต้องเลื่อนได้ */
-    }
-    .total-summary-section .form-group {
-        flex-basis: 100%; /* แสดง 1 คอลัมน์บนมือถือ */
-        min-width: unset;
-    }
-    .total-summary-section .brand-summary-card {
-        flex-basis: 100%;
+
+    .main-footer {
+        text-align: center;
+        padding: 1.5rem;
+        margin-top: 2rem;
+        background-color: #ffffff;
+        border-top: 1px solid var(--border-color);
     }
 }

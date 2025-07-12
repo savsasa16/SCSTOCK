@@ -1,41 +1,100 @@
 {% extends 'base.html' %}
 
-{% block title %}Admin Dashboard - ระบบจัดการสต็อก{% endblock %}
+{% block page_title %}Admin Dashboard{% endblock %}
 
 {% block content %}
-    <h2 class="page-header">Admin Dashboard</h2>
-
-    <div class="tool-grid">
-        <a href="{{ url_for('manage_users') }}" class="tool-card">
-            <i class="fas fa-users"></i>
-            <h3>จัดการผู้ใช้</h3>
-            <p>เพิ่ม, แก้ไข, ลบผู้ใช้และกำหนดสิทธิ์</p>
-        </a>
-
-        <a href="{{ url_for('promotions') }}" class="tool-card">
-            <i class="fas fa-tags"></i>
-            <h3>จัดการโปรโมชัน</h3>
-            <p>สร้างและจัดการโปรโมชันส่วนลด</p>
-        </a>
-
-        <a href="{{ url_for('manage_wholesale_customers') }}" class="tool-card">
-            <i class="fas fa-store"></i>
-            <h3>จัดการลูกค้าค้าส่ง</h3>
-            <p>เพิ่ม, แก้ไข, ลบข้อมูลร้านค้าส่ง</p>
-        </a>
-
-        <a href="{{ url_for('export_import') }}" class="tool-card">
-            <i class="fas fa-file-export"></i>
-            <h3>นำเข้า/ส่งออกข้อมูล</h3>
-            <p>สำรองและกู้คืนข้อมูลสต็อก</p>
-        </a>
-
-        <a href="{{ url_for('admin_deleted_items') }}" class="tool-card">
-            <i class="fas fa-trash-restore-alt"></i>
-            <h3>รายการที่ถูกลบ</h3>
-            <p>ดูและกู้คืนสินค้าที่ถูกลบ</p>
-        </a>
-
-        {# คุณสามารถเพิ่มการ์ดเครื่องมืออื่นๆ ที่เกี่ยวข้องกับ Admin ได้ที่นี่ #}
+<div class="container-fluid">
+    <div class="d-sm-flex align-items-center justify-content-between mb-4">
+        <h1 class="h3 mb-0 text-gray-800">Admin Dashboard</h1>
     </div>
+
+    <div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-4">
+
+        <div class="col">
+            <a href="{{ url_for('manage_users') }}" class="text-decoration-none text-dark">
+                <div class="card h-100 shadow-sm card-hover">
+                    <div class="card-body text-center p-4">
+                        <i class="fas fa-users fa-3x text-primary mb-3"></i>
+                        <h5 class="card-title">จัดการผู้ใช้</h5>
+                        <p class="card-text text-muted">เพิ่ม, แก้ไข, ลบผู้ใช้และกำหนดสิทธิ์</p>
+                    </div>
+                </div>
+            </a>
+        </div>
+
+        <div class="col">
+            <a href="{{ url_for('promotions') }}" class="text-decoration-none text-dark">
+                <div class="card h-100 shadow-sm card-hover">
+                    <div class="card-body text-center p-4">
+                        <i class="fas fa-tags fa-3x text-success mb-3"></i>
+                        <h5 class="card-title">จัดการโปรโมชัน</h5>
+                        <p class="card-text text-muted">สร้างและจัดการโปรโมชันส่วนลด</p>
+                    </div>
+                </div>
+            </a>
+        </div>
+
+        <div class="col">
+            <a href="{{ url_for('manage_wholesale_customers') }}" class="text-decoration-none text-dark">
+                <div class="card h-100 shadow-sm card-hover">
+                    <div class="card-body text-center p-4">
+                        <i class="fas fa-store fa-3x text-info mb-3"></i>
+                        <h5 class="card-title">จัดการลูกค้าค้าส่ง</h5>
+                        <p class="card-text text-muted">เพิ่ม, แก้ไข, ลบข้อมูลร้านค้าส่ง</p>
+                    </div>
+                </div>
+            </a>
+        </div>
+
+        <div class="col">
+            <a href="{{ url_for('export_import') }}" class="text-decoration-none text-dark">
+                <div class="card h-100 shadow-sm card-hover">
+                    <div class="card-body text-center p-4">
+                        <i class="fas fa-file-export fa-3x text-warning mb-3"></i>
+                        <h5 class="card-title">นำเข้า/ส่งออกข้อมูล</h5>
+                        <p class="card-text text-muted">สำรองและกู้คืนข้อมูลสต็อก</p>
+                    </div>
+                </div>
+            </a>
+        </div>
+
+        <div class="col">
+            <a href="{{ url_for('admin_deleted_items') }}" class="text-decoration-none text-dark">
+                <div class="card h-100 shadow-sm card-hover">
+                    <div class="card-body text-center p-4">
+                        <i class="fas fa-trash-restore-alt fa-3x text-danger mb-3"></i>
+                        <h5 class="card-title">รายการที่ถูกลบ</h5>
+                        <p class="card-text text-muted">ดูและกู้คืนสินค้าที่ถูกลบ</p>
+                    </div>
+                </div>
+            </a>
+        </div>
+
+        <div class="col">
+            <a href="{{ url_for('fix_history') }}" class="text-decoration-none text-dark">
+                <div class="card h-100 shadow-sm card-hover">
+                    <div class="card-body text-center p-4">
+                        <i class="fas fa-wrench fa-3x text-secondary mb-3"></i>
+                        <h5 class="card-title">ซ่อมแซมข้อมูล</h5>
+                        <p class="card-text text-muted">คำนวณค่า "คงเหลือ" ในประวัติการทำรายการใหม่ทั้งหมด</p>
+                    </div>
+                </div>
+            </a>
+        </div>
+	
+        </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<style>
+/* เพิ่ม CSS เล็กน้อยเพื่อให้การ์ดดูน่าสนใจขึ้นเมื่อเอาเมาส์ไปชี้ */
+.card-hover {
+    transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
+}
+.card-hover:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 0.5rem 1rem rgba(0,0,0,.15) !important;
+}
+</style>
 {% endblock %}

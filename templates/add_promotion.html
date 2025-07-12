@@ -1,83 +1,105 @@
 {% extends 'base.html' %}
 
-{% block title %}เพิ่มโปรโมชันใหม่{% endblock %}
+{% block page_title %}เพิ่มโปรโมชันใหม่{% endblock %}
 
 {% block content %}
-<h2>เพิ่มโปรโมชันใหม่</h2>
+<div class="card shadow-sm">
+    <div class="card-header">
+        <h4 class="mb-0">เพิ่มโปรโมชันใหม่</h4>
+    </div>
+    <div class="card-body">
+        <form action="{{ url_for('add_promotion') }}" method="post">
+            <div class="row g-3">
 
-<div class="form-section">
-    <form action="{{ url_for('add_promotion') }}" method="post" class="form-row">
-        <div class="form-group quarter-width">
-            <label for="promo_name">ชื่อโปรโมชัน <span class="required">*</span>:</label>
-            <input type="text" id="promo_name" name="name" required value="{{ request.form.name if request.form.name else '' }}">
-        </div>
-        <div class="form-group quarter-width">
-            <label for="promo_type">ประเภทโปรโมชัน <span class="required">*</span>:</label>
-            <select id="promo_type" name="type" required>
-                <option value="buy_x_get_y" {% if request.form.type == 'buy_x_get_y' %}selected{% endif %}>ซื้อ X แถม Y (เช่น 3 แถม 1)</option>
-                <option value="percentage_discount" {% if request.form.type == 'percentage_discount' %}selected{% endif %}>ส่วนลด % (เช่น ลด 25%)</option>
-                <option value="fixed_price_per_item" {% if request.form.type == 'fixed_price_per_item' %}selected{% endif %}>ราคาพิเศษต่อเส้น (เช่น 1500 บาท)</option>
-            </select>
-        </div>
-        <div class="form-group quarter-width" id="value1_group">
-            <label for="promo_value1">Value 1 <span class="required">*</span>:</label>
-            <input type="number" id="promo_value1" name="value1" step="0.01" required value="{{ request.form.value1 if request.form.value1 else '' }}" placeholder="">
-        </div>
-        <div class="form-group quarter-width" id="value2_group">
-            <label for="promo_value2">Value 2 (สำหรับ Buy X Get Y):</label>
-            <input type="number" id="promo_value2" name="value2" step="1" value="{{ request.form.value2 if request.form.value2 else '' }}" placeholder="">
-        </div>
-        <div class="form-group checkbox-group full-width">
-            <input type="checkbox" id="is_active" name="is_active" value="1" {% if request.form.is_active == '1' %}checked{% endif %}>
-            <label for="is_active">ใช้งาน</label>
-        </div>
-        <div class="form-group full-width">
-            <button type="submit" class="btn btn-primary"><i class="fas fa-plus"></i> เพิ่มโปรโมชัน</button>
-            <a href="{{ url_for('promotions') }}" class="btn btn-outline" style="margin-left: 10px;"><i class="fas fa-arrow-left"></i> กลับ</a>
-        </div>
-    </form>
+                <div class="col-md-6">
+                    <label for="promo_name" class="form-label">ชื่อโปรโมชัน <span class="text-danger">*</span></label>
+                    <input type="text" class="form-control" id="promo_name" name="name" required value="{{ request.form.name if request.form.name else '' }}">
+                </div>
+
+                <div class="col-md-6">
+                    <label for="promo_type" class="form-label">ประเภทโปรโมชัน <span class="text-danger">*</span></label>
+                    <select class="form-select" id="promo_type" name="type" required>
+                        <option value="buy_x_get_y" {% if request.form.type == 'buy_x_get_y' %}selected{% endif %}>ซื้อ X แถม Y (เช่น 3 แถม 1)</option>
+                        <option value="percentage_discount" {% if request.form.type == 'percentage_discount' %}selected{% endif %}>ส่วนลด % (เช่น ลด 25%)</option>
+                        <option value="fixed_price_per_item" {% if request.form.type == 'fixed_price_per_item' %}selected{% endif %}>ราคาพิเศษต่อเส้น (เช่น 1500 บาท)</option>
+                    </select>
+                </div>
+
+                <div class="col-md-6" id="value1_group">
+                    <label for="promo_value1" class="form-label">Value 1 <span class="text-danger">*</span></label>
+                    <input type="number" class="form-control" id="promo_value1" name="value1" step="0.01" required value="{{ request.form.value1 if request.form.value1 else '' }}" placeholder="">
+                </div>
+
+                <div class="col-md-6" id="value2_group" style="display: none;">
+                    <label for="promo_value2" class="form-label">Value 2 (สำหรับ Buy X Get Y)</label>
+                    <input type="number" class="form-control" id="promo_value2" name="value2" step="1" value="{{ request.form.value2 if request.form.value2 else '' }}" placeholder="">
+                </div>
+                
+                <div class="col-12">
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" id="is_active" name="is_active" value="1" {% if request.form.is_active == '1' or not request.form %}checked{% endif %}>
+                        <label class="form-check-label" for="is_active">
+                            เปิดใช้งานโปรโมชันนี้
+                        </label>
+                    </div>
+                </div>
+
+                <div class="col-12 mt-4">
+                    <button type="submit" class="btn btn-primary"><i class="fas fa-plus me-2"></i>เพิ่มโปรโมชัน</button>
+                    <a href="{{ url_for('promotions') }}" class="btn btn-secondary"><i class="fas fa-arrow-left me-2"></i>กลับ</a>
+                </div>
+
+            </div>
+        </form>
+    </div>
 </div>
+{% endblock %}
 
+{% block scripts %}
 <script>
     document.addEventListener('DOMContentLoaded', function() {
         const promoTypeSelect = document.getElementById('promo_type');
         const value1Group = document.getElementById('value1_group');
+        const value1Label = value1Group.querySelector('label');
+        const value1Input = document.getElementById('promo_value1');
+        
         const value2Group = document.getElementById('value2_group');
-        const promoValue1Input = document.getElementById('promo_value1');
-        const promoValue2Input = document.getElementById('promo_value2');
+        const value2Input = document.getElementById('promo_value2');
 
         function updateValueFields() {
             const selectedType = promoTypeSelect.value;
+            
+            // Hide Value 2 by default, then show if needed
             value2Group.style.display = 'none';
-
-            promoValue1Input.placeholder = '';
-            promoValue2Input.placeholder = '';
-            promoValue1Input.step = '0.01';
-            promoValue2Input.step = '1';
-
-            promoValue1Input.removeAttribute('required');
-            promoValue2Input.removeAttribute('required');
+            value2Input.removeAttribute('required');
 
             if (selectedType === 'buy_x_get_y') {
+                value1Label.textContent = 'จำนวนที่ซื้อ (X) *';
+                value1Input.placeholder = 'เช่น 3';
+                value1Input.step = '1';
+                value1Input.setAttribute('required', true);
+
                 value2Group.style.display = 'block';
-                promoValue1Input.placeholder = 'เช่น 3 (สำหรับ X)';
-                promoValue2Input.placeholder = 'เช่น 1 (สำหรับ Y)';
-                promoValue1Input.step = '1';
-                promoValue2Input.step = '1';
-                promoValue1Input.setAttribute('required', true);
-                promoValue2Input.setAttribute('required', true);
+                value2Input.placeholder = 'เช่น 1';
+                value2Input.setAttribute('required', true);
+
             } else if (selectedType === 'percentage_discount') {
-                promoValue1Input.placeholder = 'เช่น 25 (สำหรับ % ลด)';
-                promoValue1Input.step = '0.01';
-                promoValue1Input.setAttribute('required', true);
+                value1Label.textContent = 'ส่วนลด (%) *';
+                value1Input.placeholder = 'เช่น 25 (สำหรับ 25%)';
+                value1Input.step = '0.01';
+                value1Input.setAttribute('required', true);
+
             } else if (selectedType === 'fixed_price_per_item') {
-                promoValue1Input.placeholder = 'เช่น 1500 (สำหรับราคาต่อเส้น)';
-                promoValue1Input.step = '0.01';
-                promoValue1Input.setAttribute('required', true);
+                value1Label.textContent = 'ราคาพิเศษต่อเส้น (บาท) *';
+                value1Input.placeholder = 'เช่น 1500';
+                value1Input.step = '0.01';
+                value1Input.setAttribute('required', true);
             }
         }
 
         promoTypeSelect.addEventListener('change', updateValueFields);
+        
+        // Run on page load to set initial state
         updateValueFields(); 
     });
 </script>

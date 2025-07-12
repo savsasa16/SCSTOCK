@@ -1,508 +1,326 @@
 {% extends 'base.html' %}
 
-{% block title %}สรุปรายงานสต็อกรายช่วงเวลา - ระบบจัดการสต็อก{% endblock %}
+{% block page_title %}สรุปรายงานสต็อกรายช่วงเวลา{% endblock %}
+
+{% block head_scripts %}
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+{% endblock %}
 
 {% block content %}
-    <h1 class="page-header">สรุปรายงานสต็อกรายช่วงเวลา</h1>
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1 class="h3 mb-0 text-gray-800">สรุปรายงานสต็อก</h1>
+</div>
 
-    <div class="date-selector-form form-section">
-        <form action="{{ url_for('summary_stock_report') }}" method="GET" class="form-row">
-            <div class="form-group half-width">
-                <label for="start_date">จากวันที่:</label>
-                <input type="date" id="start_date" name="start_date" value="{{ start_date_param }}">
-            </div>
-            <div class="form-group half-width">
-                <label for="end_date">ถึงวันที่:</label>
-                <input type="date" id="end_date" name="end_date" value="{{ end_date_param }}">
-            </div>
-            <div class="form-group" style="flex-grow: 0; min-width: unset;">
-                <button type="submit" class="btn btn-primary"><i class="fas fa-filter"></i> ดูรายงาน</button>
+<div class="card shadow-sm mb-4">
+    <div class="card-body">
+        <form action="{{ url_for('summary_stock_report') }}" method="GET">
+            <div class="row g-3 align-items-end">
+                <div class="col-md">
+                    <label for="start_date" class="form-label">จากวันที่:</label>
+                    <input type="text" class="form-control" id="start_date" name="start_date" value="{{ start_date_param }}">
+                </div>
+                <div class="col-md">
+                    <label for="end_date" class="form-label">ถึงวันที่:</label>
+                    <input type="text" class="form-control" id="end_date" name="end_date" value="{{ end_date_param }}">
+                </div>
+                <div class="col-md-auto">
+                    <button type="submit" class="btn btn-primary w-100"><i class="fas fa-filter me-2"></i>ดูรายงาน</button>
+                </div>
             </div>
         </form>
     </div>
+</div>
 
-    <div class="summary-header">
-        <h2>รายงานสต็อกยางและล้อแม็ก</h2>
-        <h3>ช่วงวันที่: {{ display_range_str }}</h3>
+<div class="card shadow-sm mb-4">
+    <div class="card-header bg-primary text-white">
+        <h5 class="mb-0">ภาพรวมสต็อกทั้งหมด (ช่วงวันที่: {{ display_range_str }})</h5>
     </div>
-
-    <hr>
-
-    <div class="card mb-4">
-        <div class="card-header bg-success text-white">
-            ภาพรวมสต็อก (ทั้งหมด)
-        </div>
-        <div class="card-body">
-            <div class="row">
-                <div class="col-md-6">
-                    <h5>ยาง:</h5>
-                    <p>สต็อกเริ่มต้น: {{ overall_tire_initial }} เส้น</p>
-                    <p>ยอดรับเข้ารวม (ช่วงนี้): {{ overall_tire_in }} เส้น</p>
-                    <p>ยอดรับคืนรวม (ช่วงนี้): {{ overall_tire_return }} เส้น</p>
-                    <p>ยอดจ่ายออกรวม (ช่วงนี้): {{ overall_tire_out }} เส้น</p>
-                    <p><strong>คงเหลือรวม ณ สิ้นสุดช่วง: {{ overall_tire_final }} เส้น</strong></p>
+    <div class="card-body">
+        <div class="row text-center">
+            <div class="col-md-6 border-end">
+                <h6 class="text-uppercase text-muted">ยาง (Tires)</h6>
+                <div class="row">
+                    <div class="col-6"><p class="mb-1">เริ่มต้น: <strong>{{ overall_tire_initial }}</strong></p></div>
+                    <div class="col-6"><p class="mb-1">คงเหลือ: <strong class="fs-5">{{ overall_tire_final }}</strong></p></div>
+                    <div class="col-4"><p class="mb-1 text-success">รับเข้า: {{ overall_tire_in }}</p></div>
+                    <div class="col-4"><p class="mb-1 text-danger">จ่ายออก: {{ overall_tire_out }}</p></div>
+                    <div class="col-4"><p class="mb-1 text-info">รับคืน: {{ overall_tire_return }}</p></div>
                 </div>
-                <div class="col-md-6">
-                    <h5>แม็ก:</h5>
-                    <p>สต็อกเริ่มต้น: {{ overall_wheel_initial }} วง</p>
-                    <p>ยอดรับเข้ารวม (ช่วงนี้): {{ overall_wheel_in }} วง</p>
-                    <p>ยอดรับคืนรวม (ช่วงนี้): {{ overall_wheel_return }} วง</p>
-                    <p>ยอดจ่ายออกรวม (ช่วงนี้): {{ overall_wheel_out }} วง</p>
-                    <p><strong>คงเหลือรวม ณ สิ้นสุดช่วง: {{ overall_wheel_final }} วง</strong></p>
+            </div>
+            <div class="col-md-6">
+                <h6 class="text-uppercase text-muted">แม็ก (Wheels)</h6>
+                 <div class="row">
+                    <div class="col-6"><p class="mb-1">เริ่มต้น: <strong>{{ overall_wheel_initial }}</strong></p></div>
+                    <div class="col-6"><p class="mb-1">คงเหลือ: <strong class="fs-5">{{ overall_wheel_final }}</strong></p></div>
+                    <div class="col-4"><p class="mb-1 text-success">รับเข้า: {{ overall_wheel_in }}</p></div>
+                    <div class="col-4"><p class="mb-1 text-danger">จ่ายออก: {{ overall_wheel_out }}</p></div>
+                    <div class="col-4"><p class="mb-1 text-info">รับคืน: {{ overall_wheel_return }}</p></div>
                 </div>
             </div>
         </div>
     </div>
+</div>
 
-    <ul class="nav nav-tabs" id="summaryTabs" role="tablist">
-        <li class="nav-item" role="presentation">
-            <button class="nav-link active" id="tire-channel-tab" data-bs-toggle="tab" data-bs-target="#tire-channel-report" type="button" role="tab" aria-controls="tire-channel-report" aria-selected="true">
-                สรุปยางตามช่องทาง
-            </button>
-        </li>
-        <li class="nav-item" role="presentation">
-            <button class="nav-link" id="wheel-channel-tab" data-bs-toggle="tab" data-bs-target="#wheel-channel-report" type="button" role="tab" aria-controls="wheel-channel-report" aria-selected="false">
-                สรุปแม็กตามช่องทาง
-            </button>
-        </li>
-        <li class="nav-item" role="presentation">
-            <button class="nav-link" id="tire-item-tab" data-bs-toggle="tab" data-bs-target="#tire-item-report" type="button" role="tab" aria-controls="tire-item-report" aria-selected="false">
-                สรุปยางรายรุ่น
-            </button>
-        </li>
-        <li class="nav-item" role="presentation">
-            <button class="nav-link" id="wheel-item-tab" data-bs-toggle="tab" data-bs-target="#wheel-item-report" type="button" role="tab" aria-controls="wheel-item-report" aria-selected="false">
-                สรุปแม็กรายรุ่น
-            </button>
-        </li>
-    </ul>
-
-    <div class="tab-content mt-3" id="summaryTabContent" data-bs-parent="#summaryTabs">
-        <div class="tab-pane fade show active" id="tire-channel-report" role="tabpanel" aria-labelledby="tire-channel-tab">
-            <h3>สรุปยอดการเคลื่อนไหว "ยาง" ตามช่องทาง</h3>
-            {% if tire_movements_by_channel %}
-                {# กำหนดลำดับการแสดงผลของช่องทาง #}
+<div class="card shadow-sm">
+    <div class="card-header">
+        <ul class="nav nav-tabs card-header-tabs" id="summaryTabs" role="tablist">
+            <li class="nav-item" role="presentation"><button class="nav-link active" id="tire-channel-tab" data-bs-toggle="tab" data-bs-target="#tire-channel-pane" type="button" role="tab">สรุปยางตามช่องทาง</button></li>
+            <li class="nav-item" role="presentation"><button class="nav-link" id="wheel-channel-tab" data-bs-toggle="tab" data-bs-target="#wheel-channel-pane" type="button" role="tab">สรุปแม็กตามช่องทาง</button></li>
+            <li class="nav-item" role="presentation"><button class="nav-link" id="tire-item-tab" data-bs-toggle="tab" data-bs-target="#tire-item-pane" type="button" role="tab">สรุปยางรายรุ่น</button></li>
+            <li class="nav-item" role="presentation"><button class="nav-link" id="wheel-item-tab" data-bs-toggle="tab" data-bs-target="#wheel-item-pane" type="button" role="tab">สรุปแม็กรายรุ่น</button></li>
+        </ul>
+    </div>
+    <div class="card-body">
+        <div class="tab-content" id="summaryTabContent">
+            <div class="tab-pane fade show active" id="tire-channel-pane" role="tabpanel" tabindex="0">
+                <h4 class="mb-3">สรุปยอด "ยาง" ตามช่องทาง</h4>
                 {% set display_order = ['ซื้อเข้า', 'หน้าร้าน', 'ออนไลน์', 'ค้าส่ง', 'รับคืน', 'ไม่ระบุช่องทาง'] %}
-                {# กรองเฉพาะช่องทางที่มีข้อมูลใน tire_movements_by_channel และจัดเรียงตาม display_order #}
+                
                 {% for channel_name in display_order %}
                     {% if channel_name in tire_movements_by_channel %}
                         {% set data = tire_movements_by_channel[channel_name] %}
                         <div class="card mb-3">
-                            <div class="card-header bg-light">
-                                <strong>{{ channel_name }}</strong>
-                            </div>
-                            <div class="card-body">
-                                {# แสดงเฉพาะข้อมูลที่เกี่ยวข้องและมีค่าไม่เป็น 0 เท่านั้น #}
-                                {% if channel_name == 'ซื้อเข้า' %}
-                                    {% if data.IN > 0 %}<p>รับเข้า: <span class="text-success">{{ data.IN }}</span> เส้น</p>{% endif %}
-                                {% elif channel_name == 'หน้าร้าน' or channel_name == 'ออนไลน์' or channel_name == 'ค้าส่ง' %}
-                                    {% if data.OUT > 0 %}<p>จ่ายออก: <span class="text-danger">{{ data.OUT }}</span> เส้น</p>{% endif %}
-                                {% elif channel_name == 'รับคืน' %}
-                                    {# Calculate total RETURN quantity for the summary line #}
-                                    {% set total_return_qty = 0 %}
-                                    {% for return_detail in data.RETURN %}
-                                        {% set total_return_qty = total_return_qty + return_detail.quantity %}
+                            <div class="card-header bg-light"><strong>{{ channel_name }}</strong></div>
+                            <div class="card-body p-3">
+                                <div class="row">
+                                    {% if data.IN > 0 %}<div class="col-md-6"><p class="mb-1"><span class="text-success">รับเข้า:</span><strong class="text-success ms-2">{{ data.IN }}</strong></p></div>{% endif %}
+                                    {% if data.OUT > 0 %}<div class="col-md-6"><p class="mb-1"><span class="text-danger">จ่ายออก:</span><strong class="text-danger ms-2">{{ data.OUT }}</strong></p></div>{% endif %}
+                                </div>
+                                
+                                {% if data.RETURN %}
+                                    {% set return_total = namespace(value=0) %}
+                                    {% for ret in data.RETURN %}
+                                        {% set return_total.value = return_total.value + ret.quantity %}
                                     {% endfor %}
-
-                                    {# Display summary line if total_return_qty > 0 #}
-                                    {% if total_return_qty > 0 %}
-                                        <p>รับคืน: <span class="text-info">{{ total_return_qty }}</span> เส้น</p>
-                                    {% endif %}
-
-                                    {# Display detailed return movements #}
-                                    {% if data.RETURN %} {# <--- ตรวจสอบว่า list ไม่ว่าง #}
-                                        <h6 class="mt-3">รายละเอียดการรับคืน:</h6>
-                                        <ul class="list-group list-group-flush">
-                                            {% for return_detail in data.RETURN %}
-                                                <li class="list-group-item">
-                                                    รับคืน: <span class="text-info">{{ return_detail.quantity }}</span> เส้น จาก {{ return_detail.type }}
-                                                    {% if return_detail.type == 'ออนไลน์' and return_detail.online_platform_name %}
-                                                        ({{ return_detail.online_platform_name }})
-                                                    {% elif return_detail.type == 'หน้าร้านร้านยาง' and return_detail.wholesale_customer_name %}
-                                                        ({{ return_detail.wholesale_customer_name }})
-                                                    {% endif %}
-                                                </li>
-                                            {% endfor %}
-                                        </ul>
-                                    {% endif %}
-                                {% elif channel_name == 'ไม่ระบุช่องทาง' %}
-                                    {% if data.IN > 0 %}<p>รับเข้า: <span class="text-success">{{ data.IN }}</span> เส้น</p>{% endif %}
-                                    {% if data.OUT > 0 %}<p>จ่ายออก: <span class="text-danger">{{ data.OUT }}</span> เส้น</p>{% endif %}
-                                    {# Display summary line for 'ไม่ระบุช่องทาง' returns if list is not empty #}
-                                    {% if data.RETURN %}
-                                        {% set total_return_qty = 0 %}
-                                        {% for return_detail in data.RETURN %}{% set total_return_qty = total_return_qty + return_detail.quantity %}{% endfor %}
-                                        {% if total_return_qty > 0 %}<p>รับคืน: <span class="text-info">{{ total_return_qty }}</span> เส้น</p>{% endif %}
-                                    {% endif %}
-                                {% endif %} {# <--- ปิด if channel_name หลัก #}
-
-                                {% if 'ออนไลน์' == channel_name and data.online_platforms %}
-                                    <h6 class="mt-3">รายละเอียดแพลตฟอร์มออนไลน์:</h6>
+                                    
+                                    <p class="mb-1 mt-2">
+                                        <span class="text-info">รับคืน/ตีคืน:</span>
+                                        <strong class="text-info ms-2">{{ return_total.value }}</strong>
+                                    </p>
                                     <ul class="list-group list-group-flush">
-                                        {% for platform_name, platform_data in data.online_platforms.items() %}
-                                            <li class="list-group-item">
-                                                **{{ platform_name }}:**
-                                                {% if platform_data.IN > 0 %}รับเข้า: <span class="text-success">{{ platform_data.IN }}</span> เส้น{% endif %}
-                                                {% if platform_data.OUT > 0 %}จ่ายออก: <span class="text-danger">{{ platform_data.OUT }}</span> เส้น{% endif %}
-                                                {% if platform_data.RETURN > 0 %}รับคืน: <span class="text-info">{{ platform_data.RETURN }}</span> เส้น{% endif %}
+                                        {% for ret in data.RETURN %}
+                                            <li class="list-group-item d-flex align-items-center py-1 px-0">
+                                                <span>&ndash; จาก {{ ret.type }}
+                                                    {% if ret.type == 'ออนไลน์' and ret.online_platform_name != 'ไม่ระบุแพลตฟอร์ม' %}({{ ret.online_platform_name }}){% endif %}
+                                                    {% if ret.type == 'หน้าร้านร้านยาง' and ret.wholesale_customer_name != 'ไม่ระบุลูกค้า' %}({{ ret.wholesale_customer_name }}){% endif %}
+                                                </span>
+                                                <strong class="text-info ms-2">{{ ret.quantity }}</strong>
                                             </li>
                                         {% endfor %}
                                     </ul>
                                 {% endif %}
-
-                                {% if 'ค้าส่ง' == channel_name and data.wholesale_customers %}
-                                    <h6 class="mt-3">รายละเอียดลูกค้าค้าส่ง:</h6>
+                                
+                                {% if data.online_platforms %}
+                                    <p class="mb-1 mt-2"><strong>แพลตฟอร์มออนไลน์ (จ่ายออก):</strong></p>
                                     <ul class="list-group list-group-flush">
-                                        {% for customer_name, customer_data in data.wholesale_customers.items() %}
-                                            <li class="list-group-item">
-                                                **{{ customer_name }}:**
-                                                {% if customer_data.IN > 0 %}รับเข้า: <span class="text-success">{{ customer_data.IN }}</span> เส้น{% endif %}
-                                                {% if customer_data.OUT > 0 %}จ่ายออก: <span class="text-danger">{{ customer_data.OUT }}</span> เส้น{% endif %}
-                                                {% if customer_data.RETURN > 0 %}รับคืน: <span class="text-info">{{ customer_data.RETURN }}</span> เส้น{% endif %}
-                                            </li>
-                                        {% endfor %}
+                                        {% for platform, p_data in data.online_platforms.items() %}{% if p_data.OUT > 0 %}
+                                        <li class="list-group-item d-flex align-items-center py-1 px-0">
+                                            <span>&ndash; {{ platform }}</span>
+                                            <strong class="text-danger ms-2">{{ p_data.OUT }}</strong>
+                                        </li>
+                                        {% endif %}{% endfor %}
                                     </ul>
                                 {% endif %}
+
+                                {% if data.wholesale_customers %}
+                                    <p class="mb-1 mt-2"><strong>ลูกค้าค้าส่ง (จ่ายออก):</strong></p>
+                                    <ul class="list-group list-group-flush">
+                                        {% for customer, c_data in data.wholesale_customers.items() %}{% if c_data.OUT > 0 %}
+                                        <li class="list-group-item d-flex align-items-center py-1 px-0">
+                                            <span>&ndash; {{ customer }}</span>
+                                            <strong class="text-danger ms-2">{{ c_data.OUT }}</strong>
+                                        </li>
+                                        {% endif %}{% endfor %}
+                                    </ul>
+                                {% endif %}
+
                             </div>
                         </div>
                     {% endif %}
                 {% endfor %}
-            {% else %}
-                <p>ไม่มีการเคลื่อนไหวสต็อกยางตามช่องทางในช่วงเวลาที่เลือก</p>
-            {% endif %}
-        </div>
-
-        <div class="tab-pane fade" id="wheel-channel-report" role="tabpanel" aria-labelledby="wheel-channel-tab">
-            <h3>สรุปยอดการเคลื่อนไหว "แม็ก" ตามช่องทาง</h3>
-            {% if wheel_movements_by_channel %}
-                {# กำหนดลำดับการแสดงผลของช่องทาง #}
-                {% set display_order = ['ซื้อเข้า', 'หน้าร้าน', 'ออนไลน์', 'ค้าส่ง', 'รับคืน', 'ไม่ระบุช่องทาง'] %}
-                {# กรองเฉพาะช่องทางที่มีข้อมูลใน wheel_movements_by_channel และจัดเรียงตาม display_order #}
+            </div>
+            
+            <div class="tab-pane fade" id="wheel-channel-pane" role="tabpanel" tabindex="0">
+                <h4 class="mb-3">สรุปยอด "แม็ก" ตามช่องทาง</h4>
+                 {% set display_order = ['ซื้อเข้า', 'หน้าร้าน', 'ออนไลน์', 'ค้าส่ง', 'รับคืน', 'ไม่ระบุช่องทาง'] %}
+                
                 {% for channel_name in display_order %}
                     {% if channel_name in wheel_movements_by_channel %}
                         {% set data = wheel_movements_by_channel[channel_name] %}
                         <div class="card mb-3">
-                            <div class="card-header bg-light">
-                                <strong>{{ channel_name }}</strong>
-                            </div>
-                            <div class="card-body">
-                                {# แสดงเฉพาะข้อมูลที่เกี่ยวข้องและมีค่าไม่เป็น 0 เท่านั้น #}
-                                {% if channel_name == 'ซื้อเข้า' %}
-                                    {% if data.IN > 0 %}<p>รับเข้า: <span class="text-success">{{ data.IN }}</span> วง</p>{% endif %}
-                                {% elif channel_name == 'หน้าร้าน' or channel_name == 'ออนไลน์' or channel_name == 'ค้าส่ง' %}
-                                    {% if data.OUT > 0 %}<p>จ่ายออก: <span class="text-danger">{{ data.OUT }}</span> วง</p>{% endif %}
-                                {% elif channel_name == 'รับคืน' %}
-                                    {# Calculate total RETURN quantity for the summary line #}
-                                    {% set total_return_qty = 0 %}
-                                    {% for return_detail in data.RETURN %}
-                                        {% set total_return_qty = total_return_qty + return_detail.quantity %}
+                            <div class="card-header bg-light"><strong>{{ channel_name }}</strong></div>
+                            <div class="card-body p-3">
+                                <div class="row">
+                                    {% if data.IN > 0 %}<div class="col-md-6"><p class="mb-1"><span class="text-success">รับเข้า:</span><strong class="text-success ms-2">{{ data.IN }}</strong></p></div>{% endif %}
+                                    {% if data.OUT > 0 %}<div class="col-md-6"><p class="mb-1"><span class="text-danger">จ่ายออก:</span><strong class="text-danger ms-2">{{ data.OUT }}</strong></p></div>{% endif %}
+                                </div>
+                                
+                                {% if data.RETURN %}
+                                    {% set return_total = namespace(value=0) %}
+                                    {% for ret in data.RETURN %}
+                                        {% set return_total.value = return_total.value + ret.quantity %}
                                     {% endfor %}
 
-                                    {# Display summary line if total_return_qty > 0 #}
-                                    {% if total_return_qty > 0 %}
-                                        <p>รับคืน: <span class="text-info">{{ total_return_qty }}</span> วง</p>
-                                    {% endif %}
-
-                                    {# Display detailed return movements #}
-                                    {% if data.RETURN %} {# <--- ตรวจสอบว่า list ไม่ว่าง #}
-                                        <h6 class="mt-3">รายละเอียดการรับคืน:</h6>
-                                        <ul class="list-group list-group-flush">
-                                            {% for return_detail in data.RETURN %}
-                                                <li class="list-group-item">
-                                                    รับคืน: <span class="text-info">{{ return_detail.quantity }}</span> วง จาก {{ return_detail.type }}
-                                                    {% if return_detail.type == 'ออนไลน์' and return_detail.online_platform_name %}
-                                                        ({{ return_detail.online_platform_name }})
-                                                    {% elif return_detail.type == 'หน้าร้านร้านยาง' and return_detail.wholesale_customer_name %}
-                                                        ({{ return_detail.wholesale_customer_name }})
-                                                    {% endif %}
-                                                </li>
-                                            {% endfor %}
-                                        </ul>
-                                    {% endif %}
-                                {% elif channel_name == 'ไม่ระบุช่องทาง' %}
-                                    {% if data.IN > 0 %}<p>รับเข้า: <span class="text-success">{{ data.IN }}</span> วง</p>{% endif %}
-                                    {% if data.OUT > 0 %}<p>จ่ายออก: <span class="text-danger">{{ data.OUT }}</span> วง</p>{% endif %}
-                                    {% if data.RETURN %} {# NEW: ตรวจสอบว่า list ไม่ว่าง #}
-                                        {% set total_return_qty = 0 %}
-                                        {% for return_detail in data.RETURN %}{% set total_return_qty = total_return_qty + return_detail.quantity %}{% endfor %}
-                                        {% if total_return_qty > 0 %}<p>รับคืน: <span class="text-info">{{ total_return_qty }}</span> วง</p>{% endif %}
-                                    {% endif %}
-                                {% endif %} {# <--- ปิด if channel_name หลัก #}
-
-                                {% if 'ออนไลน์' == channel_name and data.online_platforms %}
-                                    <h6 class="mt-3">รายละเอียดแพลตฟอร์มออนไลน์:</h6>
+                                    <p class="mb-1 mt-2">
+                                        <span class="text-info">รับคืน/ตีคืน:</span>
+                                        <strong class="text-info ms-2">{{ return_total.value }}</strong>
+                                    </p>
                                     <ul class="list-group list-group-flush">
-                                        {% for platform_name, platform_data in data.online_platforms.items() %}
-                                            <li class="list-group-item">
-                                                **{{ platform_name }}:**
-                                                {% if platform_data.IN > 0 %}รับเข้า: <span class="text-success">{{ platform_data.IN }}</span> วง{% endif %}
-                                                {% if platform_data.OUT > 0 %}จ่ายออก: <span class="text-danger">{{ platform_data.OUT }}</span> วง{% endif %}
-                                                {% if platform_data.RETURN > 0 %}รับคืน: <span class="text-info">{{ platform_data.RETURN }}</span> วง{% endif %}
+                                        {% for ret in data.RETURN %}
+                                            <li class="list-group-item d-flex align-items-center py-1 px-0">
+                                               <span>&ndash; จาก {{ ret.type }}
+                                                    {% if ret.type == 'ออนไลน์' and ret.online_platform_name != 'ไม่ระบุแพลตฟอร์ม' %}({{ ret.online_platform_name }}){% endif %}
+                                                    {% if ret.type == 'หน้าร้านร้านยาง' and ret.wholesale_customer_name != 'ไม่ระบุลูกค้า' %}({{ ret.wholesale_customer_name }}){% endif %}
+                                                </span>
+                                                <strong class="text-info ms-2">{{ ret.quantity }}</strong>
                                             </li>
                                         {% endfor %}
                                     </ul>
                                 {% endif %}
 
-                                {% if 'ค้าส่ง' == channel_name and data.wholesale_customers %}
-                                    <h6 class="mt-3">รายละเอียดลูกค้าค้าส่ง:</h6>
+                                {% if data.online_platforms %}
+                                    <p class="mb-1 mt-2"><strong>แพลตฟอร์มออนไลน์ (จ่ายออก):</strong></p>
                                     <ul class="list-group list-group-flush">
-                                        {% for customer_name, customer_data in data.wholesale_customers.items() %}
-                                            <li class="list-group-item">
-                                                **{{ customer_name }}:**
-                                                {% if customer_data.IN > 0 %}รับเข้า: <span class="text-success">{{ customer_data.IN }}</span> วง{% endif %}
-                                                {% if customer_data.OUT > 0 %}จ่ายออก: <span class="text-danger">{{ customer_data.OUT }}</span> วง{% endif %}
-                                                {% if customer_data.RETURN > 0 %}รับคืน: <span class="text-info">{{ customer_data.RETURN }}</span> วง{% endif %}
-                                            </li>
-                                        {% endfor %}
+                                        {% for platform, p_data in data.online_platforms.items() %}{% if p_data.OUT > 0 %}
+                                        <li class="list-group-item d-flex align-items-center py-1 px-0">
+                                            <span>&ndash; {{ platform }}</span>
+                                            <strong class="text-danger ms-2">{{ p_data.OUT }}</strong>
+                                        </li>
+                                        {% endif %}{% endfor %}
+                                    </ul>
+                                {% endif %}
+
+                                {% if data.wholesale_customers %}
+                                    <p class="mb-1 mt-2"><strong>ลูกค้าค้าส่ง (จ่ายออก):</strong></p>
+                                    <ul class="list-group list-group-flush">
+                                        {% for customer, c_data in data.wholesale_customers.items() %}{% if c_data.OUT > 0 %}
+                                        <li class="list-group-item d-flex align-items-center py-1 px-0">
+                                            <span>&ndash; {{ customer }}</span>
+                                            <strong class="text-danger ms-2">{{ c_data.OUT }}</strong>
+                                        </li>
+                                        {% endif %}{% endfor %}
                                     </ul>
                                 {% endif %}
                             </div>
                         </div>
                     {% endif %}
                 {% endfor %}
-            {% else %}
-                <p>ไม่มีการเคลื่อนไหวสต็อกแม็กตามช่องทางในช่วงเวลาที่เลือก</p>
-            {% endif %}
-        </div>
+            </div>
 
-        <div class="tab-pane fade" id="tire-item-report" role="tabpanel" aria-labelledby="tire-item-tab">
-            <h3>สรุปยอดการเคลื่อนไหว "ยาง" รายรุ่น</h3>
-            {% if tires_by_brand_for_summary_report %}
-                {% for brand, items in tires_by_brand_for_summary_report.items()|sort %}
-                    <div class="brand-frame form-section">
-                        <h4>ยี่ห้อ: {{ brand | title }}</h4>
-                        <div class="table-responsive">
-                            <table class="summary-table">
-                                <thead>
-                                    <tr>
-                                        <th>รุ่นยาง</th>
-                                        <th>เบอร์ยาง</th>
-                                        <th>ยอดเริ่มต้น</th>
-                                        <th>รับเข้า</th>
-                                        <th>จ่ายออก</th>
-                                        <th>รับคืน</th>
-                                        <th>ยอดคงเหลือ</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {% for item in items %}
+            <div class="tab-pane fade" id="tire-item-pane" role="tabpanel" tabindex="0">
+                <h4 class="mb-3">สรุปยอด "ยาง" รายรุ่น</h4>
+                {% if tires_by_brand_for_summary_report %}
+                    {% for brand, items in tires_by_brand_for_summary_report.items()|sort %}
+                    <div class="card mb-3">
+                        <div class="card-header bg-light">
+                            <strong>{{ brand | title }}</strong>
+                        </div>
+                        <div class="card-body p-0">
+                             <div class="table-responsive">
+                                <table class="table table-sm table-striped table-hover mb-0">
+                                    <thead class="table-light">
                                         <tr>
-                                            <td>{{ item.model | title }}</td>
-                                            <td>{{ item.size }}</td>
-                                            <td>{{ item.initial_quantity }}</td> 
-                                            <td class="text-success">{{ item.IN }}</td> 
-                                            <td class="text-danger">{{ item.OUT }}</td> 
-                                            <td class="text-info">{{ item.RETURN }}</td> 
-                                            <td>{{ item.final_quantity }}</td> 
+                                            <th>รุ่น/เบอร์</th>
+                                            <th class="text-center">เริ่ม</th>
+                                            <th class="text-center text-success">เข้า</th>
+                                            <th class="text-center text-danger">ออก</th>
+                                            <th class="text-center text-info">คืน</th>
+                                            <th class="text-center">เหลือ</th>
                                         </tr>
-                                    {% endfor %}
-                                </tbody>
-                            </table>
+                                    </thead>
+                                    <tbody>
+                                        {% for item in items %}
+                                        <tr>
+                                            <td>{{item.model|title}} {{item.size}}</td>
+                                            <td class="text-center">{{item.initial_quantity}}</td>
+                                            <td class="text-center text-success">{{item.IN}}</td>
+                                            <td class="text-center text-danger">{{item.OUT}}</td>
+                                            <td class="text-center text-info">{{item.RETURN}}</td>
+                                            <td class="text-center fw-bold">{{item.final_quantity}}</td>
+                                        </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
                         </div>
                     </div>
-                {% endfor %}
-            {% else %}
-                <p class="no-data">ไม่พบข้อมูลการเคลื่อนไหวสต็อกยางรายรุ่นในช่วงที่เลือก</p>
-            {% endif %}
-        </div>
-
-        <div class="tab-pane fade" id="wheel-item-report" role="tabpanel" aria-labelledby="wheel-item-tab">
-            <h3>สรุปยอดการเคลื่อนไหว "แม็ก" รายรุ่น</h3>
-            {% if wheels_by_brand_for_summary_report %}
-                {% for brand, items in wheels_by_brand_for_summary_report.items()|sort %}
-                    <div class="brand-frame form-section">
-                        <h4>ยี่ห้อ: {{ brand | title }}</h4>
-                        <div class="table-responsive">
-                            <table class="summary-table">
-                                <thead>
-                                    <tr>
-                                        <th>ลาย</th>
-                                        <th>ขอบ</th>
-                                        <th>PCD</th>
-                                        <th>กว้าง</th>
-                                        <th>ET</th>
-                                        <th>สี</th>
-                                        <th>ยอดเริ่มต้น</th>
-                                        <th>รับเข้า</th>
-                                        <th>จ่ายออก</th>
-                                        <th>รับคืน</th>
-                                        <th>ยอดคงเหลือ</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {% for item in items %}
+                    {% endfor %}
+                {% else %}<div class="alert alert-info">ไม่พบข้อมูล</div>{% endif %}
+            </div>
+            
+            <div class="tab-pane fade" id="wheel-item-pane" role="tabpanel" tabindex="0">
+                <h4 class="mb-3">สรุปยอด "แม็ก" รายรุ่น</h4>
+                {% if wheels_by_brand_for_summary_report %}
+                    {% for brand, items in wheels_by_brand_for_summary_report.items()|sort %}
+                    <div class="card mb-3">
+                         <div class="card-header bg-light">
+                            <strong>{{ brand | title }}</strong>
+                        </div>
+                        <div class="card-body p-0">
+                            <div class="table-responsive">
+                                <table class="table table-sm table-striped table-hover mb-0">
+                                    <thead class="table-light">
                                         <tr>
-                                            <td>{{ item.model | title }}</td>
-                                            <td>{{ item.diameter }}</td>
-                                            <td>{{ item.pcd }}</td>
-                                            <td>{{ item.width }}</td>
-                                            <td>{{ item.et | default('-') }}</td>
-                                            <td>{{ item.color | default('-') }}</td>
-                                            <td>{{ item.initial_quantity }}</td> 
-                                            <td class="text-success">{{ item.IN }}</td> 
-                                            <td class="text-danger">{{ item.OUT }}</td> 
-                                            <td class="text-info">{{ item.RETURN }}</td> 
-                                            <td>{{ item.final_quantity }}</td> 
+                                            <th>ลาย/ขนาด/รู/สี</th>
+                                            <th class="text-center">เริ่ม</th>
+                                            <th class="text-center text-success">เข้า</th>
+                                            <th class="text-center text-danger">ออก</th>
+                                            <th class="text-center text-info">คืน</th>
+                                            <th class="text-center">เหลือ</th>
                                         </tr>
-                                    {% endfor %}
-                                </tbody>
-                            </table>
+                                    </thead>
+                                    <tbody>
+                                        {% for item in items %}
+                                        <tr>
+                                            <td>{{item.model|title}} {{item.diameter}}x{{item.width}} {{item.pcd}} {{item.color|default('')}}</td>
+                                            <td class="text-center">{{item.initial_quantity}}</td>
+                                            <td class="text-center text-success">{{item.IN}}</td>
+                                            <td class="text-center text-danger">{{item.OUT}}</td>
+                                            <td class="text-center text-info">{{item.RETURN}}</td>
+                                            <td class="text-center fw-bold">{{item.final_quantity}}</td>
+                                        </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
                         </div>
                     </div>
-                {% endfor %}
-            {% else %}
-                <p class="no-data">ไม่พบข้อมูลการเคลื่อนไหวสต็อกล้อแม็กรายรุ่นในช่วงที่เลือก</p>
-            {% endif %}
+                    {% endfor %}
+                {% else %}<div class="alert alert-info">ไม่พบข้อมูล</div>{% endif %}
+            </div>
         </div>
     </div>
-
-    <div class="total-summary-section form-section">
-        <h3>สรุปยอดรวมทั้งหมด</h3>
-        <div class="form-row">
-            <div class="form-group quarter-width">
-                ยางรวม<br>
-                ยอดเริ่มต้น: <strong>{{ overall_tire_initial }}</strong>
-            </div>
-            <div class="form-group quarter-width">
-                ยางรวม<br>
-                รับเข้า: <strong class="text-success">{{ overall_tire_in }}</strong>
-            </div>
-            <div class="form-group quarter-width">
-                ยางรวม<br>
-                จ่ายออก: <strong class="text-danger">{{ overall_tire_out }}</strong>
-            </div>
-            <div class="form-group quarter-width">
-                ยางรวม<br>
-                รับคืน: <strong class="text-info">{{ overall_tire_return }}</strong>
-            </div>
-            <div class="form-group full-width">
-                ยางรวม<br>
-                ยอดคงเหลือ: <strong>{{ overall_tire_final }}</strong>
-            </div>
-        </div>
-        <div class="form-row">
-            <div class="form-group quarter-width">
-                แม็กรวม<br>
-                ยอดเริ่มต้น: <strong>{{ overall_wheel_initial }}</strong>
-            </div>
-            <div class="form-group quarter-width">
-                แม็กรวม<br>
-                รับเข้า: <strong class="text-success">{{ overall_wheel_in }}</strong>
-            </div>
-            <div class="form-group quarter-width">
-                แม็กรวม<br>
-                จ่ายออก: <strong class="text-danger">{{ overall_wheel_out }}</strong>
-            </div>
-            <div class="form-group quarter-width">
-                แม็กรวม<br>
-                รับคืน: <strong class="text-info">{{ overall_wheel_return }}</strong>
-            </div>
-            <div class="form-group full-width">
-                แม็กรวม<br>
-                ยอดคงเหลือ: <strong>{{ overall_wheel_final }}</strong>
-            </div>
-        </div>
-
-        <hr style="border-top: 1px dashed var(--border-color); margin: var(--spacing-xl) 0;">
-
-        <h3>สรุปยอดรวมแยกตามยี่ห้อยาง</h3>
-        <div class="form-row">
-            {% if tire_brand_totals_for_summary_report %}
-                {% for brand, summary in tire_brand_totals_for_summary_report.items() %}
-                    <div class="form-group quarter-width brand-summary-card">
-                        {{ brand | title }}<br>
-                        รับเข้า: <strong class="text-success">{{ summary.IN }}</strong><br>
-                        จ่ายออก: <strong class="text-danger">{{ summary.OUT }}</strong><br>
-                        รับคืน: <strong class="text-info">{{ summary.RETURN }}</strong><br>
-                        คงเหลือ: <strong>{{ summary.final_quantity_sum }}</strong>
-                    </div>
-                {% endfor %}
-            {% else %}
-                <div class="form-group full-width no-data-summary">
-                    <p class="no-data" style="margin:0; padding:10px;">ไม่มีข้อมูลสรุปยางแยกตามยี่ห้อในช่วงที่เลือก</p>
-                </div>
-            {% endif %}
-        </div>
-
-        <h3>สรุปยอดรวมแยกตามยี่ห้อแม็ก</h3>
-        <div class="form-row">
-            {% if wheel_brand_totals_for_summary_report %}
-                {% for brand, summary in wheel_brand_totals_for_summary_report.items() %}
-                    <div class="form-group quarter-width brand-summary-card">
-                        {{ brand | title }}<br>
-                        รับเข้า: <strong class="text-success">{{ summary.IN }}</strong><br>
-                        จ่ายออก: <strong class="text-danger">{{ summary.OUT }}</strong><br>
-                        รับคืน: <strong class="text-info">{{ summary.RETURN }}</strong><br>
-                        คงเหลือ: <strong>{{ summary.final_quantity_sum }}</strong>
-                    </div>
-                {% endfor %}
-            {% else %}
-                <div class="form-group full-width no-data-summary">
-                    <p class="no-data" style="margin:0; padding:10px;">ไม่มีข้อมูลสรุปแม็กแยกตามยี่ห้อในช่วงที่เลือก</p>
-                </div>
-            {% endif %}
-        </div>
-    </div>
-
+</div>
 {% endblock %}
 
 {% block scripts %}
     <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
     <script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/th.js"></script>
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
     <script>
-        flatpickr("#start_date", {
-            dateFormat: "Y-m-d",
-            locale: "th"
-        });
-        flatpickr("#end_date", {
-            dateFormat: "Y-m-d",
-            locale: "th"
-        });
-    </script>
+        flatpickr("#start_date", { dateFormat: "Y-m-d", locale: "th" });
+        flatpickr("#end_date", { dateFormat: "Y-m-d", locale: "th" });
 
-    <script>
-        // ใช้ jQuery's ready function for safer DOM manipulation
-        $(document).ready(function() {
-            // Function to activate a specific tab
-            function activateTab(tabId) {
-                var tabTrigger = document.querySelector(tabId);
-                if (tabTrigger) {
-                    var bsTab = new bootstrap.Tab(tabTrigger);
-                    bsTab.show();
-                    // Optional: Scroll to the top of the tab content for better UX
-                    // $('html, body').animate({
-                    //     scrollTop: $(targetTabPaneId).offset().top - $('.navbar').outerHeight() - 20
-                    // }, 500);
-                }
-            }
-
-            // Check URL hash on load to activate a specific tab (e.g., #tire-channel-report)
-            // This is useful for direct links or reloading the page with a specific tab active
-            if (window.location.hash) {
-                var initialTabId = window.location.hash; // e.g., "#tire-channel-report"
-                var tabButtonSelector = 'button[data-bs-target="' + initialTabId + '"]';
-                var initialTabButton = document.querySelector(tabButtonSelector);
-
-                if (initialTabButton && initialTabButton.classList.contains('nav-link')) {
-                    // Activate the tab specified in the URL hash
-                    activateTab(tabButtonSelector);
-                } else {
-                    // If hash doesn't correspond to a valid tab, activate the default first tab
-                    activateTab('#tire-channel-tab');
-                }
-            } else {
-                // If no hash in URL, activate the default first tab
-                activateTab('#tire-channel-tab');
-            }
-
-            // Add event listeners for tab buttons to update the URL hash
-            $('#summaryTabs button[data-bs-toggle="tab"]').on('shown.bs.tab', function (e) {
-                // Get the ID of the newly shown tab pane (e.g., #tire-channel-report)
-                var newTabPaneId = $(e.target).attr('data-bs-target');
-                // Update the URL hash without causing a page reload
-                history.replaceState(null, null, newTabPaneId);
+        // Script to handle URL hash for tabs
+        document.addEventListener('DOMContentLoaded', function() {
+            const tabElms = document.querySelectorAll('button[data-bs-toggle="tab"]');
+            tabElms.forEach(function(tabElm) {
+                tabElm.addEventListener('shown.bs.tab', function(event) {
+                    const hash = event.target.dataset.bsTarget;
+                    if(history.replaceState) {
+                        history.replaceState(null, null, hash);
+                    } else {
+                        window.location.hash = hash;
+                    }
+                });
             });
+
+            if (window.location.hash) {
+                const tabTrigger = document.querySelector(`button[data-bs-target="${window.location.hash}"]`);
+                if (tabTrigger) {
+                    const tab = new bootstrap.Tab(tabTrigger);
+                    tab.show();
+                }
+            }
         });
     </script>
 {% endblock %}

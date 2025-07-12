@@ -1507,9 +1507,9 @@ def delete_tire_movement(conn, movement_id):
 
     # คำนวณยอดคงเหลือเริ่มต้นก่อนรายการแรกใน subsequent_movements
     if is_postgres:
-        cursor.execute("SELECT COALESCE(SUM(CASE WHEN type = 'IN' THEN quantity_change ELSE -quantity_change END), 0) FROM tire_movements WHERE tire_id = %s AND timestamp < %s", (tire_id, movement_timestamp))
+        cursor.execute("SELECT COALESCE(SUM(CASE WHEN type IN ('IN', 'RETURN') THEN quantity_change ELSE -quantity_change END), 0) FROM tire_movements WHERE tire_id = %s AND timestamp < %s", (tire_id, movement_timestamp))
     else:
-        cursor.execute("SELECT COALESCE(SUM(CASE WHEN type = 'IN' THEN quantity_change ELSE -quantity_change END), 0) FROM tire_movements WHERE tire_id = ? AND timestamp < ?", (tire_id, movement_timestamp))
+        cursor.execute("SELECT COALESCE(SUM(CASE WHEN type IN ('IN', 'RETURN') THEN quantity_change ELSE -quantity_change END), 0) FROM tire_movements WHERE tire_id = ? AND timestamp < ?", (tire_id, movement_timestamp))
     
     current_remaining_qty = cursor.fetchone()[0] or 0
 
@@ -2078,3 +2078,124 @@ def get_barcodes_for_wheel(conn, wheel_id):
     else:
         cursor.execute("SELECT barcode_string, is_primary_barcode FROM wheel_barcodes WHERE wheel_id = ? ORDER BY is_primary_barcode DESC, barcode_string ASC", (wheel_id,))
     return [dict(row) for row in cursor.fetchall()]
+
+def recalculate_all_stock_histories(conn):
+    """
+    Recalculates the entire history of remaining_quantity for ALL tires and wheels.
+    This is a one-time fix for corrupted historical data.
+    """
+    cursor = conn.cursor()
+    is_postgres = "psycopg2" in str(type(conn))
+    print("Starting recalculation for all items...")
+
+    # --- Recalculate for all TIRES ---
+    print("Processing tires...")
+    cursor.execute("SELECT DISTINCT tire_id FROM tire_movements")
+    all_tire_ids = [row['tire_id'] for row in cursor.fetchall()]
+
+    for tire_id in all_tire_ids:
+        print(f"  Recalculating for tire_id: {tire_id}")
+        # ดึงประวัติทั้งหมดของยางเส้นนี้ เรียงตามเวลา
+        sql_get_movements = f"""
+            SELECT id, type, quantity_change FROM tire_movements 
+            WHERE tire_id = ? ORDER BY timestamp ASC, id ASC
+        """
+        cursor.execute(sql_get_movements.replace('?','%s') if is_postgres else sql_get_movements, (tire_id,))
+        movements = cursor.fetchall()
+        
+        # เริ่มคำนวณใหม่จาก 0
+        running_stock = 0
+        for move in movements:
+            if move['type'] in ('IN', 'RETURN'):
+                running_stock += move['quantity_change']
+            elif move['type'] == 'OUT':
+                running_stock -= move['quantity_change']
+            
+            # อัปเดตค่า remaining_quantity ของทุกรายการให้ถูกต้อง
+            sql_update_remaining = f"UPDATE tire_movements SET remaining_quantity = ? WHERE id = ?"
+            cursor.execute(sql_update_remaining.replace('?','%s') if is_postgres else sql_update_remaining, (running_stock, move['id']))
+
+    # --- Recalculate for all WHEELS ---
+    print("Processing wheels...")
+    cursor.execute("SELECT DISTINCT wheel_id FROM wheel_movements")
+    all_wheel_ids = [row['wheel_id'] for row in cursor.fetchall()]
+
+    for wheel_id in all_wheel_ids:
+        print(f"  Recalculating for wheel_id: {wheel_id}")
+        # ดึงประวัติทั้งหมดของแม็กวงนี้ เรียงตามเวลา
+        sql_get_movements = f"""
+            SELECT id, type, quantity_change FROM wheel_movements 
+            WHERE wheel_id = ? ORDER BY timestamp ASC, id ASC
+        """
+        cursor.execute(sql_get_movements.replace('?','%s') if is_postgres else sql_get_movements, (wheel_id,))
+        movements = cursor.fetchall()
+
+        running_stock = 0
+        for move in movements:
+            if move['type'] in ('IN', 'RETURN'):
+                running_stock += move['quantity_change']
+            elif move['type'] == 'OUT':
+                running_stock -= move['quantity_change']
+
+            sql_update_remaining = f"UPDATE wheel_movements SET remaining_quantity = ? WHERE id = ?"
+            cursor.execute(sql_update_remaining.replace('?','%s') if is_postgres else sql_update_remaining, (running_stock, move['id']))
+
+    conn.commit()
+    print("Recalculation complete!")
+    return "Recalculation complete for all items."
+
+def add_notification(conn, message, user_id=None):
+    """บันทึกข้อความแจ้งเตือนใหม่ลงในฐานข้อมูล"""
+    created_at = get_bkk_time().isoformat()
+    cursor = conn.cursor()
+    if "psycopg2" in str(type(conn)):
+        cursor.execute(
+            "INSERT INTO notifications (message, user_id, created_at, is_read) VALUES (%s, %s, %s, FALSE)",
+            (message, user_id, created_at)
+        )
+    else:
+        cursor.execute(
+            "INSERT INTO notifications (message, user_id, created_at, is_read) VALUES (?, ?, ?, 0)",
+            (message, user_id, created_at)
+        )
+    # No conn.commit() here, it will be handled by the main route function
+
+def get_all_notifications(conn):
+    """ดึงการแจ้งเตือนทั้งหมด เรียงจากใหม่ไปเก่า"""
+    cursor = conn.cursor()
+    query = """
+        SELECT n.id, n.message, n.created_at, n.is_read, u.username
+        FROM notifications n
+        LEFT JOIN users u ON n.user_id = u.id
+        ORDER BY n.created_at DESC
+        LIMIT 100
+    """
+    cursor.execute(query)
+    
+    # แปลงเวลาให้เป็น BKK Time ก่อนส่งกลับ
+    notifications = []
+    for row in cursor.fetchall():
+        notif_dict = dict(row)
+        notif_dict['created_at'] = convert_to_bkk_time(notif_dict['created_at'])
+        notifications.append(notif_dict)
+    return notifications  
+
+def get_unread_notification_count(conn):
+    """นับจำนวนการแจ้งเตือนที่ยังไม่ได้อ่าน"""
+    cursor = conn.cursor()
+    if "psycopg2" in str(type(conn)):
+        cursor.execute("SELECT COUNT(id) FROM notifications WHERE is_read = FALSE")
+    else:
+        cursor.execute("SELECT COUNT(id) FROM notifications WHERE is_read = 0")
+    count = cursor.fetchone()[0]
+    return count
+
+def mark_all_notifications_as_read(conn):
+    """อัปเดตการแจ้งเตือนทั้งหมดให้เป็น 'อ่านแล้ว'"""
+    cursor = conn.cursor()
+    if "psycopg2" in str(type(conn)):
+        cursor.execute("UPDATE notifications SET is_read = TRUE WHERE is_read = FALSE")
+    else:
+        cursor.execute("UPDATE notifications SET is_read = 1 WHERE is_read = 0")
+    conn.commit()
+  
