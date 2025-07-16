@@ -4,6 +4,12 @@
 
 {% block head_scripts %}
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+    <style>
+        /* ทำให้ลิงก์หัวข้อหลักและลิงก์ย่อยมีขีดเส้นใต้เมื่อเอาเมาส์ไปชี้ */
+        .channel-link:hover, .sub-channel-link:hover {
+            text-decoration: underline !important;
+        }
+    </style>
 {% endblock %}
 
 {% block content %}
@@ -74,19 +80,20 @@
             
             <div class="tab-pane fade show active" id="channel-summary-pane" role="tabpanel" tabindex="0">
                 <ul class="nav nav-pills mb-3" id="channel-pills-tab" role="tablist">
-                    <li class="nav-item" role="presentation">
-                        <button class="nav-link active" id="pills-channel-tire-tab" data-bs-toggle="pill" data-bs-target="#pills-channel-tire" type="button" role="tab">ยาง</button>
-                    </li>
-                    <li class="nav-item" role="presentation">
-                        <button class="nav-link" id="pills-channel-wheel-tab" data-bs-toggle="pill" data-bs-target="#pills-channel-wheel" type="button" role="tab">แม็ก</button>
-                    </li>
+                    <li class="nav-item" role="presentation"><button class="nav-link active" id="pills-channel-tire-tab" data-bs-toggle="pill" data-bs-target="#pills-channel-tire" type="button" role="tab">ยาง</button></li>
+                    <li class="nav-item" role="presentation"><button class="nav-link" id="pills-channel-wheel-tab" data-bs-toggle="pill" data-bs-target="#pills-channel-wheel" type="button" role="tab">แม็ก</button></li>
                 </ul>
                 <div class="tab-content" id="channel-pills-tabContent">
+                    
                     <div class="tab-pane fade show active" id="pills-channel-tire" role="tabpanel">
                         {% set display_order = ['ซื้อเข้า', 'หน้าร้าน', 'ออนไลน์', 'ค้าส่ง', 'รับคืน', 'ไม่ระบุช่องทาง'] %}
                         {% for channel_name in display_order %}{% if channel_name in tire_movements_by_channel %}
                             {% set data = tire_movements_by_channel[channel_name] %}
-                            <div class="card mb-3"><div class="card-header bg-light"><strong>{{ channel_name }}</strong></div>
+                            <div class="card mb-3">
+                                <div class="card-header bg-light">
+                                    {% set move_type = 'IN' if channel_name == 'ซื้อเข้า' else ('RETURN' if channel_name == 'รับคืน' else 'OUT') %}
+                                    <a href="{{ url_for('summary_details', item_type='tire', channel_id=data.channel_id, start_date=start_date_param, end_date=end_date_param, move_type=move_type) }}" class="text-decoration-none text-primary fw-bold fs-5 channel-link">{{ channel_name }}</a>
+                                </div>
                                 <div class="card-body p-3">
                                     <div class="row">
                                         {% if data.IN > 0 %}<div class="col-md-6"><p class="mb-1"><span class="text-success">รับเข้า:</span><strong class="text-success ms-2">{{ data.IN }}</strong></p></div>{% endif %}
@@ -95,24 +102,43 @@
                                     {% if data.RETURN %}{% set return_total = namespace(value=0) %}{% for ret in data.RETURN %}{% set return_total.value = return_total.value + ret.quantity %}{% endfor %}
                                     <p class="mb-1 mt-2"><span class="text-info">รับคืน/ตีคืน:</span><strong class="text-info ms-2">{{ return_total.value }}</strong></p>
                                     <ul class="list-group list-group-flush">
-                                        {% for ret in data.RETURN %}<li class="list-group-item d-flex align-items-center py-1 px-0"><span>&ndash; จาก {{ ret.type }}{% if ret.type == 'ออนไลน์' and ret.online_platform_name != 'ไม่ระบุแพลตฟอร์ม' %}({{ ret.online_platform_name }}){% endif %}{% if ret.type == 'หน้าร้านร้านยาง' and ret.wholesale_customer_name != 'ไม่ระบุลูกค้า' %}({{ ret.wholesale_customer_name }}){% endif %}</span><strong class="text-info ms-2">{{ ret.quantity }}</strong></li>{% endfor %}
+                                        {% for ret in data.RETURN %}
+                                            <li class="list-group-item d-flex align-items-center py-1 px-0">
+                                                {% set query_params = {'item_type': 'tire', 'return_customer_type': ret.type, 'start_date': start_date_param, 'end_date': end_date_param, 'move_type': 'RETURN'} %}
+                                                {% if ret.type == 'ออนไลน์' and ret.online_platform_id %}{% set _ = query_params.update({'online_platform_id': ret.online_platform_id}) %}{% endif %}
+                                                {% if ret.type == 'หน้าร้านร้านยาง' and ret.wholesale_customer_id %}{% set _ = query_params.update({'wholesale_customer_id': ret.wholesale_customer_id}) %}{% endif %}
+                                                <a href="{{ url_for('summary_details', **query_params) }}" class="text-decoration-none text-primary sub-channel-link">&ndash; จาก {{ ret.type }}{% if ret.type == 'ออนไลน์' and ret.online_platform_name != 'ไม่ระบุแพลตฟอร์ม' %}({{ ret.online_platform_name }}){% endif %}{% if ret.type == 'หน้าร้านร้านยาง' and ret.wholesale_customer_name != 'ไม่ระบุลูกค้า' %}({{ ret.wholesale_customer_name }}){% endif %}</a>
+                                                <strong class="text-info ms-2">{{ ret.quantity }}</strong>
+                                            </li>
+                                        {% endfor %}
                                     </ul>{% endif %}
                                     {% if data.online_platforms %}<p class="mb-1 mt-2"><strong>แพลตฟอร์มออนไลน์ (จ่ายออก):</strong></p>
                                     <ul class="list-group list-group-flush">
-                                        {% for platform, p_data in data.online_platforms.items() %}{% if p_data.OUT > 0 %}<li class="list-group-item d-flex align-items-center py-1 px-0"><span>&ndash; {{ platform }}</span><strong class="text-danger ms-2">{{ p_data.OUT }}</strong></li>{% endif %}{% endfor %}
+                                        {% for platform, p_data in data.online_platforms.items() %}{% if p_data.OUT > 0 %}<li class="list-group-item d-flex align-items-center py-1 px-0">
+                                            <a href="{{ url_for('summary_details', item_type='tire', online_platform_id=p_data.id, start_date=start_date_param, end_date=end_date_param, move_type='OUT') }}" class="text-decoration-none text-primary sub-channel-link">&ndash; {{ platform }}</a>
+                                            <strong class="text-danger ms-2">{{ p_data.OUT }}</strong>
+                                        </li>{% endif %}{% endfor %}
                                     </ul>{% endif %}
                                     {% if data.wholesale_customers %}<p class="mb-1 mt-2"><strong>ลูกค้าค้าส่ง (จ่ายออก):</strong></p>
                                     <ul class="list-group list-group-flush">
-                                        {% for customer, c_data in data.wholesale_customers.items() %}{% if c_data.OUT > 0 %}<li class="list-group-item d-flex align-items-center py-1 px-0"><span>&ndash; {{ customer }}</span><strong class="text-danger ms-2">{{ c_data.OUT }}</strong></li>{% endif %}{% endfor %}
+                                        {% for customer, c_data in data.wholesale_customers.items() %}{% if c_data.OUT > 0 %}<li class="list-group-item d-flex align-items-center py-1 px-0">
+                                            <a href="{{ url_for('summary_details', item_type='tire', wholesale_customer_id=c_data.id, start_date=start_date_param, end_date=end_date_param, move_type='OUT') }}" class="text-decoration-none text-primary sub-channel-link">&ndash; {{ customer }}</a>
+                                            <strong class="text-danger ms-2">{{ c_data.OUT }}</strong>
+                                        </li>{% endif %}{% endfor %}
                                     </ul>{% endif %}
                                 </div>
                             </div>
                         {% endif %}{% endfor %}
                     </div>
+
                     <div class="tab-pane fade" id="pills-channel-wheel" role="tabpanel">
                         {% for channel_name in display_order %}{% if channel_name in wheel_movements_by_channel %}
                             {% set data = wheel_movements_by_channel[channel_name] %}
-                            <div class="card mb-3"><div class="card-header bg-light"><strong>{{ channel_name }}</strong></div>
+                            <div class="card mb-3">
+                                <div class="card-header bg-light">
+                                    {% set move_type = 'IN' if channel_name == 'ซื้อเข้า' else ('RETURN' if channel_name == 'รับคืน' else 'OUT') %}
+                                    <a href="{{ url_for('summary_details', item_type='wheel', channel_id=data.channel_id, start_date=start_date_param, end_date=end_date_param, move_type=move_type) }}" class="text-decoration-none text-primary fw-bold fs-5 channel-link">{{ channel_name }}</a>
+                                </div>
                                 <div class="card-body p-3">
                                     <div class="row">
                                         {% if data.IN > 0 %}<div class="col-md-6"><p class="mb-1"><span class="text-success">รับเข้า:</span><strong class="text-success ms-2">{{ data.IN }}</strong></p></div>{% endif %}
@@ -121,15 +147,29 @@
                                     {% if data.RETURN %}{% set return_total = namespace(value=0) %}{% for ret in data.RETURN %}{% set return_total.value = return_total.value + ret.quantity %}{% endfor %}
                                     <p class="mb-1 mt-2"><span class="text-info">รับคืน/ตีคืน:</span><strong class="text-info ms-2">{{ return_total.value }}</strong></p>
                                     <ul class="list-group list-group-flush">
-                                        {% for ret in data.RETURN %}<li class="list-group-item d-flex align-items-center py-1 px-0"><span>&ndash; จาก {{ ret.type }}{% if ret.type == 'ออนไลน์' and ret.online_platform_name != 'ไม่ระบุแพลตฟอร์ม' %}({{ ret.online_platform_name }}){% endif %}{% if ret.type == 'หน้าร้านร้านยาง' and ret.wholesale_customer_name != 'ไม่ระบุลูกค้า' %}({{ ret.wholesale_customer_name }}){% endif %}</span><strong class="text-info ms-2">{{ ret.quantity }}</strong></li>{% endfor %}
+                                        {% for ret in data.RETURN %}
+                                            <li class="list-group-item d-flex align-items-center py-1 px-0">
+                                                {% set query_params = {'item_type': 'wheel', 'return_customer_type': ret.type, 'start_date': start_date_param, 'end_date': end_date_param, 'move_type': 'RETURN'} %}
+                                                {% if ret.type == 'ออนไลน์' and ret.online_platform_id %}{% set _ = query_params.update({'online_platform_id': ret.online_platform_id}) %}{% endif %}
+                                                {% if ret.type == 'หน้าร้านร้านยาง' and ret.wholesale_customer_id %}{% set _ = query_params.update({'wholesale_customer_id': ret.wholesale_customer_id}) %}{% endif %}
+                                                <a href="{{ url_for('summary_details', **query_params) }}" class="text-decoration-none text-primary sub-channel-link">&ndash; จาก {{ ret.type }}{% if ret.type == 'ออนไลน์' and ret.online_platform_name != 'ไม่ระบุแพลตฟอร์ม' %}({{ ret.online_platform_name }}){% endif %}{% if ret.type == 'หน้าร้านร้านยาง' and ret.wholesale_customer_name != 'ไม่ระบุลูกค้า' %}({{ ret.wholesale_customer_name }}){% endif %}</a>
+                                                <strong class="text-info ms-2">{{ ret.quantity }}</strong>
+                                            </li>
+                                        {% endfor %}
                                     </ul>{% endif %}
                                     {% if data.online_platforms %}<p class="mb-1 mt-2"><strong>แพลตฟอร์มออนไลน์ (จ่ายออก):</strong></p>
                                     <ul class="list-group list-group-flush">
-                                        {% for platform, p_data in data.online_platforms.items() %}{% if p_data.OUT > 0 %}<li class="list-group-item d-flex align-items-center py-1 px-0"><span>&ndash; {{ platform }}</span><strong class="text-danger ms-2">{{ p_data.OUT }}</strong></li>{% endif %}{% endfor %}
+                                        {% for platform, p_data in data.online_platforms.items() %}{% if p_data.OUT > 0 %}<li class="list-group-item d-flex align-items-center py-1 px-0">
+                                            <a href="{{ url_for('summary_details', item_type='wheel', online_platform_id=p_data.id, start_date=start_date_param, end_date=end_date_param, move_type='OUT') }}" class="text-decoration-none text-primary sub-channel-link">&ndash; {{ platform }}</a>
+                                            <strong class="text-danger ms-2">{{ p_data.OUT }}</strong>
+                                        </li>{% endif %}{% endfor %}
                                     </ul>{% endif %}
                                     {% if data.wholesale_customers %}<p class="mb-1 mt-2"><strong>ลูกค้าค้าส่ง (จ่ายออก):</strong></p>
                                     <ul class="list-group list-group-flush">
-                                        {% for customer, c_data in data.wholesale_customers.items() %}{% if c_data.OUT > 0 %}<li class="list-group-item d-flex align-items-center py-1 px-0"><span>&ndash; {{ customer }}</span><strong class="text-danger ms-2">{{ c_data.OUT }}</strong></li>{% endif %}{% endfor %}
+                                        {% for customer, c_data in data.wholesale_customers.items() %}{% if c_data.OUT > 0 %}<li class="list-group-item d-flex align-items-center py-1 px-0">
+                                            <a href="{{ url_for('summary_details', item_type='wheel', wholesale_customer_id=c_data.id, start_date=start_date_param, end_date=end_date_param, move_type='OUT') }}" class="text-decoration-none text-primary sub-channel-link">&ndash; {{ customer }}</a>
+                                            <strong class="text-danger ms-2">{{ c_data.OUT }}</strong>
+                                        </li>{% endif %}{% endfor %}
                                     </ul>{% endif %}
                                 </div>
                             </div>
@@ -164,7 +204,7 @@
                     </div>
                 </div>
             </div>
-
+            
             <div class="tab-pane fade" id="item-summary-pane" role="tabpanel" tabindex="0">
                  <ul class="nav nav-pills mb-3" id="item-pills-tab" role="tablist">
                     <li class="nav-item" role="presentation"><button class="nav-link active" id="pills-item-tire-tab" data-bs-toggle="pill" data-bs-target="#pills-item-tire" type="button" role="tab">ยาง</button></li>

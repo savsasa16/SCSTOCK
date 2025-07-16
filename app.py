@@ -10,7 +10,7 @@ from werkzeug.utils import secure_filename
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
 import os
-
+import json
 import database # Your existing database.py file
 
 # *** Add Cloudinary imports ***
@@ -1810,7 +1810,143 @@ def delete_wheel_movement_action(movement_id):
     except Exception as e:
         flash(f'เกิดข้อผิดพลาดในการลบข้อมูลการเคลื่อนไหวสต็อกแม็ก: {e}', 'danger')
     
-    return redirect(url_for('daily_stock_report'))    
+    return redirect(url_for('daily_stock_report'))
+
+@app.route('/summary_details')
+@login_required
+def summary_details():
+    if not (current_user.is_admin() or current_user.is_editor() or current_user.is_wholesale_sales()):
+        flash('คุณไม่มีสิทธิ์เข้าถึงหน้านี้', 'danger')
+        return redirect(url_for('index'))
+        
+    conn = get_db()
+    
+    # Get filters from URL
+    start_date_str = request.args.get('start_date')
+    end_date_str = request.args.get('end_date', start_date_str)
+    channel_id = request.args.get('channel_id', type=int)
+    wholesale_customer_id = request.args.get('wholesale_customer_id', type=int)
+    online_platform_id = request.args.get('online_platform_id', type=int)
+    return_customer_type = request.args.get('return_customer_type', type=str)
+    move_type = request.args.get('move_type', type=str)
+    item_type_filter = request.args.get('item_type')
+
+    # Set date range
+    try:
+        start_date_obj = BKK_TZ.localize(datetime.strptime(start_date_str, '%Y-%m-%d')).replace(hour=0, minute=0, second=0, microsecond=0) if start_date_str else get_bkk_time().replace(hour=0, minute=0, second=0, microsecond=0)
+        end_date_obj = BKK_TZ.localize(datetime.strptime(end_date_str, '%Y-%m-%d')).replace(hour=23, minute=59, second=59, microsecond=999999) if end_date_str else get_bkk_time().replace(hour=23, minute=59, second=59, microsecond=999999)
+    except (ValueError, TypeError):
+        flash("รูปแบบวันที่ใน URL ไม่ถูกต้อง", "warning")
+        return redirect(url_for('summary_stock_report'))
+
+    display_range_str = f"จาก {start_date_obj.strftime('%d %b %Y')} ถึง {end_date_obj.strftime('%d %b %Y')}"
+    
+    # --- START: CORRECTED SECTION ---
+
+    is_postgres = "psycopg2" in str(type(conn))
+    placeholder = "%s" if is_postgres else "?"
+    
+    base_params = [start_date_obj.isoformat(), end_date_obj.isoformat()]
+    
+    # Helper function to build WHERE clause conditions without table prefixes
+    def build_query_parts():
+        conditions = []
+        # Start params with the base date range
+        params = list(base_params)
+        if channel_id:
+            conditions.append(f"channel_id = {placeholder}")
+            params.append(channel_id)
+        if wholesale_customer_id:
+            conditions.append(f"wholesale_customer_id = {placeholder}")
+            params.append(wholesale_customer_id)
+        if online_platform_id:
+            conditions.append(f"online_platform_id = {placeholder}")
+            params.append(online_platform_id)
+        if return_customer_type:
+            conditions.append(f"return_customer_type = {placeholder}")
+            params.append(return_customer_type)
+        if move_type:
+            conditions.append(f"type = {placeholder}")
+            params.append(move_type)
+        
+        # Join conditions with 'AND'
+        where_clause = " AND ".join(conditions) if conditions else "1=1"
+        return where_clause, params
+
+    cursor = conn.cursor()
+    tire_movements_raw = []
+    wheel_movements_raw = []
+
+    # Fetch tire data if needed
+    if not item_type_filter or item_type_filter == 'tire':
+        tire_where_clause, tire_params = build_query_parts()
+        tire_movements_query = f"""
+            SELECT tm.id, tm.timestamp, tm.type, tm.quantity_change, tm.notes,
+                   t.brand, t.model, t.size, u.username AS user_username,
+                   tm.image_filename,
+                   sc.name as channel_name,
+                   op.name as online_platform_name,
+                   wc.name as wholesale_customer_name,
+                   tm.return_customer_type
+            FROM tire_movements tm
+            JOIN tires t ON tm.tire_id = t.id
+            LEFT JOIN users u ON tm.user_id = u.id
+            LEFT JOIN sales_channels sc ON tm.channel_id = sc.id
+            LEFT JOIN online_platforms op ON tm.online_platform_id = op.id
+            LEFT JOIN wholesale_customers wc ON tm.wholesale_customer_id = wc.id
+            WHERE tm.timestamp BETWEEN {placeholder} AND {placeholder} AND {tire_where_clause}
+            ORDER BY tm.timestamp DESC
+        """
+        print("DEBUG TIRE QUERY:", tire_movements_query) # Add this for debugging
+        cursor.execute(tire_movements_query, tuple(tire_params))
+        tire_movements_raw = cursor.fetchall()
+
+    # Fetch wheel data if needed
+    if not item_type_filter or item_type_filter == 'wheel':
+        wheel_where_clause, wheel_params = build_query_parts()
+        wheel_movements_query = f"""
+            SELECT wm.id, wm.timestamp, wm.type, wm.quantity_change, wm.notes,
+                   w.brand, w.model, w.diameter, u.username AS user_username,
+                   wm.image_filename,
+                   sc.name as channel_name,
+                   op.name as online_platform_name,
+                   wc.name as wholesale_customer_name,
+                   wm.return_customer_type
+            FROM wheel_movements wm
+            JOIN wheels w ON wm.wheel_id = w.id
+            LEFT JOIN users u ON wm.user_id = u.id
+            LEFT JOIN sales_channels sc ON wm.channel_id = sc.id
+            LEFT JOIN online_platforms op ON wm.online_platform_id = op.id
+            LEFT JOIN wholesale_customers wc ON wm.wholesale_customer_id = wc.id
+            WHERE wm.timestamp BETWEEN {placeholder} AND {placeholder} AND {wheel_where_clause}
+            ORDER BY wm.timestamp DESC
+        """
+        print("DEBUG WHEEL QUERY:", wheel_movements_query) # Add this for debugging
+        cursor.execute(wheel_movements_query, tuple(wheel_params))
+        wheel_movements_raw = cursor.fetchall()
+    
+    cursor.close()
+    
+    # --- END: CORRECTED SECTION ---
+
+    # Process timestamps (this part is correct)
+    processed_tire_movements = []
+    for movement in tire_movements_raw:
+        movement_data = dict(movement)
+        movement_data['timestamp'] = database.convert_to_bkk_time(movement_data['timestamp'])
+        processed_tire_movements.append(movement_data)
+
+    processed_wheel_movements = []
+    for movement in wheel_movements_raw:
+        movement_data = dict(movement)
+        movement_data['timestamp'] = database.convert_to_bkk_time(movement_data['timestamp'])
+        processed_wheel_movements.append(movement_data)
+
+    return render_template('summary_details.html',
+                           display_range_str=display_range_str,
+                           tire_movements=processed_tire_movements,
+                           wheel_movements=processed_wheel_movements,
+                           current_user=current_user)
 
 # --- daily_stock_report (assuming this is already in your app.py) ---
 @app.route('/daily_stock_report')
@@ -2356,8 +2492,12 @@ def summary_stock_report():
     wheel_movements_by_channel_data = defaultdict(lambda: {'IN': 0, 'OUT': 0, 'RETURN': [], 'online_platforms': defaultdict(lambda: {'IN': 0, 'OUT': 0, 'RETURN': 0}), 'wholesale_customers': defaultdict(lambda: {'IN': 0, 'OUT': 0, 'RETURN': 0})})
     
     # --- Tire Movements by Channel, Platform, Customer (Summary by Channel) ---
+    tire_movements_raw_detailed = []
     tire_channel_summary_query = f"""
         SELECT
+            sc.id AS channel_id,
+            op.id AS online_platform_id,
+            wc.id AS wholesale_customer_id,
             COALESCE(sc.name, 'ไม่ระบุช่องทาง') AS channel_name, 
             COALESCE(op.name, 'ไม่ระบุแพลตฟอร์ม') AS online_platform_name,
             COALESCE(wc.name, 'ไม่ระบุลูกค้า') AS wholesale_customer_name,
@@ -2369,7 +2509,7 @@ def summary_stock_report():
         LEFT JOIN online_platforms op ON tm.online_platform_id = op.id
         LEFT JOIN wholesale_customers wc ON tm.wholesale_customer_id = wc.id
         WHERE tm.timestamp BETWEEN {placeholder}{timestamp_cast} AND {placeholder}{timestamp_cast}
-        GROUP BY sc.name, op.name, wc.name, tm.type, tm.return_customer_type
+        GROUP BY sc.id, op.id, wc.id, sc.name, op.name, wc.name, tm.type, tm.return_customer_type
         ORDER BY sc.name, op.name, wc.name, tm.type;
     """
     tire_channel_summary_params = (start_of_period_iso, end_of_period_iso)
@@ -2384,56 +2524,73 @@ def summary_stock_report():
             query_for_sqlite = tire_channel_summary_query.replace(f"{timestamp_cast}", "").replace(placeholder, '?')
             tire_movements_raw_detailed = conn.execute(query_for_sqlite, tire_channel_summary_params).fetchall()
         
-        # flash(f"DEBUG (Tire Raw Detailed for Channel Summary): {tire_movements_raw_detailed}", "info") # DEBUGGING LINE
-
         for movement_row in tire_movements_raw_detailed:
+            # โค้ดทั้งหมดนี้ต้องอยู่ "ข้างใน" for loop
             row_data = dict(movement_row)
-            channel_name_from_db = row_data['channel_name'] 
+            channel_name_from_db = row_data['channel_name']
+            
+            channel_id_from_db = row_data['channel_id']
+            online_platform_id_from_db = row_data['online_platform_id']
+            wholesale_customer_id_from_db = row_data['wholesale_customer_id']
+            
             online_platform_name = row_data['online_platform_name']
             wholesale_customer_name = row_data['wholesale_customer_name']
             move_type = row_data['type']
             total_qty = int(row_data['total_quantity'])
             return_customer_type = row_data['return_customer_type']
-
+    
             main_channel_key = channel_name_from_db
-
-            # Aggregate to main channel totals
-            if move_type == 'RETURN': # หากเป็น RETURN ให้เก็บรายละเอียดไว้ใน list
+    
+            if 'channel_id' not in tire_movements_by_channel_data[main_channel_key]:
+                tire_movements_by_channel_data[main_channel_key]['channel_id'] = channel_id_from_db
+    
+            if move_type == 'RETURN': 
                 tire_movements_by_channel_data[main_channel_key]['RETURN'].append({
                     'quantity': total_qty,
                     'type': return_customer_type,
                     'online_platform_name': online_platform_name,
-                    'wholesale_customer_name': wholesale_customer_name
+                    'wholesale_customer_name': wholesale_customer_name,
+                    'online_platform_id': online_platform_id_from_db,
+                    'wholesale_customer_id': wholesale_customer_id_from_db
                 })
-            else: # สำหรับ IN และ OUT ให้รวมยอดปกติ
+            else: 
                 tire_movements_by_channel_data[main_channel_key][move_type] += total_qty
             
-            # Aggregate to sub-channel totals if applicable (ยังคงเหมือนเดิม)
             if main_channel_key == 'ออนไลน์':
                 if online_platform_name and online_platform_name != 'ไม่ระบุแพลตฟอร์ม':
+                    if online_platform_name not in tire_movements_by_channel_data[main_channel_key]['online_platforms']:
+                         tire_movements_by_channel_data[main_channel_key]['online_platforms'][online_platform_name] = {'IN': 0, 'OUT': 0, 'RETURN': 0}
                     tire_movements_by_channel_data[main_channel_key]['online_platforms'][online_platform_name][move_type] += total_qty
+                    tire_movements_by_channel_data[main_channel_key]['online_platforms'][online_platform_name]['id'] = online_platform_id_from_db
+    
             elif main_channel_key == 'ค้าส่ง':
                 if wholesale_customer_name and wholesale_customer_name != 'ไม่ระบุลูกค้า':
+                    if wholesale_customer_name not in tire_movements_by_channel_data[main_channel_key]['wholesale_customers']:
+                        tire_movements_by_channel_data[main_channel_key]['wholesale_customers'][wholesale_customer_name] = {'IN': 0, 'OUT': 0, 'RETURN': 0}
                     tire_movements_by_channel_data[main_channel_key]['wholesale_customers'][wholesale_customer_name][move_type] += total_qty
+                    tire_movements_by_channel_data[main_channel_key]['wholesale_customers'][wholesale_customer_name]['id'] = wholesale_customer_id_from_db
         
+        # โค้ด 2 บรรทัดนี้ต้องอยู่ "นอก" for loop แต่ยังอยู่ "ใน" try
         sorted_tire_movements_by_channel = OrderedDict(sorted(tire_movements_by_channel_data.items()))
-        # Sort sub-dictionaries for consistent display
+        
         for channel_name_sort, data_sort in sorted_tire_movements_by_channel.items():
             if 'online_platforms' in data_sort:
                 data_sort['online_platforms'] = OrderedDict(sorted(data_sort['online_platforms'].items()))
             if 'wholesale_customers' in data_sort:
                 data_sort['wholesale_customers'] = OrderedDict(sorted(data_sort['wholesale_customers'].items()))
         
-        # flash(f"DEBUG (Sorted Tire by Channel for Template): {sorted_tire_movements_by_channel}", "info") # DEBUGGING LINE
-
     except Exception as e:
         print(f"ERROR: Failed to fetch detailed tire movements for summary (Channel): {e}")
         flash(f"เกิดข้อผิดพลาดในการดึงข้อมูลสรุปยางตามช่องทาง: {e}", "danger")
 
 
     # --- Wheel Movements by Channel, Platform, Customer (Summary by Channel) ---
+    wheel_movements_raw_detailed = []
     wheel_channel_summary_query = f"""
         SELECT
+            sc.id AS channel_id,
+            op.id AS online_platform_id,
+            wc.id AS wholesale_customer_id,
             COALESCE(sc.name, 'ไม่ระบุช่องทาง') AS channel_name,
             COALESCE(op.name, 'ไม่ระบุแพลตฟอร์ม') AS online_platform_name,
             COALESCE(wc.name, 'ไม่ระบุลูกค้า') AS wholesale_customer_name,
@@ -2445,7 +2602,7 @@ def summary_stock_report():
         LEFT JOIN online_platforms op ON wm.online_platform_id = op.id
         LEFT JOIN wholesale_customers wc ON wm.wholesale_customer_id = wc.id
         WHERE wm.timestamp BETWEEN {placeholder}{timestamp_cast} AND {placeholder}{timestamp_cast}
-        GROUP BY sc.name, op.name, wc.name, wm.type, wm.return_customer_type
+        GROUP BY sc.id, op.id, wc.id, sc.name, op.name, wc.name, wm.type, wm.return_customer_type
         ORDER BY sc.name, op.name, wc.name, wm.type;
     """
     wheel_channel_summary_params = (start_of_period_iso, end_of_period_iso)
@@ -3825,7 +3982,108 @@ def notifications():
 def mark_notifications_read():
     conn = get_db()
     database.mark_all_notifications_as_read(conn)
-    return redirect(url_for('notifications'))   
+    return redirect(url_for('notifications'))
+
+@app.route('/bulk_stock_movement', methods=['POST'])
+@login_required
+def bulk_stock_movement():
+    if not current_user.can_edit():
+        return jsonify({"success": False, "message": "คุณไม่มีสิทธิ์ในการทำรายการสต็อก"}), 403
+
+    conn = get_db()
+    cursor = conn.cursor()
+    
+    try:
+        # ดึงข้อมูลจากฟอร์ม
+        item_type = request.form.get('item_type')
+        move_type = request.form.get('type')
+        items_json = request.form.get('items_json')
+        notes = request.form.get('notes', '').strip()
+        user_id = current_user.id
+        
+        # ดึงข้อมูลช่องทาง
+        channel_id = request.form.get('channel_id')
+        online_platform_id = request.form.get('online_platform_id')
+        wholesale_customer_id = request.form.get('wholesale_customer_id')
+        return_customer_type = request.form.get('return_customer_type')
+        return_wholesale_customer_id = request.form.get('return_wholesale_customer_id')
+        return_online_platform_id = request.form.get('return_online_platform_id')
+        
+        # แปลงค่า ID ให้เป็น integer หรือ None
+        final_channel_id = int(channel_id) if channel_id else None
+        final_online_platform_id = int(online_platform_id) if online_platform_id else None
+        final_wholesale_customer_id = int(wholesale_customer_id) if wholesale_customer_id else None
+
+        # Logic สำหรับการคืนสินค้า
+        if move_type == 'RETURN':
+            if return_customer_type == 'ออนไลน์':
+                final_online_platform_id = int(return_online_platform_id) if return_online_platform_id else None
+            elif return_customer_type == 'หน้าร้านร้านยาง':
+                final_wholesale_customer_id = int(return_wholesale_customer_id) if return_wholesale_customer_id else None
+        
+        # อัปโหลดรูปภาพ (ถ้ามี)
+        bill_image_url_to_db = None
+        if 'bill_image' in request.files:
+            bill_image_file = request.files['bill_image']
+            if bill_image_file and allowed_image_file(bill_image_file.filename):
+                upload_result = cloudinary.uploader.upload(bill_image_file)
+                bill_image_url_to_db = upload_result['secure_url']
+
+        if not items_json:
+            return jsonify({"success": False, "message": "ไม่พบรายการสินค้า"}), 400
+        
+        items = json.loads(items_json)
+
+        # --- เริ่ม Transaction ---
+        for item_data in items:
+            item_id = item_data['id']
+            quantity_change = item_data['quantity']
+
+            if item_type == 'tire':
+                current_item = database.get_tire(conn, item_id)
+                update_quantity_func = database.update_tire_quantity
+                add_movement_func = database.add_tire_movement
+            else: # wheel
+                current_item = database.get_wheel(conn, item_id)
+                update_quantity_func = database.update_wheel_quantity
+                add_movement_func = database.add_wheel_movement
+            
+            if not current_item:
+                raise ValueError(f"ไม่พบสินค้า ID {item_id} ในระบบ")
+
+            current_quantity = current_item['quantity']
+            new_quantity = current_quantity
+
+            if move_type == 'IN' or move_type == 'RETURN':
+                new_quantity += quantity_change
+            elif move_type == 'OUT':
+                if current_quantity < quantity_change:
+                    item_name = f"{current_item['brand']} {current_item['model']}"
+                    raise ValueError(f"สต็อกไม่พอสำหรับ {item_name} (มี: {current_quantity}, ต้องการ: {quantity_change})")
+                new_quantity -= quantity_change
+            
+            # อัปเดตยอดสต็อกหลัก
+            update_quantity_func(conn, item_id, new_quantity)
+            
+            # บันทึกประวัติการเคลื่อนไหว
+            add_movement_func(
+                conn, item_id, move_type, quantity_change, new_quantity, notes,
+                bill_image_url_to_db, user_id, final_channel_id,
+                final_online_platform_id, final_wholesale_customer_id, return_customer_type
+            )
+        
+        # --- สิ้นสุด Transaction ---
+        conn.commit()
+        return jsonify({"success": True, "message": f"บันทึกการทำรายการ {len(items)} รายการสำเร็จ!"})
+
+    except ValueError as e:
+        conn.rollback()
+        return jsonify({"success": False, "message": str(e)}), 400
+    except Exception as e:
+        conn.rollback()
+        # Log the full error for debugging
+        current_app.logger.error(f"Bulk stock movement failed: {e}", exc_info=True)
+        return jsonify({"success": False, "message": "เกิดข้อผิดพลาดร้ายแรงในเซิร์ฟเวอร์"}), 500
 
 # --- Main entry point ---
 if __name__ == '__main__':

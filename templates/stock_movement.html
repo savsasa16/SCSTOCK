@@ -1,68 +1,101 @@
 {% extends 'base.html' %}
 
-{% block page_title %}รับเข้า / จ่ายออกสต็อก{% endblock %}
+{% block page_title %}ทำรายการสต็อก (Bulk){% endblock %}
 
 {% block content %}
 <div class="card shadow-sm">
     <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
-        <h4 class="mb-0">รับเข้า / จ่ายออกสต็อก</h4>
+        <h4 class="mb-0">ทำรายการสต็อก (Bulk)</h4>
         <div>
             <a href="{{ url_for('daily_stock_report') }}" class="btn btn-outline-info btn-sm"><i class="fas fa-chart-bar me-2"></i>รายงานประจำวัน</a>
             <a href="{{ url_for('summary_stock_report') }}" class="btn btn-outline-info btn-sm"><i class="fas fa-calendar-alt me-2"></i>สรุปรายงานรายช่วง</a>
         </div>
     </div>
     <div class="card-body">
+        <div class="alert alert-info">
+            <strong>ขั้นตอน:</strong> 1. เลือกประเภท (ยาง/แม็ก) -> 2. ค้นหาสินค้าและกด "เพิ่ม" -> 3. ใส่จำนวนที่ต้องการในตาราง -> 4. ระบุข้อมูลการทำรายการด้านล่าง -> 5. กดบันทึกทั้งหมด
+        </div>
+
         <ul class="nav nav-tabs" id="stockMovementTab" role="tablist">
             <li class="nav-item" role="presentation">
-                <button class="nav-link {% if active_tab == 'tire_movements' or not active_tab %}active{% endif %}" id="tire-tab" data-bs-toggle="tab" data-bs-target="#tire-pane" type="button" role="tab" aria-controls="tire-pane" aria-selected="true">
-                    <i class="fas fa-tire me-2"></i>สต็อกยาง
+                <button class="nav-link active" id="tire-tab" data-bs-toggle="tab" data-bs-target="#tire-pane" type="button" role="tab">
+                    <i class="fas fa-tire me-2"></i>ยาง
                 </button>
             </li>
             <li class="nav-item" role="presentation">
-                <button class="nav-link {% if active_tab == 'wheel_movements' %}active{% endif %}" id="wheel-tab" data-bs-toggle="tab" data-bs-target="#wheel-pane" type="button" role="tab" aria-controls="wheel-pane" aria-selected="false">
-                    <i class="fas fa-compact-disc me-2"></i>สต็อกแม็ก
+                <button class="nav-link" id="wheel-tab" data-bs-toggle="tab" data-bs-target="#wheel-pane" type="button" role="tab">
+                    <i class="fas fa-compact-disc me-2"></i>แม็ก
                 </button>
             </li>
         </ul>
 
         <div class="tab-content pt-3">
-            <div class="tab-pane fade {% if active_tab == 'tire_movements' or not active_tab %}show active{% endif %}" id="tire-pane" role="tabpanel" aria-labelledby="tire-tab">
-                <div class="border p-3 rounded mb-4">
-                    <h5>ทำรายการสต็อกยาง</h5>
-                    <form action="{{ url_for('stock_movement') }}" method="post" enctype="multipart/form-data">
-                        <input type="hidden" name="submit_type" value="tire_movement">
-                        <div class="row g-3">
-                            <div class="col-lg-6">
-                                <label for="tire_id" class="form-label">เลือกยาง*</label>
-                                <select class="form-select" id="tire_id" name="tire_id" required>
-                                    <option value="">-- ค้นหาและเลือกยาง --</option>
-                                    {% for tire in tires %}<option value="{{ tire.id }}">{{ tire.brand }} {{ tire.model }} {{ tire.size }} (คงเหลือ: {{ tire.quantity }})</option>{% endfor %}
-                                </select>
-                            </div>
-                            <div class="col-lg-3 col-md-6">
-                                <label for="tire_movement_type" class="form-label">ประเภท*</label>
-                                <select class="form-select" id="tire_movement_type" name="type" required onchange="toggleMovementTypeDetails('tire')">
-                                    <option value="">-- เลือกประเภท --</option><option value="IN">รับเข้า</option><option value="OUT">จ่ายออก</option><option value="RETURN">รับคืน/ตีคืน</option>
-                                </select>
-                            </div>
-                            <div class="col-lg-3 col-md-6">
-                                <label for="tire_quantity" class="form-label">จำนวน (เส้น)*</label>
-                                <input type="number" class="form-control" id="tire_quantity" name="quantity" min="1" required>
-                            </div>
-
-                            <div class="col-12" id="tire_channel_section" style="display: none;"><label for="tire_channel_id" class="form-label">ช่องทาง*</label><select class="form-select" id="tire_channel_id" name="channel_id" required onchange="toggleChannelDetails('tire')"><option value="">-- เลือกช่องทาง --</option>{% for ch in sales_channels %}<option value="{{ ch.id }}">{{ ch.name }}</option>{% endfor %}</select></div>
-                            <div class="col-12" id="tire_online_platform_section" style="display: none;"><label for="tire_online_platform_id" class="form-label">แพลตฟอร์มออนไลน์</label><select class="form-select select2-enable" id="tire_online_platform_id" name="online_platform_id"><option value="">-- เลือก --</option>{% for p in online_platforms %}<option value="{{ p.id }}">{{ p.name }}</option>{% endfor %}</select></div>
-                            <div class="col-12" id="tire_wholesale_customer_section" style="display: none;"><label for="tire_wholesale_customer_id" class="form-label">ลูกค้าค้าส่ง</label><select class="form-select select2-enable" id="tire_wholesale_customer_id" name="wholesale_customer_id"><option value="">-- เลือก --</option>{% for c in wholesale_customers %}<option value="{{ c.id }}">{{ c.name }}</option>{% endfor %}</select></div>
-                            <div class="col-12" id="tire_return_customer_type_section" style="display: none;"><label for="tire_return_customer_type" class="form-label">คืนจาก</label><select class="form-select select2-enable" id="tire_return_customer_type" name="return_customer_type" onchange="toggleReturnDetails('tire')"><option value="">-- เลือก --</option><option value="หน้าร้านลูกค้า">ลูกค้าทั่วไป</option><option value="หน้าร้านร้านยาง">ร้านยาง</option><option value="ออนไลน์">ออนไลน์</option></select></div>
-                            <div class="col-12" id="tire_return_wholesale_customer_section" style="display: none;"><label for="tire_return_wholesale_customer_id" class="form-label">ชื่อร้านยางที่คืน</label><select class="form-select select2-enable" id="tire_return_wholesale_customer_id" name="return_wholesale_customer_id"><option value="">-- เลือก --</option>{% for c in wholesale_customers %}<option value="{{ c.id }}">{{ c.name }}</option>{% endfor %}</select></div>
-                            <div class="col-12" id="tire_return_online_platform_section" style="display: none;"><label for="tire_return_online_platform_id" class="form-label">แพลตฟอร์มที่คืน</label><select class="form-select select2-enable" id="tire_return_online_platform_id" name="return_online_platform_id"><option value="">-- เลือก --</option>{% for p in online_platforms %}<option value="{{ p.id }}">{{ p.name }}</option>{% endfor %}</select></div>
-
-                            <div class="col-md-6"><label for="tire_notes" class="form-label">หมายเหตุ</label><input type="text" class="form-control" id="tire_notes" name="notes"></div>
-                            <div class="col-md-6"><label for="tire_bill_image" class="form-label">รูปบิล</label><input type="file" class="form-control" id="tire_bill_image" name="bill_image" accept="image/*"></div>
-                        </div>
-                        <button type="submit" class="btn btn-primary mt-3">บันทึก</button>
-                    </form>
+            <div class="tab-pane fade show active" id="tire-pane" role="tabpanel">
+                <div class="row g-2 mb-3">
+                    <div class="col-sm-8">
+                        <label for="tire_selector" class="form-label">ค้นหาสินค้า (ยาง)</label>
+                        <select class="form-select" id="tire_selector">
+                            <option value="">-- ค้นหาและเลือกยาง --</option>
+                            {% for tire in tires %}<option value="{{ tire.id }}" data-name="{{ tire.brand }} {{ tire.model }} {{ tire.size }}" data-stock="{{ tire.quantity }}">{{ tire.brand | title }} {{ tire.model | title }} {{ tire.size }} (คงเหลือ: {{ tire.quantity }})</option>{% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-sm-4 d-flex align-items-end">
+                        <button type="button" class="btn btn-success w-100" onclick="addItemToList('tire')"><i class="fas fa-plus me-2"></i>เพิ่มเข้ารายการ</button>
+                    </div>
                 </div>
+                <div class="table-responsive">
+                    <table class="table table-bordered">
+                        <thead class="table-light">
+                            <tr><th>สินค้า</th><th style="width: 120px;">จำนวน (เส้น)</th><th class="text-center" style="width: 80px;">ลบ</th></tr>
+                        </thead>
+                        <tbody id="tire_transaction_list"></tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="tab-pane fade" id="wheel-pane" role="tabpanel">
+                 <div class="row g-2 mb-3">
+                    <div class="col-sm-8">
+                        <label for="wheel_selector" class="form-label">ค้นหาสินค้า (แม็ก)</label>
+                        <select class="form-select" id="wheel_selector">
+                             <option value="">-- ค้นหาและเลือกแม็ก --</option>
+                            {% for w in wheels %}<option value="{{ w.id }}" data-name='{{ w.brand }} {{ w.model }} {{ "%.1f"|format(w.diameter) }}' data-stock="{{ w.quantity }}">{{ w.brand | title }} {{ w.model | title }} {{ "%.1f"|format(w.diameter) }} (คงเหลือ: {{ w.quantity }})</option>{% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-sm-4 d-flex align-items-end">
+                        <button type="button" class="btn btn-success w-100" onclick="addItemToList('wheel')"><i class="fas fa-plus me-2"></i>เพิ่มเข้ารายการ</button>
+                    </div>
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-bordered">
+                        <thead class="table-light">
+                            <tr><th>สินค้า</th><th style="width: 120px;">จำนวน (วง)</th><th class="text-center" style="width: 80px;">ลบ</th></tr>
+                        </thead>
+                        <tbody id="wheel_transaction_list"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <hr class="my-4">
+        <div id="common_details_form">
+             <h5 class="mb-3">ข้อมูลการทำรายการ (สำหรับทุกรายการข้างต้น)</h5>
+             <div class="row g-3">
+                <div class="col-lg-4 col-md-6"><label for="common_movement_type" class="form-label">ประเภท*</label><select class="form-select" id="common_movement_type" name="type" required><option value="">-- เลือกประเภท --</option><option value="IN">รับเข้า</option><option value="OUT">จ่ายออก</option><option value="RETURN">รับคืน/ตีคืน</option></select></div>
+                <div class="col-lg-8 col-md-6" id="channel_section" style="display: none;"><label for="common_channel_id" class="form-label">ช่องทาง*</label><select class="form-select" id="common_channel_id" name="channel_id"><option value="">-- เลือกช่องทาง --</option>{% for ch in sales_channels %}<option value="{{ ch.id }}">{{ ch.name }}</option>{% endfor %}</select></div>
+                <div class="col-12" id="online_platform_section" style="display: none;"><label for="online_platform_id" class="form-label">แพลตฟอร์มออนไลน์</label><select class="form-select" id="online_platform_id" name="online_platform_id"><option value="">-- เลือก --</option>{% for p in online_platforms %}<option value="{{ p.id }}">{{ p.name }}</option>{% endfor %}</select></div>
+                <div class="col-12" id="wholesale_customer_section" style="display: none;"><label for="wholesale_customer_id" class="form-label">ลูกค้าค้าส่ง</label><select class="form-select" id="wholesale_customer_id" name="wholesale_customer_id"><option value="">-- เลือก --</option>{% for c in wholesale_customers %}<option value="{{ c.id }}">{{ c.name }}</option>{% endfor %}</select></div>
+                <div class="col-12" id="return_customer_type_section" style="display: none;"><label for="return_customer_type" class="form-label">คืนจาก</label><select class="form-select" id="return_customer_type" name="return_customer_type"><option value="">-- เลือก --</option><option value="หน้าร้านลูกค้า">ลูกค้าทั่วไป</option><option value="หน้าร้านร้านยาง">ร้านยาง</option><option value="ออนไลน์">ออนไลน์</option></select></div>
+                <div class="col-12" id="return_wholesale_customer_section" style="display: none;"><label for="return_wholesale_customer_id" class="form-label">ชื่อร้านยางที่คืน</label><select class="form-select" id="return_wholesale_customer_id" name="return_wholesale_customer_id"><option value="">-- เลือก --</option>{% for c in wholesale_customers %}<option value="{{ c.id }}">{{ c.name }}</option>{% endfor %}</select></div>
+                <div class="col-12" id="return_online_platform_section" style="display: none;"><label for="return_online_platform_id" class="form-label">แพลตฟอร์มที่คืน</label><select class="form-select" id="return_online_platform_id" name="return_online_platform_id"><option value="">-- เลือก --</option>{% for p in online_platforms %}<option value="{{ p.id }}">{{ p.name }}</option>{% endfor %}</select></div>
+                <div class="col-md-6"><label for="common_notes" class="form-label">หมายเหตุ</label><input type="text" class="form-control" id="common_notes" name="notes"></div>
+                <div class="col-md-6"><label for="common_bill_image" class="form-label">รูปบิล</label><input type="file" class="form-control" id="common_bill_image" name="bill_image" accept="image/*"></div>
+            </div>
+            <button type="button" class="btn btn-primary btn-lg mt-3" onclick="submitBulkTransaction()"><i class="fas fa-save me-2"></i>บันทึกการทำรายการทั้งหมด</button>
+        </div>
+
+        <hr class="my-4">
+        <div id="history_section">
+            <div id="tire-history-section">
                 <h5>ประวัติล่าสุด (ยาง)</h5>
                 <div class="table-responsive">
                     <table class="table table-striped table-hover table-sm align-middle">
@@ -70,43 +103,20 @@
                         <tbody>
                             {% for m in tire_movements %}
                             <tr><td>{{ m.timestamp.strftime('%d/%m %H:%M') }}</td><td>{{ m.brand }} {{ m.model }} {{ m.size }}</td><td>{% if m.type=='IN' %}<span class="badge text-bg-success">รับเข้า</span>{% elif m.type=='OUT' %}<span class="badge text-bg-danger">จ่ายออก</span>{% elif m.type=='RETURN' %}<span class="badge text-bg-info">รับคืน</span>{% endif %}</td><td>{{ m.quantity_change }}</td><td>{{ m.remaining_quantity }}</td><td>{% if m.channel_name=='ออนไลน์'%}{{m.online_platform_name|default('-')}}{% elif m.channel_name=='ค้าส่ง'%}{{m.wholesale_customer_name|default('-')}}{% elif m.type=='RETURN' and m.return_customer_type%}{{m.return_customer_type}}{% if m.return_customer_type=='ออนไลน์'%}({{m.online_platform_name|default('-')}}){% elif m.return_customer_type=='หน้าร้านร้านยาง'%}({{m.wholesale_customer_name|default('-')}}){% endif %}{% else %}{{m.channel_name|default('-')}}{% endif %}</td><td>{{ m.user_username|default('-') }}</td><td>{{ m.notes|default('-')}}</td><td class="text-center">{% if m.image_filename %}<a href="{{ m.image_filename }}" target="_blank"><i class="fas fa-image"></i></a>{% else %}-{% endif %}</td>{% if current_user.is_admin() %}<td class="text-center"><div class="d-flex gap-1 justify-content-center"><a href="{{url_for('edit_tire_movement', movement_id=m.id)}}" class="btn btn-warning btn-sm" title="แก้ไข"><i class="fas fa-edit"></i></a><form action="{{url_for('delete_tire_movement_action', movement_id=m.id)}}" method="POST" class="d-inline" onsubmit="return confirm('ยืนยันการลบ?');"><button type="submit" class="btn btn-danger btn-sm" title="ลบ"><i class="fas fa-trash-alt"></i></button></form></div></td>{% endif %}</tr>
-                            {% else %}<tr><td colspan="11" class="text-center text-muted">ยังไม่มีประวัติ</td></tr>{% endfor %}
+                            {% else %}<tr><td colspan="10" class="text-center text-muted">ยังไม่มีประวัติ</td></tr>{% endfor %}
                         </tbody>
                     </table>
                 </div>
             </div>
-
-            <div class="tab-pane fade {% if active_tab == 'wheel_movements' %}show active{% endif %}" id="wheel-pane" role="tabpanel" aria-labelledby="wheel-tab">
-                <div class="border p-3 rounded mb-4">
-                    <h5>ทำรายการสต็อกแม็ก</h5>
-                    <form action="{{ url_for('stock_movement') }}" method="post" enctype="multipart/form-data">
-                        <input type="hidden" name="submit_type" value="wheel_movement">
-                        <div class="row g-3">
-                            <div class="col-lg-6"><label for="wheel_id" class="form-label">เลือกแม็ก*</label><select class="form-select" id="wheel_id" name="wheel_id" required><option value="">-- ค้นหาและเลือกแม็ก --</option>{% for w in wheels %}<option value="{{ w.id }}">{{ w.brand }} {{ w.model }} {{ "%.1f"|format(w.diameter) }} (คงเหลือ: {{ w.quantity }})</option>{% endfor %}</select></div>
-                            <div class="col-lg-3 col-md-6"><label for="wheel_movement_type" class="form-label">ประเภท*</label><select class="form-select" id="wheel_movement_type" name="type" required onchange="toggleMovementTypeDetails('wheel')"><option value="">-- เลือก --</option><option value="IN">รับเข้า</option><option value="OUT">จ่ายออก</option><option value="RETURN">รับคืน</option></select></div>
-                            <div class="col-lg-3 col-md-6"><label for="wheel_quantity" class="form-label">จำนวน (วง)*</label><input type="number" class="form-control" id="wheel_quantity" name="quantity" min="1" required></div>
-                            
-                            <div class="col-12" id="wheel_channel_section" style="display: none;"><label for="wheel_channel_id" class="form-label">ช่องทาง*</label><select class="form-select" id="wheel_channel_id" name="channel_id" required onchange="toggleChannelDetails('wheel')"><option value="">-- เลือก --</option>{% for ch in sales_channels %}<option value="{{ ch.id }}">{{ ch.name }}</option>{% endfor %}</select></div>
-                            <div class="col-12" id="wheel_online_platform_section" style="display: none;"><label for="wheel_online_platform_id" class="form-label">แพลตฟอร์ม</label><select class="form-select select2-enable" id="wheel_online_platform_id" name="online_platform_id"><option value="">-- เลือก --</option>{% for p in online_platforms %}<option value="{{ p.id }}">{{ p.name }}</option>{% endfor %}</select></div>
-                            <div class="col-12" id="wheel_wholesale_customer_section" style="display: none;"><label for="wheel_wholesale_customer_id" class="form-label">ลูกค้าค้าส่ง</label><select class="form-select select2-enable" id="wheel_wholesale_customer_id" name="wholesale_customer_id"><option value="">-- เลือก --</option>{% for c in wholesale_customers %}<option value="{{ c.id }}">{{ c.name }}</option>{% endfor %}</select></div>
-                            <div class="col-12" id="wheel_return_customer_type_section" style="display: none;"><label for="wheel_return_customer_type" class="form-label">คืนจาก</label><select class="form-select select2-enable" id="wheel_return_customer_type" name="return_customer_type" onchange="toggleReturnDetails('wheel')"><option value="">-- เลือก --</option><option value="หน้าร้านลูกค้า">ลูกค้าทั่วไป</option><option value="หน้าร้านร้านยาง">ร้านยาง</option><option value="ออนไลน์">ออนไลน์</option></select></div>
-                            <div class="col-12" id="wheel_return_wholesale_customer_section" style="display: none;"><label for="wheel_return_wholesale_customer_id" class="form-label">ร้านยางที่คืน</label><select class="form-select select2-enable" id="wheel_return_wholesale_customer_id" name="return_wholesale_customer_id"><option value="">-- เลือก --</option>{% for c in wholesale_customers %}<option value="{{ c.id }}">{{ c.name }}</option>{% endfor %}</select></div>
-                            <div class="col-12" id="wheel_return_online_platform_section" style="display: none;"><label for="wheel_return_online_platform_id" class="form-label">แพลตฟอร์มที่คืน</label><select class="form-select select2-enable" id="wheel_return_online_platform_id" name="return_online_platform_id"><option value="">-- เลือก --</option>{% for p in online_platforms %}<option value="{{ p.id }}">{{ p.name }}</option>{% endfor %}</select></div>
-
-                            <div class="col-md-6"><label for="wheel_notes" class="form-label">หมายเหตุ</label><input type="text" class="form-control" id="wheel_notes" name="notes"></div>
-                            <div class="col-md-6"><label for="wheel_bill_image" class="form-label">รูปบิล</label><input type="file" class="form-control" id="wheel_bill_image" name="bill_image" accept="image/*"></div>
-                        </div>
-                        <button type="submit" class="btn btn-primary mt-3">บันทึก</button>
-                    </form>
-                </div>
+            <div id="wheel-history-section" style="display: none;">
                 <h5>ประวัติล่าสุด (แม็ก)</h5>
-                 <div class="table-responsive">
+                <div class="table-responsive">
                     <table class="table table-striped table-hover table-sm align-middle">
                         <thead class="table-light"><tr><th>เวลา</th><th>ข้อมูล</th><th>ประเภท</th><th>จำนวน</th><th>คงเหลือ</th><th>ช่องทาง/ลูกค้า</th><th>พนักงาน</th><th>หมายเหตุ</th><th class="text-center">หลักฐาน</th>{% if current_user.is_admin() %}<th class="text-center">จัดการ</th>{% endif %}</tr></thead>
                         <tbody>
                             {% for m in wheel_movements %}
                             <tr><td>{{ m.timestamp.strftime('%d/%m %H:%M') }}</td><td>{{ m.brand }} {{ m.model }} {{ "%.1f"|format(m.diameter) }}</td><td>{% if m.type=='IN' %}<span class="badge text-bg-success">รับเข้า</span>{% elif m.type=='OUT' %}<span class="badge text-bg-danger">จ่ายออก</span>{% elif m.type=='RETURN' %}<span class="badge text-bg-info">รับคืน</span>{% endif %}</td><td>{{ m.quantity_change }}</td><td>{{ m.remaining_quantity }}</td><td>{% if m.channel_name=='ออนไลน์'%}{{m.online_platform_name|default('-')}}{% elif m.channel_name=='ค้าส่ง'%}{{m.wholesale_customer_name|default('-')}}{% elif m.type=='RETURN' and m.return_customer_type%}{{m.return_customer_type}}{% if m.return_customer_type=='ออนไลน์'%}({{m.online_platform_name|default('-')}}){% elif m.return_customer_type=='หน้าร้านร้านยาง'%}({{m.wholesale_customer_name|default('-')}}){% endif %}{% else %}{{m.channel_name|default('-')}}{% endif %}</td><td>{{ m.user_username|default('-') }}</td><td>{{ m.notes|default('-')}}</td><td class="text-center">{% if m.image_filename %}<a href="{{ m.image_filename }}" target="_blank"><i class="fas fa-image"></i></a>{% else %}-{% endif %}</td>{% if current_user.is_admin() %}<td class="text-center"><div class="d-flex gap-1 justify-content-center"><a href="{{url_for('edit_wheel_movement', movement_id=m.id)}}" class="btn btn-warning btn-sm" title="แก้ไข"><i class="fas fa-edit"></i></a><form action="{{url_for('delete_wheel_movement_action', movement_id=m.id)}}" method="POST" class="d-inline" onsubmit="return confirm('ยืนยันการลบ?');"><button type="submit" class="btn btn-danger btn-sm" title="ลบ"><i class="fas fa-trash-alt"></i></button></form></div></td>{% endif %}</tr>
-                            {% else %}<tr><td colspan="11" class="text-center text-muted">ยังไม่มีประวัติ</td></tr>{% endfor %}
+                            {% else %}<tr><td colspan="10" class="text-center text-muted">ยังไม่มีประวัติ</td></tr>{% endfor %}
                         </tbody>
                     </table>
                 </div>
@@ -118,125 +128,146 @@
 
 {% block scripts %}
 <script>
-    // --- Helper Functions for Select2 ---
-    function initSelect2(selector, placeholderText, allowClear = true, minimumInputLength = 0) { 
-        const element = $(selector);
-        if (element.length && !element.data('select2')) {
-            element.select2({
-                placeholder: placeholderText,
-                allowClear: allowClear,
-                minimumInputLength: minimumInputLength,
-                width: '100%'
-            });
-        }
-    }
-    function destroySelect2(selector) {
-        const element = $(selector);
-        if (element.data('select2')) element.select2('destroy');
-    }
+// --- Global Data ---
+const salesChannels = JSON.parse('{{ sales_channels | tojson | safe }}');
 
-    // --- Main Dynamic Form Logic ---
-    function toggleMovementTypeDetails(itemType) {
-        const typeSelect = document.getElementById(`${itemType}_movement_type`);
-        const channelSection = document.getElementById(`${itemType}_channel_section`); // --- เพิ่มบรรทัดนี้
-        const channelSelect = document.getElementById(`${itemType}_channel_id`);
-        const salesChannels = JSON.parse('{{ sales_channels | tojson | safe }}');
-        
-        // --- ส่วนที่แก้ไข ---
-        // ตรวจสอบว่ามีการเลือกประเภทหรือไม่ เพื่อแสดง/ซ่อนช่อง "ช่องทาง"
-        if (typeSelect.value) {
-            channelSection.style.display = 'block';
+// --- Helper Functions ---
+function addItemToList(itemType) {
+    const selector = $(`#${itemType}_selector`);
+    const selectedOption = selector.find('option:selected');
+    const itemId = selectedOption.val();
+    const itemName = selectedOption.data('name');
+    const itemStock = selectedOption.data('stock');
+    const list = $(`#${itemType}_transaction_list`);
+
+    if (!itemId) { alert('กรุณาเลือกสินค้าก่อน'); return; }
+    if (list.find(`tr[data-item-id="${itemId}"]`).length > 0) { alert('สินค้านี้อยู่ในรายการแล้ว'); return; }
+
+    const newRow = `
+        <tr data-item-id="${itemId}" data-item-type="${itemType}">
+            <td class="align-middle">${itemName}<small class="text-muted d-block">คงเหลือ: ${itemStock}</small></td>
+            <td><input type="number" class="form-control item-quantity" min="1" required></td>
+            <td class="text-center align-middle"><button type="button" class="btn btn-danger btn-sm" onclick="this.closest('tr').remove()"><i class="fas fa-trash-alt"></i></button></td>
+        </tr>`;
+    list.append(newRow);
+    selector.val('').trigger('change');
+}
+
+function handleMovementTypeChange() {
+    const typeValue = $('#common_movement_type').val();
+    const channelSection = $('#channel_section');
+    const channelSelect = $('#common_channel_id');
+    const allSubSections = ['#online_platform_section', '#wholesale_customer_section', '#return_customer_type_section', '#return_wholesale_customer_section', '#return_online_platform_section'];
+    allSubSections.forEach(sec => $(sec).hide());
+    if (!typeValue) { channelSection.hide(); return; }
+    channelSection.show();
+    const buyInId = salesChannels.find(c => c.name === 'ซื้อเข้า')?.id;
+    const returnId = salesChannels.find(c => c.name === 'รับคืน')?.id;
+    const outIds = salesChannels.filter(c => ['ออนไลน์', 'ค้าส่ง', 'หน้าร้าน'].includes(c.name)).map(c => c.id);
+    const originalSelectedVal = channelSelect.val();
+    channelSelect.find('option:gt(0)').remove();
+    let validChannels = [];
+    if (typeValue === 'IN') { validChannels = salesChannels.filter(c => c.id === buyInId); }
+    else if (typeValue === 'OUT') { validChannels = salesChannels.filter(c => outIds.includes(c.id)); }
+    else if (typeValue === 'RETURN') { validChannels = salesChannels.filter(c => c.id === returnId); }
+    validChannels.forEach(function(channel) { channelSelect.append(new Option(channel.name, channel.id)); });
+    if (validChannels.length === 1) { channelSelect.val(validChannels[0].id); }
+    else if (validChannels.find(c => c.id.toString() === originalSelectedVal)) { channelSelect.val(originalSelectedVal); }
+    else { channelSelect.val(''); }
+    channelSelect.trigger('change');
+}
+
+function handleChannelChange() {
+    const channelName = $('#common_channel_id option:selected').text();
+    $('#online_platform_section, #wholesale_customer_section, #return_customer_type_section, #return_wholesale_customer_section, #return_online_platform_section').hide();
+    if (channelName === 'ออนไลน์') $('#online_platform_section').show();
+    else if (channelName === 'ค้าส่ง') $('#wholesale_customer_section').show();
+    else if (channelName === 'รับคืน') {
+        $('#return_customer_type_section').show();
+        $('#return_customer_type').trigger('change');
+    }
+}
+
+function handleReturnChange() {
+    const returnType = $('#return_customer_type').val();
+    $('#return_wholesale_customer_section, #return_online_platform_section').hide();
+    if (returnType === 'หน้าร้านร้านยาง') $('#return_wholesale_customer_section').show();
+    else if (returnType === 'ออนไลน์') $('#return_online_platform_section').show();
+}
+
+async function submitBulkTransaction() {
+    const activeTabId = $('#stockMovementTab .nav-link.active').attr('id');
+    const itemType = activeTabId === 'tire-tab' ? 'tire' : 'wheel';
+    const listId = `${itemType}_transaction_list`;
+    const transactionList = $(`#${listId} tr`);
+    if (transactionList.length === 0) { alert('กรุณาเพิ่มสินค้าเข้ารายการก่อนบันทึก'); return; }
+    const items = [];
+    let hasError = false;
+    transactionList.each(function() {
+        const row = $(this);
+        const itemId = row.data('item-id');
+        const quantity = row.find('.item-quantity').val();
+        if (!quantity || parseInt(quantity) <= 0) {
+            alert('กรุณากรอกจำนวนให้ถูกต้อง (ต้องเป็นตัวเลขมากกว่า 0)');
+            row.find('.item-quantity').focus();
+            hasError = true;
+            return false;
+        }
+        items.push({ id: itemId, quantity: parseInt(quantity) });
+    });
+    if (hasError) return;
+    const formData = new FormData();
+    formData.append('item_type', itemType);
+    formData.append('type', $('#common_movement_type').val());
+    formData.append('channel_id', $('#common_channel_id').val());
+    formData.append('online_platform_id', $('#online_platform_id').val());
+    formData.append('wholesale_customer_id', $('#wholesale_customer_id').val());
+    formData.append('return_customer_type', $('#return_customer_type').val());
+    formData.append('return_wholesale_customer_id', $('#return_wholesale_customer_id').val());
+    formData.append('return_online_platform_id', $('#return_online_platform_id').val());
+    formData.append('notes', $('#common_notes').val());
+    formData.append('items_json', JSON.stringify(items));
+    const imageFile = $('#common_bill_image')[0].files[0];
+    if (imageFile) { formData.append('bill_image', imageFile); }
+    if (!$('#common_movement_type').val() || !$('#common_channel_id').val()) { alert('กรุณาระบุข้อมูลการทำรายการให้ครบถ้วน (ประเภท และ ช่องทาง)'); return; }
+    if (!confirm('ยืนยันการทำรายการทั้งหมด?')) return;
+    try {
+        const response = await fetch("{{ url_for('bulk_stock_movement') }}", { method: 'POST', body: formData });
+        const result = await response.json();
+        if (result.success) {
+            alert(result.message);
+            window.location.reload();
         } else {
-            channelSection.style.display = 'none';
+            alert('เกิดข้อผิดพลาด: ' + result.message);
         }
-        // --- จบส่วนแก้ไข ---
-        
-        const buyInChannelId = salesChannels.find(c => c.name === 'ซื้อเข้า')?.id;
-        const returnChannelId = salesChannels.find(c => c.name === 'รับคืน')?.id;
-        const outChannelsIds = ['ออนไลน์', 'ค้าส่ง', 'หน้าร้าน'].map(name => salesChannels.find(c => c.name === name)?.id).filter(id => id);
-
-        Array.from(channelSelect.options).forEach(option => {
-            if (!option.value) { option.style.display = 'block'; return; }
-            const value = parseInt(option.value);
-            let shouldShow = false;
-            if (typeSelect.value === 'IN' && value === buyInChannelId) shouldShow = true;
-            if (typeSelect.value === 'OUT' && outChannelsIds.includes(value)) shouldShow = true;
-            if (typeSelect.value === 'RETURN' && value === returnChannelId) shouldShow = true;
-            option.style.display = shouldShow ? 'block' : 'none';
-        });
-
-        if (typeSelect.value === 'IN') channelSelect.value = buyInChannelId || '';
-        else if (typeSelect.value === 'RETURN') channelSelect.value = returnChannelId || '';
-        else channelSelect.value = '';
-
-        toggleChannelDetails(itemType);
+    } catch (error) {
+        console.error('Error:', error);
+        alert('เกิดข้อผิดพลาดในการเชื่อมต่อกับเซิร์ฟเวอร์');
     }
+}
 
-    function toggleChannelDetails(itemType) {
-        const sections = ['online_platform', 'wholesale_customer', 'return_customer_type'];
-        sections.forEach(sec => document.getElementById(`${itemType}_${sec}_section`).style.display = 'none');
-
-        const channelSelect = document.getElementById(`${itemType}_channel_id`);
-        const selectedChannelOption = channelSelect.options[channelSelect.selectedIndex];
-        if (!selectedChannelOption) return;
-        
-        const selectedChannelName = selectedChannelOption.text.trim();
-        if (selectedChannelName === 'ออนไลน์') document.getElementById(`${itemType}_online_platform_section`).style.display = 'block';
-        else if (selectedChannelName === 'ค้าส่ง') document.getElementById(`${itemType}_wholesale_customer_section`).style.display = 'block';
-        else if (selectedChannelName === 'รับคืน') {
-            document.getElementById(`${itemType}_return_customer_type_section`).style.display = 'block';
-            toggleReturnDetails(itemType);
-        }
-    }
-
-    function toggleReturnDetails(itemType) {
-        const returnSections = ['return_online_platform', 'return_wholesale_customer'];
-        returnSections.forEach(sec => document.getElementById(`${itemType}_${sec}_section`).style.display = 'none');
-
-        const returnTypeSelect = document.getElementById(`${itemType}_return_customer_type`);
-        if (returnTypeSelect.value === 'ออนไลน์') document.getElementById(`${itemType}_return_online_platform_section`).style.display = 'block';
-        else if (returnTypeSelect.value === 'หน้าร้านร้านยาง') document.getElementById(`${itemType}_return_wholesale_customer_section`).style.display = 'block';
-    }
-
-    // --- Main Execution ---
-    document.addEventListener('DOMContentLoaded', function() {
-        const stockMovementTab = document.getElementById('stockMovementTab');
-
-        function initializeTab(tabId) {
-            const itemType = tabId === 'tire-pane' ? 'tire' : 'wheel';
-            const otherItemType = itemType === 'tire' ? 'wheel' : 'tire';
-
-            initSelect2(`#${itemType}_id`, `-- ค้นหาและเลือก${itemType === 'tire' ? 'ยาง' : 'แม็ก'} --`, true, 0);
-            initSelect2(`#${itemType}_online_platform_id`, '-- เลือกแพลตฟอร์ม --', true, 0);
-            initSelect2(`#${itemType}_wholesale_customer_id`, '-- ค้นหาลูกค้า --', true, 0);
-            initSelect2(`#${itemType}_return_customer_type`, '-- เลือกประเภทการคืน --', true, 0);
-            initSelect2(`#${itemType}_return_online_platform_id`, '-- เลือกแพลตฟอร์ม --', true, 0);
-            initSelect2(`#${itemType}_return_wholesale_customer_id`, '-- ค้นหาร้านยาง --', true, 0);
-
-            destroySelect2(`#${otherItemType}_id`);
-            destroySelect2(`#${otherItemType}_online_platform_id`);
-            destroySelect2(`#${otherItemType}_wholesale_customer_id`);
-            destroySelect2(`#${otherItemType}_return_customer_type`);
-            destroySelect2(`#${otherItemType}_return_online_platform_id`);
-            destroySelect2(`#${otherItemType}_return_wholesale_customer_id`);
-            
-            toggleMovementTypeDetails(itemType);
-        }
-
-        stockMovementTab.addEventListener('shown.bs.tab', function(event) {
-            const activeTabId = event.target.getAttribute('data-bs-target').substring(1);
-            initializeTab(activeTabId);
-
-            const url = new URL(window.location);
-            url.searchParams.set('tab', activeTabId.replace('-pane', '_movements'));
-            window.history.pushState({}, '', url);
-        });
-
-        const initialActiveTab = document.querySelector('#stockMovementTab .nav-link.active');
-        if (initialActiveTab) {
-            const initialTabId = initialActiveTab.getAttribute('data-bs-target').substring(1);
-            initializeTab(initialTabId);
+document.addEventListener('DOMContentLoaded', function() {
+    $('#tire_selector, #wheel_selector, #common_channel_id, #online_platform_id, #wholesale_customer_id, #return_customer_type, #return_wholesale_customer_id, #return_online_platform_id').select2({ width: '100%', allowClear: true });
+    
+    $('#common_movement_type').on('change', handleMovementTypeChange);
+    $('#common_channel_id').on('change', handleChannelChange);
+    $('#return_customer_type').on('change', handleReturnChange);
+    
+    // Toggle history visibility based on active tab
+    $('#stockMovementTab button').on('shown.bs.tab', function(event) {
+        const tireHistory = $('#tire-history-section');
+        const wheelHistory = $('#wheel-history-section');
+        if (event.target.id === 'tire-tab') {
+            tireHistory.show();
+            wheelHistory.hide();
+        } else if (event.target.id === 'wheel-tab') {
+            tireHistory.hide();
+            wheelHistory.show();
         }
     });
+
+    // Initial call
+    handleMovementTypeChange();
+});
 </script>
 {% endblock %}
