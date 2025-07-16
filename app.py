@@ -3991,7 +3991,6 @@ def bulk_stock_movement():
         return jsonify({"success": False, "message": "คุณไม่มีสิทธิ์ในการทำรายการสต็อก"}), 403
 
     conn = get_db()
-    cursor = conn.cursor()
     
     try:
         # ดึงข้อมูลจากฟอร์ม
@@ -4011,16 +4010,19 @@ def bulk_stock_movement():
         
         # แปลงค่า ID ให้เป็น integer หรือ None
         final_channel_id = int(channel_id) if channel_id else None
-        final_online_platform_id = int(online_platform_id) if online_platform_id else None
-        final_wholesale_customer_id = int(wholesale_customer_id) if wholesale_customer_id else None
+        final_online_platform_id = None
+        final_wholesale_customer_id = None
 
-        # Logic สำหรับการคืนสินค้า
+        # Logic สำหรับการคืนสินค้า หรือ การจ่ายออก
         if move_type == 'RETURN':
             if return_customer_type == 'ออนไลน์':
                 final_online_platform_id = int(return_online_platform_id) if return_online_platform_id else None
             elif return_customer_type == 'หน้าร้านร้านยาง':
                 final_wholesale_customer_id = int(return_wholesale_customer_id) if return_wholesale_customer_id else None
-        
+        elif move_type == 'OUT':
+             final_online_platform_id = int(online_platform_id) if online_platform_id else None
+             final_wholesale_customer_id = int(wholesale_customer_id) if wholesale_customer_id else None
+
         # อัปโหลดรูปภาพ (ถ้ามี)
         bill_image_url_to_db = None
         if 'bill_image' in request.files:
@@ -4038,15 +4040,22 @@ def bulk_stock_movement():
         for item_data in items:
             item_id = item_data['id']
             quantity_change = item_data['quantity']
+            
+            item_name_for_notif = ""
+            unit_for_notif = ""
 
             if item_type == 'tire':
                 current_item = database.get_tire(conn, item_id)
                 update_quantity_func = database.update_tire_quantity
                 add_movement_func = database.add_tire_movement
+                item_name_for_notif = f"ยาง: {current_item['brand'].title()} {current_item['model'].title()} ({current_item['size']})"
+                unit_for_notif = "เส้น"
             else: # wheel
                 current_item = database.get_wheel(conn, item_id)
                 update_quantity_func = database.update_wheel_quantity
                 add_movement_func = database.add_wheel_movement
+                item_name_for_notif = f"แม็ก: {current_item['brand'].title()} {current_item['model'].title()}"
+                unit_for_notif = "วง"
             
             if not current_item:
                 raise ValueError(f"ไม่พบสินค้า ID {item_id} ในระบบ")
@@ -4071,7 +4080,16 @@ def bulk_stock_movement():
                 bill_image_url_to_db, user_id, final_channel_id,
                 final_online_platform_id, final_wholesale_customer_id, return_customer_type
             )
-        
+            
+            # ---- START: ส่วนที่เพิ่มเข้ามา ----
+            message = (
+                f"สต็อก [{move_type}] {item_name_for_notif} "
+                f"จำนวน {quantity_change} {unit_for_notif} (คงเหลือ: {new_quantity}) "
+                f"โดย {current_user.username}"
+            )
+            database.add_notification(conn, message, user_id)
+            # ---- END: ส่วนที่เพิ่มเข้ามา ----
+
         # --- สิ้นสุด Transaction ---
         conn.commit()
         return jsonify({"success": True, "message": f"บันทึกการทำรายการ {len(items)} รายการสำเร็จ!"})
