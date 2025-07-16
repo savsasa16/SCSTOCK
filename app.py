@@ -4103,6 +4103,69 @@ def bulk_stock_movement():
         current_app.logger.error(f"Bulk stock movement failed: {e}", exc_info=True)
         return jsonify({"success": False, "message": "เกิดข้อผิดพลาดร้ายแรงในเซิร์ฟเวอร์"}), 500
 
+@app.route('/submit_feedback', methods=['POST'])
+@login_required
+def submit_feedback():
+    conn = get_db()
+    feedback_type = request.form.get('feedback_type')
+    message = request.form.get('message')
+
+    if not feedback_type or not message:
+        flash('กรุณากรอกข้อมูลให้ครบถ้วน', 'danger')
+        return redirect(request.referrer or url_for('index'))
+
+    try:
+        user_id = current_user.id
+        database.add_feedback(conn, user_id, feedback_type, message)
+        conn.commit()
+        flash('ขอบคุณสำหรับข้อเสนอแนะ!', 'success')
+    except Exception as e:
+        conn.rollback()
+        flash(f'เกิดข้อผิดพลาดในการส่งข้อเสนอแนะ: {e}', 'danger')
+
+    return redirect(request.referrer or url_for('index'))
+
+@app.route('/view_feedback')
+@login_required
+def view_feedback():
+    if not current_user.is_admin():
+        flash('คุณไม่มีสิทธิ์เข้าถึงหน้านี้', 'danger')
+        return redirect(url_for('index'))
+
+    conn = get_db()
+    all_feedback = database.get_all_feedback(conn)
+
+    status_order = ['ใหม่', 'กำลังตรวจสอบ', 'แก้ไขแล้ว', 'ไม่ดำเนินการ']
+
+    return render_template('view_feedback.html', 
+                           all_feedback=all_feedback, 
+                           status_order=status_order,
+                           current_user=current_user)
+
+@app.route('/update_feedback_status/<int:feedback_id>', methods=['POST'])
+@login_required
+def update_feedback_status(feedback_id):
+    if not current_user.is_admin():
+        flash('คุณไม่มีสิทธิ์ดำเนินการนี้', 'danger')
+        return redirect(url_for('view_feedback'))
+
+    new_status = request.form.get('status')
+    if not new_status:
+        flash('กรุณาเลือกสถานะใหม่', 'danger')
+        return redirect(url_for('view_feedback'))
+
+    conn = get_db()
+    try:
+        database.update_feedback_status(conn, feedback_id, new_status)
+        conn.commit()
+        flash(f'อัปเดตสถานะของ Feedback ID #{feedback_id} เป็น "{new_status}" สำเร็จ!', 'success')
+    except Exception as e:
+        conn.rollback()
+        flash(f'เกิดข้อผิดพลาดในการอัปเดตสถานะ: {e}', 'danger')
+
+    return redirect(url_for('view_feedback'))
+
+
 # --- Main entry point ---
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)

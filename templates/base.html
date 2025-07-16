@@ -80,7 +80,7 @@
             {% if current_user.is_authenticated and current_user.is_admin() %}
             <li>
                 <a href="#admin-submenu" data-bs-toggle="collapse" class="nav-link text-white d-flex justify-content-between align-items-center {% if 'admin' in request.endpoint or 'manage_users' in request.endpoint or 'wholesale_customers' in request.endpoint %}active{% endif %}">
-                    <div><i class="fas fa-tools me-2"></i><span class="sidebar-text">Admin</span></div>
+                    <div><i class="fas fa-tools me-2"></i><span class="sidebar-text">Admin Dashboard</span></div>
                     <i class="fas fa-chevron-down ms-auto sidebar-text"></i>
                 </a>
                 <ul class="collapse list-unstyled ps-3 {% if 'admin' in request.endpoint or 'manage_users' in request.endpoint or 'wholesale_customers' in request.endpoint %}show{% endif %}" id="admin-submenu">
@@ -88,6 +88,11 @@
                     <li><a href="{{ url_for('manage_users') }}" class="nav-link text-white {% if request.endpoint == 'manage_users' %}active{% endif %}"><i class="fas fa-users me-2"></i><span class="sidebar-text">จัดการผู้ใช้</span></a></li>
                     <li><a href="{{ url_for('manage_wholesale_customers') }}" class="nav-link text-white {% if request.endpoint == 'manage_wholesale_customers' %}active{% endif %}"><i class="fas fa-handshake me-2"></i><span class="sidebar-text">จัดการลูกค้าค้าส่ง</span></a></li>
                     <li><a href="{{ url_for('admin_deleted_items') }}" class="nav-link text-white {% if request.endpoint == 'admin_deleted_items' %}active{% endif %}"><i class="fas fa-trash-restore me-2"></i><span class="sidebar-text">สินค้าที่ถูกลบ</span></a></li>
+                    <li>
+                        <a href="{{ url_for('view_feedback') }}" class="nav-link text-white {% if request.endpoint == 'view_feedback' %}active{% endif %}">
+                            <i class="fas fa-comment-dots me-2"></i><span class="sidebar-text">UX Feedback(ออมสิน)</span>
+                        </a>
+                    </li>
                 </ul>
             </li>
             {% endif %}
@@ -230,5 +235,40 @@
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js" integrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz" crossorigin="anonymous"></script>
     
     {% block scripts %}{% endblock %}
+
+    <button type="button" class="btn btn-primary position-fixed bottom-0 end-0 m-3" data-bs-toggle="modal" data-bs-target="#feedbackModal" style="z-index: 1050;">
+        <i class="fas fa-comment-dots me-2"></i>ส่งข้อเสนอแนะ
+    </button>
+    
+    <div class="modal fade" id="feedbackModal" tabindex="-1" aria-labelledby="feedbackModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="feedbackModalLabel">ส่งข้อเสนอแนะ / แจ้งปัญหา</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <form action="{{ url_for('submit_feedback') }}" method="POST">
+                    <div class="modal-body">
+                        <div class="mb-3">
+                            <label for="feedback_type" class="form-label">ประเภท</label>
+                            <select class="form-select" id="feedback_type" name="feedback_type" required>
+                                <option value="Suggestion">เสนอไอเดีย / ฟีเจอร์ใหม่</option>
+                                <option value="Bug">แจ้งปัญหา / บั๊ก</option>
+                                <option value="Other">อื่นๆ</option>
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label for="message" class="form-label">รายละเอียด</label>
+                            <textarea class="form-control" id="message" name="message" rows="4" placeholder="กรุณาอธิบายรายละเอียดของปัญหาที่พบ หรือไอเดียที่ต้องการเสนอ..." required></textarea>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">ปิด</button>
+                        <button type="submit" class="btn btn-primary">ส่ง</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
 </body>
 </html>

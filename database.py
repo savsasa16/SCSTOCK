@@ -410,6 +410,32 @@ def init_db(conn):
             );
         """)
 
+    # Feedback Table Add HERE
+    if is_postgres:
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS feedback (
+                id SERIAL PRIMARY KEY,
+                user_id INTEGER NULL,
+                feedback_type VARCHAR(50) NOT NULL, -- e.g., 'Bug', 'Suggestion', 'Other'
+                message TEXT NOT NULL,
+                status VARCHAR(50) NOT NULL DEFAULT 'ใหม่', -- e.g., 'New', 'In Progress', 'Done'
+                created_at TIMESTAMP WITH TIME ZONE NOT NULL,
+                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
+            );
+        """)
+    else: # SQLite
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS feedback (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NULL,
+                feedback_type TEXT NOT NULL,
+                message TEXT NOT NULL,
+                status TEXT NOT NULL DEFAULT 'ใหม่',
+                created_at TEXT NOT NULL,
+                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
+            );
+        """)    
+
     # Barcodes Table for Tires
     if is_postgres:
         cursor.execute("""
@@ -2198,4 +2224,54 @@ def mark_all_notifications_as_read(conn):
     else:
         cursor.execute("UPDATE notifications SET is_read = 1 WHERE is_read = 0")
     conn.commit()
+
+def add_feedback(conn, user_id, feedback_type, message):
+    """Adds a new feedback record to the database."""
+    created_at = get_bkk_time().isoformat()
+    status = 'ใหม่'  # Default status for new feedback
+    is_postgres = "psycopg2" in str(type(conn))
+
+    if is_postgres:
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT INTO feedback (user_id, feedback_type, message, status, created_at)
+            VALUES (%s, %s, %s, %s, %s)
+        """, (user_id, feedback_type, message, status, created_at))
+    else: # SQLite
+        conn.execute("""
+            INSERT INTO feedback (user_id, feedback_type, message, status, created_at)
+            VALUES (?, ?, ?, ?, ?)
+        """, (user_id, feedback_type, message, status, created_at))
+
+def get_all_feedback(conn):
+    """Retrieves all feedback, joining with usernames."""
+    is_postgres = "psycopg2" in str(type(conn))
+    query = """
+        SELECT f.id, f.feedback_type, f.message, f.status, f.created_at, u.username
+        FROM feedback f
+        LEFT JOIN users u ON f.user_id = u.id
+        ORDER BY f.created_at DESC
+    """
+    if is_postgres:
+        cursor = conn.cursor()
+        cursor.execute(query)
+        feedback_list = cursor.fetchall()
+    else:
+        feedback_list = conn.execute(query).fetchall()
+
+    processed_feedback = []
+    for item in feedback_list:
+        item_dict = dict(item)
+        item_dict['created_at'] = convert_to_bkk_time(item_dict['created_at'])
+        processed_feedback.append(item_dict)
+    return processed_feedback
+
+def update_feedback_status(conn, feedback_id, new_status):
+    """Updates the status of a specific feedback item."""
+    is_postgres = "psycopg2" in str(type(conn))
+    if is_postgres:
+        cursor = conn.cursor()
+        cursor.execute("UPDATE feedback SET status = %s WHERE id = %s", (new_status, feedback_id))
+    else:
+        conn.execute("UPDATE feedback SET status = ? WHERE id = ?", (new_status, feedback_id))
   
