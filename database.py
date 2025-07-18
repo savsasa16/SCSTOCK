@@ -2332,22 +2332,37 @@ def get_all_announcements(conn):
 def add_announcement(conn, title, content, is_active):
     """Adds a new announcement."""
     created_at = get_bkk_time().isoformat()
+    is_postgres = "psycopg2" in str(type(conn))
     query = "INSERT INTO announcements (title, content, is_active, created_at) VALUES (?, ?, ?, ?)"
-    if "psycopg2" in str(type(conn)):
+    
+    if is_postgres:
         query = query.replace('?', '%s')
-    conn.execute(query, (title, content, is_active, created_at))
+        cursor = conn.cursor()
+        cursor.execute(query, (title, content, is_active, created_at))
+    else: # SQLite
+        conn.execute(query, (title, content, is_active, created_at))
 
 def update_announcement_status(conn, announcement_id, is_active):
     """Activates or deactivates an announcement."""
+    is_postgres = "psycopg2" in str(type(conn))
     query = "UPDATE announcements SET is_active = ? WHERE id = ?"
-    if "psycopg2" in str(type(conn)):
+    
+    if is_postgres:
         query = query.replace('?', '%s')
-    conn.execute(query, (is_active, announcement_id))
+        cursor = conn.cursor()
+        cursor.execute(query, (is_active, announcement_id))
+    else: # SQLite
+        conn.execute(query, (is_active, announcement_id))
 
 def deactivate_all_announcements(conn):
     """Deactivates all other announcements."""
+    is_postgres = "psycopg2" in str(type(conn))
     query = "UPDATE announcements SET is_active = ?"
-    if "psycopg2" in str(type(conn)):
+    
+    if is_postgres:
         query = query.replace('?', '%s')
-    conn.execute(query, (False,))
+        cursor = conn.cursor()
+        cursor.execute(query, (False,))
+    else: # SQLite
+        conn.execute(query, (False,))
   
