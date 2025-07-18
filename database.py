@@ -2310,8 +2310,18 @@ def get_latest_active_announcement(conn):
 
 def get_all_announcements(conn):
     """Fetches all announcements for the admin page."""
+    # --- START: ส่วนที่แก้ไข ---
+    is_postgres = "psycopg2" in str(type(conn))
     query = "SELECT id, title, content, is_active, created_at FROM announcements ORDER BY created_at DESC"
-    items = conn.execute(query).fetchall()
+    
+    if is_postgres:
+        cursor = conn.cursor()
+        cursor.execute(query)
+        items = cursor.fetchall()
+    else: # SQLite
+        items = conn.execute(query).fetchall()
+    # --- END: ส่วนที่แก้ไข ---
+
     processed = []
     for item in items:
         item_dict = dict(item)
