@@ -89,12 +89,15 @@ def convert_to_bkk_time(timestamp_obj):
 @app.context_processor
 def inject_global_data():
     unread_count = 0
+    latest_announcement = None
     if current_user.is_authenticated:
         conn = get_db()
         unread_count = database.get_unread_notification_count(conn)
+        latest_announcement = database.get_latest_active_announcement(conn)
     return dict(
         get_bkk_time=get_bkk_time, 
-        unread_notification_count=unread_count # ส่งตัวแปรนี้ไปให้ทุกหน้า
+        unread_notification_count=unread_count, # ส่งตัวแปรนี้ไปให้ทุกหน้า
+        latest_announcement=latest_announcement
     )
 
 # --- Flask-Login Setup (assuming these are already in your app.py) ---
@@ -4164,6 +4167,47 @@ def update_feedback_status(feedback_id):
         flash(f'เกิดข้อผิดพลาดในการอัปเดตสถานะ: {e}', 'danger')
 
     return redirect(url_for('view_feedback'))
+
+@app.route('/manage_announcements', methods=['GET', 'POST'])
+@login_required
+def manage_announcements():
+    if not current_user.is_admin():
+        flash('คุณไม่มีสิทธิ์เข้าถึงหน้านี้', 'danger')
+        return redirect(url_for('index'))
+
+    conn = get_db()
+    if request.method == 'POST':
+        title = request.form.get('title')
+        content = request.form.get('content')
+        is_active = request.form.get('is_active') == 'true'
+
+        if is_active:
+            database.deactivate_all_announcements(conn)
+
+        database.add_announcement(conn, title, content, is_active)
+        conn.commit()
+        flash('สร้างประกาศใหม่สำเร็จ!', 'success')
+        return redirect(url_for('manage_announcements'))
+
+    announcements = database.get_all_announcements(conn)
+    return render_template('manage_announcements.html', announcements=announcements)
+
+@app.route('/update_announcement_status/<int:ann_id>', methods=['POST'])
+@login_required
+def update_announcement_status(ann_id):
+    if not current_user.is_admin():
+        flash('คุณไม่มีสิทธิ์ดำเนินการนี้', 'danger')
+        return redirect(url_for('manage_announcements'))
+
+    is_active = request.form.get('status') == 'true'
+    conn = get_db()
+    if is_active:
+        database.deactivate_all_announcements(conn)
+
+    database.update_announcement_status(conn, ann_id, is_active)
+    conn.commit()
+    flash('อัปเดตสถานะประกาศสำเร็จ!', 'success')
+    return redirect(url_for('manage_announcements'))
 
 
 # --- Main entry point ---

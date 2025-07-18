@@ -136,6 +136,28 @@ def init_db(conn):
             );
         """)
 
+    # เพิ่มตารางประกาศ Announcment     
+    if is_postgres:
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS announcements (
+                id SERIAL PRIMARY KEY,
+                title VARCHAR(255) NOT NULL,
+                content TEXT NOT NULL,
+                is_active BOOLEAN DEFAULT FALSE,
+                created_at TIMESTAMP WITH TIME ZONE NOT NULL
+            );
+        """)
+    else: # SQLite
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS announcements (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                title TEXT NOT NULL,
+                content TEXT NOT NULL,
+                is_active BOOLEAN DEFAULT 0,
+                created_at TEXT NOT NULL
+            );
+        """)
+
     # Sales Channels Table (ใหม่)
     if is_postgres:
         cursor.execute("""
@@ -2274,4 +2296,48 @@ def update_feedback_status(conn, feedback_id, new_status):
         cursor.execute("UPDATE feedback SET status = %s WHERE id = %s", (new_status, feedback_id))
     else:
         conn.execute("UPDATE feedback SET status = ? WHERE id = ?", (new_status, feedback_id))
+
+def get_latest_active_announcement(conn):
+    """Fetches the most recent active announcement."""
+    query = "SELECT id, title, content FROM announcements WHERE is_active = ? ORDER BY created_at DESC LIMIT 1"
+    if "psycopg2" in str(type(conn)):
+        query = query.replace('?', '%s')
+        cursor = conn.cursor()
+        cursor.execute(query, (True,))
+        return cursor.fetchone()
+    else:
+        return conn.execute(query, (1,)).fetchone()
+
+def get_all_announcements(conn):
+    """Fetches all announcements for the admin page."""
+    query = "SELECT id, title, content, is_active, created_at FROM announcements ORDER BY created_at DESC"
+    items = conn.execute(query).fetchall()
+    processed = []
+    for item in items:
+        item_dict = dict(item)
+        item_dict['created_at'] = convert_to_bkk_time(item_dict['created_at'])
+        processed.append(item_dict)
+    return processed
+
+def add_announcement(conn, title, content, is_active):
+    """Adds a new announcement."""
+    created_at = get_bkk_time().isoformat()
+    query = "INSERT INTO announcements (title, content, is_active, created_at) VALUES (?, ?, ?, ?)"
+    if "psycopg2" in str(type(conn)):
+        query = query.replace('?', '%s')
+    conn.execute(query, (title, content, is_active, created_at))
+
+def update_announcement_status(conn, announcement_id, is_active):
+    """Activates or deactivates an announcement."""
+    query = "UPDATE announcements SET is_active = ? WHERE id = ?"
+    if "psycopg2" in str(type(conn)):
+        query = query.replace('?', '%s')
+    conn.execute(query, (is_active, announcement_id))
+
+def deactivate_all_announcements(conn):
+    """Deactivates all other announcements."""
+    query = "UPDATE announcements SET is_active = ?"
+    if "psycopg2" in str(type(conn)):
+        query = query.replace('?', '%s')
+    conn.execute(query, (False,))
   

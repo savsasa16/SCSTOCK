@@ -1,0 +1,75 @@
+{% extends 'base.html' %}
+{% block page_title %}จัดการประกาศ{% endblock %}
+
+{% block content %}
+<h1 class="h3 mb-4 text-gray-800">จัดการประกาศหน้าเว็บ</h1>
+
+<div class="card shadow-sm mb-4">
+    <div class="card-header">
+        <h6 class="m-0 font-weight-bold text-primary">สร้างประกาศใหม่</h6>
+    </div>
+    <div class="card-body">
+        <form action="{{ url_for('manage_announcements') }}" method="POST">
+            <div class="mb-3">
+                <label for="title" class="form-label">หัวข้อ</label>
+                <input type="text" class="form-control" id="title" name="title" required>
+            </div>
+            <div class="mb-3">
+                <label for="content" class="form-label">เนื้อหา</label>
+                <textarea class="form-control" id="content" name="content" rows="5" required></textarea>
+            </div>
+            <div class="form-check mb-3">
+                <input class="form-check-input" type="checkbox" name="is_active" value="true" id="is_active">
+                <label class="form-check-label" for="is_active">
+                    เปิดใช้งานประกาศนี้ทันที (ประกาศอื่นๆ จะถูกปิดใช้งาน)
+                </label>
+            </div>
+            <button type="submit" class="btn btn-primary">สร้างประกาศ</button>
+        </form>
+    </div>
+</div>
+
+<div class="card shadow-sm">
+    <div class="card-header"><h6 class="m-0 font-weight-bold text-primary">ประกาศทั้งหมด</h6></div>
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-bordered">
+                <thead>
+                    <tr>
+                        <th>หัวข้อ</th>
+                        <th>สถานะ</th>
+                        <th>สร้างเมื่อ</th>
+                        <th class="text-center">จัดการ</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for ann in announcements %}
+                    <tr>
+                        <td>{{ ann.title }}</td>
+                        <td>
+                            {% if ann.is_active %}
+                                <span class="badge text-bg-success">เปิดใช้งาน</span>
+                            {% else %}
+                                <span class="badge text-bg-secondary">ปิดใช้งาน</span>
+                            {% endif %}
+                        </td>
+                        <td>{{ ann.created_at.strftime('%d/%m/%Y %H:%M') }}</td>
+                        <td class="text-center">
+                            <form action="{{ url_for('update_announcement_status', ann_id=ann.id) }}" method="POST">
+                                {% if ann.is_active %}
+                                    <input type="hidden" name="status" value="false">
+                                    <button type="submit" class="btn btn-warning btn-sm">ปิดใช้งาน</button>
+                                {% else %}
+                                    <input type="hidden" name="status" value="true">
+                                    <button type="submit" class="btn btn-success btn-sm">เปิดใช้งาน</button>
+                                {% endif %}
+                            </form>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

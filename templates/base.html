@@ -21,12 +21,12 @@
     <style>
         .notification-bell {
             position: relative;
-            font-size: 1.25rem; /* ขนาดไอคอนกระดิ่ง */
-            color: #6c757d; /* สีเทาเข้ม */
+            font-size: 1.25rem;
+            color: #6c757d;
             text-decoration: none;
         }
         .notification-bell:hover {
-            color: #343a40; /* สีเข้มขึ้นเมื่อเมาส์ชี้ */
+            color: #343a40;
         }
         .notification-badge {
             position: absolute;
@@ -36,7 +36,7 @@
             border-radius: 50%;
             background: red;
             color: white;
-            font-size: 0.65rem; /* ขนาดตัวเลข */
+            font-size: 0.65rem;
             font-weight: bold;
             line-height: 1;
             border: 1px solid white;
@@ -79,11 +79,11 @@
             {% endif %}
             {% if current_user.is_authenticated and current_user.is_admin() %}
             <li>
-                <a href="#admin-submenu" data-bs-toggle="collapse" class="nav-link text-white d-flex justify-content-between align-items-center {% if 'admin' in request.endpoint or 'manage_users' in request.endpoint or 'wholesale_customers' in request.endpoint %}active{% endif %}">
+                <a href="#admin-submenu" data-bs-toggle="collapse" class="nav-link text-white d-flex justify-content-between align-items-center {% if 'admin' in request.endpoint or 'manage_users' in request.endpoint or 'wholesale_customers' in request.endpoint or 'view_feedback' in request.endpoint or 'manage_announcements' in request.endpoint %}active{% endif %}">
                     <div><i class="fas fa-tools me-2"></i><span class="sidebar-text">Admin Dashboard</span></div>
                     <i class="fas fa-chevron-down ms-auto sidebar-text"></i>
                 </a>
-                <ul class="collapse list-unstyled ps-3 {% if 'admin' in request.endpoint or 'manage_users' in request.endpoint or 'wholesale_customers' in request.endpoint %}show{% endif %}" id="admin-submenu">
+                <ul class="collapse list-unstyled ps-3 {% if 'admin' in request.endpoint or 'manage_users' in request.endpoint or 'wholesale_customers' in request.endpoint or 'view_feedback' in request.endpoint or 'manage_announcements' in request.endpoint %}show{% endif %}" id="admin-submenu">
                     <li><a href="{{ url_for('admin_dashboard') }}" class="nav-link text-white {% if request.endpoint == 'admin_dashboard' %}active{% endif %}"><i class="fas fa-tachometer-alt me-2"></i><span class="sidebar-text">แดชบอร์ด</span></a></li>
                     <li><a href="{{ url_for('manage_users') }}" class="nav-link text-white {% if request.endpoint == 'manage_users' %}active{% endif %}"><i class="fas fa-users me-2"></i><span class="sidebar-text">จัดการผู้ใช้</span></a></li>
                     <li><a href="{{ url_for('manage_wholesale_customers') }}" class="nav-link text-white {% if request.endpoint == 'manage_wholesale_customers' %}active{% endif %}"><i class="fas fa-handshake me-2"></i><span class="sidebar-text">จัดการลูกค้าค้าส่ง</span></a></li>
@@ -91,6 +91,11 @@
                     <li>
                         <a href="{{ url_for('view_feedback') }}" class="nav-link text-white {% if request.endpoint == 'view_feedback' %}active{% endif %}">
                             <i class="fas fa-comment-dots me-2"></i><span class="sidebar-text">UX Feedback(ออมสิน)</span>
+                        </a>
+                    </li>
+                    <li>
+                        <a href="{{ url_for('manage_announcements') }}" class="nav-link text-white {% if request.endpoint == 'manage_announcements' %}active{% endif %}">
+                            <i class="fas fa-bullhorn me-2"></i><span class="sidebar-text">จัดการประกาศ</span>
                         </a>
                     </li>
                 </ul>
@@ -122,7 +127,7 @@
                 <span class="navbar-brand mb-0 h1 text-dark fs-4 fw-bold">{% block page_title %}ภาพรวมสต็อกสินค้า{% endblock %}</span>
                 
                 <div class="ms-auto d-flex align-items-center">
-                    <a class="notification-bell me-3" href="{{ url_for('mark_notifications_read') }}">
+                    <a class="notification-bell me-3" href="{{ url_for('notifications') }}">
                         <i class="fas fa-bell"></i>
                         {% if unread_notification_count > 0 %}
                             <span class="notification-badge">{{ unread_notification_count }}</span>
@@ -151,7 +156,7 @@
                         </a>
                     </li>
                     <li class="nav-item">
-                        <a href="{{ url_for('mark_notifications_read') }}" class="nav-link text-white {% if request.endpoint == 'notifications' %}active{% endif %}">
+                        <a href="{{ url_for('notifications') }}" class="nav-link text-white {% if request.endpoint == 'notifications' %}active{% endif %}">
                             <i class="fas fa-bell me-2"></i>
                             <span>แจ้งเตือน</span>
                             {% if unread_notification_count > 0 %}
@@ -180,15 +185,17 @@
                     {% endif %}
                     {% if current_user.is_authenticated and current_user.is_admin() %}
                     <li>
-                        <a href="#admin-submenu-mobile" data-bs-toggle="collapse" class="nav-link text-white d-flex justify-content-between align-items-center {% if 'admin' in request.endpoint or 'manage_users' in request.endpoint or 'wholesale_customers' in request.endpoint %}active{% endif %}">
+                        <a href="#admin-submenu-mobile" data-bs-toggle="collapse" class="nav-link text-white d-flex justify-content-between align-items-center {% if 'admin' in request.endpoint or 'manage_users' in request.endpoint or 'wholesale_customers' in request.endpoint or 'view_feedback' in request.endpoint or 'manage_announcements' in request.endpoint %}active{% endif %}">
                             <div><i class="fas fa-tools me-2"></i> Admin</div>
                             <i class="fas fa-chevron-down ms-auto"></i>
                         </a>
-                        <ul class="collapse list-unstyled ps-3 {% if 'admin' in request.endpoint or 'manage_users' in request.endpoint or 'wholesale_customers' in request.endpoint %}show{% endif %}" id="admin-submenu-mobile">
+                        <ul class="collapse list-unstyled ps-3 {% if 'admin' in request.endpoint or 'manage_users' in request.endpoint or 'wholesale_customers' in request.endpoint or 'view_feedback' in request.endpoint or 'manage_announcements' in request.endpoint %}show{% endif %}" id="admin-submenu-mobile">
                             <li><a href="{{ url_for('admin_dashboard') }}" class="nav-link text-white {% if request.endpoint == 'admin_dashboard' %}active{% endif %}"><i class="fas fa-tachometer-alt me-2"></i> แดชบอร์ด</a></li>
                             <li><a href="{{ url_for('manage_users') }}" class="nav-link text-white {% if request.endpoint == 'manage_users' %}active{% endif %}"><i class="fas fa-users me-2"></i> จัดการผู้ใช้</a></li>
                             <li><a href="{{ url_for('manage_wholesale_customers') }}" class="nav-link text-white {% if request.endpoint == 'manage_wholesale_customers' %}active{% endif %}"><i class="fas fa-handshake me-2"></i> จัดการลูกค้าค้าส่ง</a></li>
                             <li><a href="{{ url_for('admin_deleted_items') }}" class="nav-link text-white {% if request.endpoint == 'admin_deleted_items' %}active{% endif %}"><i class="fas fa-trash-restore me-2"></i> สินค้าที่ถูกลบ</a></li>
+                            <li><a href="{{ url_for('view_feedback') }}" class="nav-link text-white {% if request.endpoint == 'view_feedback' %}active{% endif %}"><i class="fas fa-comment-dots me-2"></i> UX Feedback</a></li>
+                            <li><a href="{{ url_for('manage_announcements') }}" class="nav-link text-white {% if request.endpoint == 'manage_announcements' %}active{% endif %}"><i class="fas fa-bullhorn me-2"></i> จัดการประกาศ</a></li>
                         </ul>
                     </li>
                     {% endif %}
@@ -239,7 +246,6 @@
     <button type="button" class="btn btn-primary position-fixed bottom-0 end-0 m-3" data-bs-toggle="modal" data-bs-target="#feedbackModal" style="z-index: 1050;">
         <i class="fas fa-comment-dots me-2"></i>ส่งข้อเสนอแนะ
     </button>
-    
     <div class="modal fade" id="feedbackModal" tabindex="-1" aria-labelledby="feedbackModalLabel" aria-hidden="true">
         <div class="modal-dialog">
             <div class="modal-content">
@@ -270,5 +276,37 @@
             </div>
         </div>
     </div>
+
+    {% if latest_announcement %}
+    <div class="modal fade" id="announcementModal" tabindex="-1" aria-labelledby="announcementModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="announcementModalLabel">{{ latest_announcement.title }}</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    {{ latest_announcement.content | safe }}
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-primary" data-bs-dismiss="modal">รับทราบ</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const announcementId = 'announcement-{{ latest_announcement.id }}';
+        const hasSeenAnnouncement = sessionStorage.getItem(announcementId);
+
+        if (hasSeenAnnouncement !== 'true') {
+            const announcementModal = new bootstrap.Modal(document.getElementById('announcementModal'));
+            announcementModal.show();
+            sessionStorage.setItem(announcementId, 'true');
+        }
+    });
+    </script>
+    {% endif %}
+
 </body>
 </html>
