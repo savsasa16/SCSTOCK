@@ -1,0 +1,33 @@
+{% extends 'base.html' %}
+{% block page_title %}ประวัติการใช้งานระบบ{% endblock %}
+{% block content %}
+<h1 class="h3 mb-4 text-gray-800">ประวัติการใช้งานระบบ (200 รายการล่าสุด)</h1>
+<div class="card shadow-sm">
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-sm table-hover">
+                <thead class="table-light">
+                    <tr>
+                        <th>เวลา</th>
+                        <th>ผู้ใช้</th>
+                        <th>หน้า/ฟังก์ชัน</th>
+                        <th>URL</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for log in logs %}
+                    <tr>
+                        <td>{{ log.timestamp.strftime('%d/%m/%y %H:%M:%S') }}</td>
+                        <td>{{ log.username or 'N/A' }}</td>
+                        <td>{{ log.endpoint }}</td>
+                        <td>{{ log.url }}</td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="4" class="text-center">ไม่พบข้อมูล</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

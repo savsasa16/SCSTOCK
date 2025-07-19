@@ -3554,11 +3554,41 @@ def delete_user(user_id):
 @app.route('/admin_dashboard')
 @login_required
 def admin_dashboard():
-    # Check permission directly inside the route function
-    if not current_user.is_admin(): # Only Admin
+    if not current_user.is_admin():
         flash('คุณไม่มีสิทธิ์เข้าถึง Admin Dashboard', 'danger')
         return redirect(url_for('index'))
-        
+
+    # --- START: Logic ใหม่สำหรับลบ Log โดยใช้ฐานข้อมูล ---
+    CLEANUP_INTERVAL_DAYS = 7
+    conn = get_db()
+
+    needs_cleanup = False
+    try:
+        last_cleanup_str = database.get_setting(conn, 'last_log_cleanup')
+
+        if last_cleanup_str:
+            last_cleanup_time = datetime.fromisoformat(last_cleanup_str)
+            if (datetime.now() - last_cleanup_time).days >= CLEANUP_INTERVAL_DAYS:
+                needs_cleanup = True
+        else:
+            # ถ้ายังไม่เคยมีการตั้งค่านี้ ให้ทำการล้างครั้งแรก
+            needs_cleanup = True
+
+        if needs_cleanup:
+            deleted_count = database.delete_old_activity_logs(conn, days=CLEANUP_INTERVAL_DAYS)
+            # บันทึกเวลาปัจจุบันลงฐานข้อมูลเป็นการล้างครั้งล่าสุด
+            database.set_setting(conn, 'last_log_cleanup', datetime.now().isoformat())
+            conn.commit() # Commit ทั้งการลบ Log และการอัปเดตค่า setting
+
+            flash(f'ล้างประวัติการใช้งานที่เก่ากว่า {CLEANUP_INTERVAL_DAYS} วันเรียบร้อยแล้ว (ลบไป {deleted_count} รายการ)', 'info')
+            print(f"AUTOMATIC LOG CLEANUP: Deleted {deleted_count} old activity logs.")
+
+    except Exception as e:
+        conn.rollback()
+        print(f"Error during automatic log cleanup: {e}")
+        flash('เกิดข้อผิดพลาดระหว่างการล้างประวัติการใช้งานอัตโนมัติ', 'warning')
+    # --- END: Logic ใหม่ ---
+
     return render_template('admin_dashboard.html', current_user=current_user)
 
 @app.route('/admin_deleted_items')
@@ -4305,6 +4335,44 @@ def wholesale_customer_detail(customer_id):
                            start_date_param=start_date_obj.strftime('%Y-%m-%d'),
                            end_date_param=end_date_obj.strftime('%Y-%m-%d'),
                            current_user=current_user)
+
+@app.after_request
+def log_activity(response):
+    # ไม่ต้อง log ถ้ายังไม่ได้ login หรือเป็น request ที่ไม่สำคัญ
+    if not current_user.is_authenticated or \
+       not request.endpoint or \
+       request.endpoint.startswith('static') or \
+       'api' in request.endpoint: # ไม่ต้อง log API call เพื่อลดจำนวน log
+        return response
+
+    # Log เฉพาะ GET request ที่สำเร็จ
+    if request.method == "GET" and response.status_code == 200:
+        try:
+            conn = get_db()
+            database.add_activity_log(
+                conn,
+                user_id=current_user.id,
+                endpoint=request.endpoint,
+                method=request.method,
+                url=request.path
+            )
+            conn.commit()
+        except Exception as e:
+            print(f"Error logging activity: {e}")
+
+    return response
+
+@app.route('/view_activity_logs')
+@login_required
+def view_activity_logs():
+    if not current_user.is_admin():
+        flash('คุณไม่มีสิทธิ์เข้าถึงหน้านี้', 'danger')
+        return redirect(url_for('index'))
+
+    conn = get_db()
+    logs = database.get_activity_logs(conn)
+
+    return render_template('view_activity_logs.html', logs=logs)
 
 
 # --- Main entry point ---

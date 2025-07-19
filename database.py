@@ -1,5 +1,5 @@
 import sqlite3
-from datetime import datetime
+from datetime import datetime, timedelta
 import pytz
 import re
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -87,6 +87,31 @@ def init_db(conn):
     cursor = conn.cursor()
     
     is_postgres = "psycopg2" in str(type(conn)) # จะคืนค่า True หาก conn เป็น psycopg2 connection
+
+    if is_postgres:
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS activity_logs (
+            id SERIAL PRIMARY KEY,
+            user_id INTEGER NULL,
+            timestamp TIMESTAMP WITH TIME ZONE NOT NULL,
+            endpoint VARCHAR(255) NOT NULL,
+            method VARCHAR(10) NOT NULL,
+            url VARCHAR(2048) NOT NULL,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
+            );
+        """)
+    else: # SQLite
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS activity_logs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NULL,
+            timestamp TEXT NOT NULL,
+            endpoint TEXT NOT NULL,
+            method TEXT NOT NULL,
+            url TEXT NOT NULL,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
+            );
+        """)
 
     # Promotions Table
     if is_postgres:
@@ -551,6 +576,21 @@ def init_db(conn):
     except Exception as e:
         print(f"Error inserting default wholesale customers: {e}")
         conn.rollback() # Rollback if default customers insertion fails
+
+        if is_postgres:
+            cursor.execute("""
+        CREATE TABLE IF NOT EXISTS app_settings (
+            key VARCHAR(255) PRIMARY KEY,
+            value TEXT NOT NULL
+        );
+    """)
+        else: # SQLite
+            cursor.execute("""
+        CREATE TABLE IF NOT EXISTS app_settings (
+            key TEXT PRIMARY KEY,
+            value TEXT NOT NULL
+        );
+    """)
 
     conn.commit() # <--- IMPORTANT: COMMIT ALL CHANGES AFTER CREATING TABLES AND INSERTING DEFAULTS
     print("Database schema and default data initialized successfully.")
@@ -2505,4 +2545,83 @@ def get_wholesale_customer_purchase_history(conn, customer_id, start_date=None, 
         row_dict['timestamp'] = convert_to_bkk_time(row_dict['timestamp'])
         history.append(row_dict)
     return history
+
+def add_activity_log(conn, user_id, endpoint, method, url):
+    """บันทึกกิจกรรมของผู้ใช้ลงฐานข้อมูล"""
+    timestamp = get_bkk_time().isoformat()
+    is_postgres = "psycopg2" in str(type(conn))
+    query = "INSERT INTO activity_logs (user_id, timestamp, endpoint, method, url) VALUES (?, ?, ?, ?, ?)"
+    params = (user_id, timestamp, endpoint, method, url)
+
+    if is_postgres:
+        query = query.replace('?', '%s')
+
+    cursor = conn.cursor()
+    cursor.execute(query, params)
+    # conn.commit() is handled by the request teardown
+
+def get_activity_logs(conn, limit=200):
+    """ดึงประวัติการใช้งานล่าสุด"""
+    query = """
+        SELECT a.id, a.timestamp, a.endpoint, a.method, a.url, u.username
+        FROM activity_logs a
+        LEFT JOIN users u ON a.user_id = u.id
+        ORDER BY a.timestamp DESC
+        LIMIT ?
+    """
+    if "psycopg2" in str(type(conn)):
+        query = query.replace('?', '%s')
+
+    cursor = conn.cursor()
+    cursor.execute(query, (limit,))
+
+    logs = []
+    for row in cursor.fetchall():
+        log_dict = dict(row)
+        log_dict['timestamp'] = convert_to_bkk_time(log_dict['timestamp'])
+        logs.append(log_dict)
+    return logs
+
+def delete_old_activity_logs(conn, days=7):
+    """ลบ Log ที่เก่ากว่าวันที่กำหนด"""
+    cutoff_date = get_bkk_time() - timedelta(days=days)
+    is_postgres = "psycopg2" in str(type(conn))
+    placeholder = "%s" if is_postgres else "?"
+    query = f"DELETE FROM activity_logs WHERE timestamp < {placeholder}"
+
+    cursor = conn.cursor()
+    cursor.execute(query, (cutoff_date.isoformat(),))
+    deleted_count = cursor.rowcount
+    conn.commit()
+    return deleted_count
+
+def get_setting(conn, key):
+    """ดึงค่าการตั้งค่าจากตาราง app_settings"""
+    cursor = conn.cursor()
+    query = "SELECT value FROM app_settings WHERE key = ?"
+    params = (key,)
+    if "psycopg2" in str(type(conn)):
+        query = query.replace('?', '%s')
+
+    cursor.execute(query, params)
+    result = cursor.fetchone()
+    cursor.close()
+    return result['value'] if result else None
+
+def set_setting(conn, key, value):
+    """เพิ่มหรืออัปเดตค่าการตั้งค่าในตาราง app_settings"""
+    cursor = conn.cursor()
+    is_postgres = "psycopg2" in str(type(conn))
+
+    if is_postgres:
+        # ใช้ ON CONFLICT เพื่อทำ UPSERT (UPDATE or INSERT)
+        query = """
+            INSERT INTO app_settings (key, value) VALUES (%s, %s)
+            ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value;
+        """
+    else: # SQLite
+        query = "INSERT OR REPLACE INTO app_settings (key, value) VALUES (?, ?)"
+
+    cursor.execute(query, (key, value))
+    # การ commit จะถูกจัดการโดย Route ใน app.py
   

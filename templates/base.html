@@ -103,6 +103,13 @@
                             <i class="fas fa-bullhorn me-2"></i><span class="sidebar-text">จัดการประกาศ</span>
                         </a>
                     </li>
+                    {% if current_user.is_authenticated and current_user.username == 'admin' %}
+                    <li>
+                        <a href="{{ url_for('view_activity_logs') }}" class="nav-link text-white {% if request.endpoint == 'view_activity_logs' %}active{% endif %}">
+                            <i class="fas fa-history me-2"></i><span class="sidebar-text">ดูประวัติการใช้งาน</span>
+                        </a>
+                    </li>
+                    {% endif %}
                 </ul>
             </li>
             {% endif %}
