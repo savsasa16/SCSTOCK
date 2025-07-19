@@ -1,0 +1,99 @@
+{% extends 'base.html' %}
+
+{% block page_title %}ลูกค้าค้าส่ง{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1 class="h3 mb-0 text-gray-800">ลูกค้าค้าส่ง</h1>
+</div>
+
+<div class="card shadow-sm mb-4">
+    <div class="card-body">
+        <h5 class="card-title">ค้นหาลูกค้า</h5>
+        <form action="{{ url_for('wholesale_dashboard') }}" method="GET" autocomplete="off">
+            <div class="position-relative">
+                <div class="input-group">
+                    <input type="text" class="form-control" id="search-input" name="search_query" placeholder="พิมพ์ชื่อลูกค้า..." value="{{ search_query or '' }}">
+                    <button class="btn btn-primary" type="submit"><i class="fas fa-search me-2"></i>ค้นหา</button>
+                </div>
+                <div id="suggestions-box" class="list-group position-absolute w-100" style="z-index: 1000;"></div>
+            </div>
+        </form>
+        </div>
+</div>
+
+<div class="card shadow-sm">
+    <div class="card-header">
+        <h6 class="m-0 font-weight-bold text-primary">ผลการค้นหา</h6>
+    </div>
+    <div class="card-body">
+        <div class="list-group">
+            {% for customer in customers %}
+            <a href="{{ url_for('wholesale_customer_detail', customer_id=customer.id) }}" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center">
+                <div>
+                    <h5 class="mb-1">{{ customer.name }}</h5>
+                    <small>ยอดซื้อรวม: {{ customer.total_items_purchased }} ชิ้น</small>
+                </div>
+                <i class="fas fa-chevron-right"></i>
+            </a>
+            {% else %}
+            <div class="list-group-item text-center text-muted">
+                {% if search_query %}
+                    ไม่พบลูกค้าที่ชื่อตรงกับ "{{ search_query }}"
+                {% else %}
+                    กรุณาพิมพ์เพื่อค้นหาลูกค้า
+                {% endif %}
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+$(document).ready(function() {
+    const searchInput = $('#search-input');
+    const suggestionsBox = $('#suggestions-box');
+
+    searchInput.on('keyup', function() {
+        let query = $(this).val();
+
+        if (query.length < 2) {
+            suggestionsBox.empty().hide();
+            return;
+        }
+
+        $.ajax({
+            url: "{{ url_for('api_search_wholesale_customers') }}",
+            data: { term: query },
+            success: function(data) {
+                suggestionsBox.empty().show();
+                if (data.length > 0) {
+                    data.forEach(function(customerName) {
+                        let suggestionItem = $('<a href="#" class="list-group-item list-group-item-action"></a>').text(customerName);
+                        suggestionItem.on('click', function(e) {
+                            e.preventDefault();
+                            searchInput.val($(this).text());
+                            suggestionsBox.empty().hide();
+                            // Optional: automatically submit the form
+                            // searchInput.closest('form').submit();
+                        });
+                        suggestionsBox.append(suggestionItem);
+                    });
+                } else {
+                    suggestionsBox.hide();
+                }
+            }
+        });
+    });
+
+    // Hide suggestions when clicking outside
+    $(document).on('click', function(e) {
+        if (!$(e.target).closest('#search-input, #suggestions-box').length) {
+            suggestionsBox.empty().hide();
+        }
+    });
+});
+</script>
+{% endblock %}

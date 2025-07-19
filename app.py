@@ -4209,6 +4209,72 @@ def update_announcement_status(ann_id):
     flash('อัปเดตสถานะประกาศสำเร็จ!', 'success')
     return redirect(url_for('manage_announcements'))
 
+@app.route('/wholesale_dashboard')
+@login_required
+def wholesale_dashboard():
+    conn = get_db()
+    search_query = request.args.get('search_query', '').strip()
+
+    customers = database.get_wholesale_customers_with_summary(conn, query=search_query)
+
+    return render_template('wholesale_dashboard.html', 
+                           customers=customers, 
+                           search_query=search_query,
+                           current_user=current_user)
+
+@app.route('/api/search_wholesale_customers')
+@login_required
+def api_search_wholesale_customers():
+    conn = get_db()
+    # รับคำค้นหาจาก query parameter ที่ชื่อว่า 'term'
+    search_term = request.args.get('term', '').strip()
+
+    if not search_term:
+        return jsonify([])
+
+    # ใช้ฟังก์ชันเดิมที่เรามีอยู่แล้ว แต่ดึงมาแค่ 10 รายการก็พอ
+    customers = database.get_wholesale_customers_with_summary(conn, query=search_term)
+
+    # ดึงมาเฉพาะชื่อลูกค้า
+    customer_names = [customer['name'] for customer in customers[:10]]
+
+    return jsonify(customer_names)                           
+
+@app.route('/wholesale_customer/<int:customer_id>')
+@login_required
+def wholesale_customer_detail(customer_id):
+    conn = get_db()
+
+    start_date_str = request.args.get('start_date')
+    end_date_str = request.args.get('end_date')
+
+    # Default to last 30 days if no dates are provided
+    if not start_date_str:
+        end_date_obj = get_bkk_time()
+        start_date_obj = end_date_obj - timedelta(days=30)
+    else:
+        try:
+            start_date_obj = BKK_TZ.localize(datetime.strptime(start_date_str, '%Y-%m-%d')).replace(hour=0, minute=0, second=0)
+            end_date_obj = BKK_TZ.localize(datetime.strptime(end_date_str, '%Y-%m-%d')).replace(hour=23, minute=59, second=59)
+        except (ValueError, TypeError):
+            flash("รูปแบบวันที่ไม่ถูกต้อง", "warning")
+            end_date_obj = get_bkk_time()
+            start_date_obj = end_date_obj - timedelta(days=30)
+
+    customer = database.get_wholesale_customer_details(conn, customer_id)
+    if not customer:
+        flash(f"ไม่พบข้อมูลลูกค้า ID: {customer_id}", "danger")
+        return redirect(url_for('wholesale_dashboard'))
+
+    history = database.get_wholesale_customer_purchase_history(conn, customer_id, start_date=start_date_obj, end_date=end_date_obj)
+
+    return render_template('wholesale_customer_detail.html',
+                           customer=customer,
+                           history=history,
+                           start_date_param=start_date_obj.strftime('%Y-%m-%d'),
+                           end_date_param=end_date_obj.strftime('%Y-%m-%d'),
+                           current_user=current_user)
+
 
 # --- Main entry point ---
 if __name__ == '__main__':

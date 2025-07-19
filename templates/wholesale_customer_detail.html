@@ -1,0 +1,113 @@
+{% extends 'base.html' %}
+
+{% block page_title %}รายละเอียดลูกค้า: {{ customer.name }}{% endblock %}
+
+{% block head_scripts %}
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <a href="{{ url_for('wholesale_dashboard') }}" class="btn btn-sm btn-outline-secondary mb-2">
+            <i class="fas fa-arrow-left me-2"></i>กลับไปหน้าค้นหา
+        </a>
+        <h1 class="h3 mb-0 text-gray-800">รายละเอียดลูกค้า: <strong>{{ customer.name }}</strong></h1>
+    </div>
+</div>
+
+<div class="row g-4 mb-4">
+    <div class="col-md-4">
+        <div class="card shadow-sm h-100">
+            <div class="card-body text-center">
+                <h5 class="card-title text-primary"><i class="fas fa-shopping-cart me-2"></i>ยอดซื้อทั้งหมด</h5>
+                <p class="fs-2 fw-bold mb-0">{{ customer.total_items_purchased }}</p>
+                <p class="card-text">ชิ้น</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card shadow-sm h-100">
+            <div class="card-body text-center">
+                <h5 class="card-title text-success"><i class="fas fa-calendar-check me-2"></i>วันที่ซื้อล่าสุด</h5>
+                <p class="fs-4 fw-bold mb-0">
+                    {{ customer.last_purchase_date.strftime('%d %b %Y') if customer.last_purchase_date else 'ไม่มีข้อมูล' }}
+                </p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card shadow-sm">
+    <div class="card-header">
+        <h5 class="mb-0">ประวัติการซื้อ</h5>
+    </div>
+    <div class="card-body">
+        <form method="GET" action="{{ url_for('wholesale_customer_detail', customer_id=customer.id) }}" class="mb-4">
+            <div class="row g-3 align-items-end">
+                <div class="col-md">
+                    <label for="start_date" class="form-label">จากวันที่:</label>
+                    <input type="text" id="start_date" name="start_date" class="form-control" value="{{ start_date_param }}">
+                </div>
+                <div class="col-md">
+                    <label for="end_date" class="form-label">ถึงวันที่:</label>
+                    <input type="text" id="end_date" name="end_date" class="form-control" value="{{ end_date_param }}">
+                </div>
+                <div class="col-md-auto">
+                    <button type="submit" class="btn btn-primary w-100"><i class="fas fa-filter me-2"></i>ดูประวัติ</button>
+                </div>
+            </div>
+        </form>
+
+        <div class="table-responsive">
+            <table class="table table-striped table-hover">
+                <thead class="table-light">
+                    <tr>
+                        <th>วันที่</th>
+                        <th>ประเภทสินค้า</th>
+                        <th>รายการ</th>
+                        <th class="text-center">จำนวน</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in history %}
+                    <tr>
+                        <td>{{ item.timestamp.strftime('%d/%m/%Y %H:%M') }}</td>
+                        <td>
+                            {% if item.item_type == 'tire' %}
+                                <span class="badge text-bg-dark"><i class="fas fa-tire me-1"></i> ยาง</span>
+                            {% elif item.item_type == 'wheel' %}
+                                <span class="badge text-bg-secondary"><i class="fas fa-compact-disc me-1"></i> แม็ก</span>
+                            {% endif %}
+                        </td>
+                        <td>{{ item.brand | title }} {{ item.model | title }} {{ item.size }}</td>
+                        <td class="text-center">{{ item.quantity_change }}</td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="4" class="text-center text-muted py-4">ไม่พบประวัติการซื้อในข่วงเวลานี้</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+<script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/th.js"></script>
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        flatpickr("#start_date", {
+            dateFormat: "Y-m-d",
+            locale: "th"
+        });
+        flatpickr("#end_date", {
+            dateFormat: "Y-m-d",
+            locale: "th"
+        });
+    });
+</script>
+{% endblock %}

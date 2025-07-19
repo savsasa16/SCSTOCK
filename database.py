@@ -2243,15 +2243,27 @@ def get_unread_notification_count(conn):
 
 def mark_all_notifications_as_read(conn):
     """อัปเดตการแจ้งเตือนทั้งหมดให้เป็น 'อ่านแล้ว'"""
-    cursor = conn.cursor()
-    if "psycopg2" in str(type(conn)):
-        cursor.execute("UPDATE notifications SET is_read = TRUE WHERE is_read = FALSE")
-    else: # SQLite
-        cursor.execute("UPDATE notifications SET is_read = 1 WHERE is_read = 0")
+    try:
+        cursor = conn.cursor()
+        if "psycopg2" in str(type(conn)):
+            cursor.execute("UPDATE notifications SET is_read = TRUE WHERE is_read = FALSE")
+        else: # SQLite
+            cursor.execute("UPDATE notifications SET is_read = 1 WHERE is_read = 0")
 
-    # ปิด cursor และ commit การเปลี่ยนแปลง
-    cursor.close()
-    conn.commit()
+        # --- DEBUGGING CODE ---
+        # ดึงจำนวนแถวที่ได้รับผลกระทบจากการ UPDATE
+        updated_rows = cursor.rowcount
+        # พิมพ์ผลลัพธ์ออกทาง Terminal เพื่อตรวจสอบ
+        print(f"DEBUG: Attempted to mark notifications as read. Rows affected: {updated_rows}")
+        # --- END DEBUGGING ---
+
+        conn.commit()
+        cursor.close()
+        print("DEBUG: Transaction committed successfully.")
+
+    except Exception as e:
+        print(f"ERROR in mark_all_notifications_as_read: {e}")
+        conn.rollback() # หากเกิด Error ให้ยกเลิกการเปลี่ยนแปลง
 
 def add_feedback(conn, user_id, feedback_type, message):
     """Adds a new feedback record to the database."""
@@ -2371,4 +2383,126 @@ def deactivate_all_announcements(conn):
         cursor.execute(query, (False,))
     else: # SQLite
         conn.execute(query, (False,))
+
+def get_wholesale_customers_with_summary(conn, query=None):
+    """
+    ดึงข้อมูลลูกค้าค้าส่งทั้งหมดพร้อมสรุปยอดซื้อ (OUT) รวม
+    และสามารถค้นหาตามชื่อได้
+    """
+    is_postgres = "psycopg2" in str(type(conn))
+
+    # ใช้ Subquery เพื่อรวมยอดซื้อจากทั้งยางและแม็ก
+    sql = f"""
+        SELECT 
+            wc.id, 
+            wc.name,
+            COALESCE(SUM(total_out.quantity), 0) as total_items_purchased
+        FROM wholesale_customers wc
+        LEFT JOIN (
+            SELECT wholesale_customer_id, quantity_change as quantity FROM tire_movements WHERE type = 'OUT'
+            UNION ALL
+            SELECT wholesale_customer_id, quantity_change as quantity FROM wheel_movements WHERE type = 'OUT'
+        ) AS total_out ON wc.id = total_out.wholesale_customer_id
+    """
+
+    params = []
+    where_clauses = []
+
+    if query:
+        like_operator = "ILIKE" if is_postgres else "LIKE"
+        placeholder = "%s" if is_postgres else "?"
+        where_clauses.append(f"wc.name {like_operator} {placeholder}")
+        params.append(f"%{query}%")
+
+    if where_clauses:
+        sql += " WHERE " + " AND ".join(where_clauses)
+
+    sql += """
+        GROUP BY wc.id, wc.name
+        ORDER BY wc.name;
+    """
+
+    cursor = conn.cursor()
+    cursor.execute(sql, tuple(params))
+
+    return [dict(row) for row in cursor.fetchall()]
+
+def get_wholesale_customer_details(conn, customer_id):
+    """
+    ดึงข้อมูลชื่อลูกค้าและข้อมูลสรุป (ยอดซื้อรวม, วันที่ซื้อล่าสุด)
+    """
+    is_postgres = "psycopg2" in str(type(conn))
+    placeholder = "%s" if is_postgres else "?"
+
+    sql = f"""
+        SELECT
+            wc.id, -- <<< ADD THIS LINE
+            wc.name,
+            COALESCE(SUM(m.quantity_change), 0) as total_items_purchased,
+            MAX(m.timestamp) as last_purchase_date
+        FROM wholesale_customers wc
+        LEFT JOIN (
+            SELECT wholesale_customer_id, quantity_change, timestamp FROM tire_movements WHERE type = 'OUT'
+            UNION ALL
+            SELECT wholesale_customer_id, quantity_change, timestamp FROM wheel_movements WHERE type = 'OUT'
+        ) AS m ON wc.id = m.wholesale_customer_id
+        WHERE wc.id = {placeholder}
+        GROUP BY wc.id, wc.name;
+    """
+    cursor = conn.cursor()
+    cursor.execute(sql, (customer_id,))
+    customer_data = cursor.fetchone()
+
+    if customer_data:
+        customer_dict = dict(customer_data)
+        if customer_dict.get('last_purchase_date'):
+            customer_dict['last_purchase_date'] = convert_to_bkk_time(customer_dict['last_purchase_date'])
+        return customer_dict
+    return None
+
+def get_wholesale_customer_purchase_history(conn, customer_id, start_date=None, end_date=None):
+    """
+    ดึงประวัติการซื้อ (OUT) ทั้งหมดของลูกค้า สามารถกรองตามช่วงวันที่ได้
+    """
+    is_postgres = "psycopg2" in str(type(conn))
+    placeholder = "%s" if is_postgres else "?"
+
+    sql = f"""
+        SELECT 'tire' as item_type, tm.timestamp, t.brand, t.model, t.size, tm.quantity_change
+        FROM tire_movements tm
+        JOIN tires t ON tm.tire_id = t.id
+        WHERE tm.type = 'OUT' AND tm.wholesale_customer_id = {placeholder}
+    """
+    params = [customer_id]
+
+    if start_date and end_date:
+        sql += f" AND tm.timestamp BETWEEN {placeholder} AND {placeholder}"
+        params.extend([start_date.isoformat(), end_date.isoformat()])
+
+    sql += f"""
+        UNION ALL
+        SELECT 'wheel' as item_type, wm.timestamp, w.brand, w.model, 
+               w.diameter || 'x' || w.width || ' ' || w.pcd as size, 
+               wm.quantity_change
+        FROM wheel_movements wm
+        JOIN wheels w ON wm.wheel_id = w.id
+        WHERE wm.type = 'OUT' AND wm.wholesale_customer_id = {placeholder}
+    """
+    params.append(customer_id)
+
+    if start_date and end_date:
+        sql += f" AND wm.timestamp BETWEEN {placeholder} AND {placeholder}"
+        params.extend([start_date.isoformat(), end_date.isoformat()])
+
+    sql += " ORDER BY timestamp DESC"
+
+    cursor = conn.cursor()
+    cursor.execute(sql, tuple(params))
+
+    history = []
+    for row in cursor.fetchall():
+        row_dict = dict(row)
+        row_dict['timestamp'] = convert_to_bkk_time(row_dict['timestamp'])
+        history.append(row_dict)
+    return history
   
