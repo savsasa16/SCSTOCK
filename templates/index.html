@@ -51,16 +51,19 @@
                                             <th>รุ่นยาง</th>
                                             <th>เบอร์ยาง</th>
                                             <th class="text-center">สต็อก</th>
-                                            {# --- แยกคอลัมน์ทุน --- #}
                                             {% if current_user.can_view_cost() %}
                                                 <th class="text-end">ทุน(SC)</th>
                                                 <th class="text-end">ทุน(Dunlop)</th>
                                                 <th class="text-end">ทุน(Online)</th>
                                             {% endif %}
-                                            {% if current_user.can_view_wholesale_price() %}
-                                                <th class="text-end">ค้าส่ง 1</th>
-                                                <th class="text-end">ค้าส่ง 2</th>
+                                            {# --- START: แก้ไขส่วนหัวตารางยาง --- #}
+                                            {% if current_user.can_view_wholesale_price_1() %}
+                                                <th class="text-center">ราคาค้าส่งเซล</th>
                                             {% endif %}
+                                            {% if current_user.can_view_wholesale_price_2() %}
+                                                <th class="text-center">ค้าส่ง 2</th>
+                                            {% endif %}
+                                            {# --- END: แก้ไขส่วนหัวตารางยาง --- #}
                                             {% if current_user.can_view_retail_price() %}
                                                 <th class="text-end">ราคา/เส้น</th>
                                                 <th class="text-center">โปรโมชัน</th>
@@ -76,18 +79,21 @@
                                         {% for item in brand_data.items_list %} 
                                             <tr class="{% if item.quantity <= 5 %}table-danger{% elif item.quantity <= 10 %}table-warning{% endif %}">
                                                 <td>{{ item.model | title }}</td>
-                                                <td>{{ item.size }}</td>                                  
+                                                <td>{{ item.size }}</td>                                          
                                                 <td class="text-center fw-bold">{{ item.quantity }}</td>
-                                                {# --- แสดงข้อมูลทุนแยกตามคอลัมน์ --- #}
                                                 {% if current_user.can_view_cost() %}
                                                     <td class="text-end">{{ "{:,.0f}".format(item.get('cost_sc')) if item.get('cost_sc') is not none else '-' }}</td>
                                                     <td class="text-end">{{ "{:,.0f}".format(item.get('cost_dunlop')) if item.get('cost_dunlop') is not none else '-' }}</td>
                                                     <td class="text-end">{{ "{:,.0f}".format(item.get('cost_online')) if item.get('cost_online') is not none else '-' }}</td>
                                                 {% endif %}
-                                                {% if current_user.can_view_wholesale_price() %}
-                                                    <td class="text-end">{{ "{:,.0f}".format(item.get('wholesale_price1')) if item.get('wholesale_price1') is not none else '-' }}</td>
-                                                    <td class="text-end">{{ "{:,.0f}".format(item.get('wholesale_price2')) if item.get('wholesale_price2') is not none else '-' }}</td>
+                                                {# --- START: แก้ไขส่วนข้อมูลยาง --- #}
+                                                {% if current_user.can_view_wholesale_price_1() %}
+                                                    <td class="text-center">{{ "{:,.0f}".format(item.get('wholesale_price1')) if item.get('wholesale_price1') is not none else '-' }}</td>
                                                 {% endif %}
+                                                {% if current_user.can_view_wholesale_price_2() %}
+                                                    <td class="text-center">{{ "{:,.0f}".format(item.get('wholesale_price2')) if item.get('wholesale_price2') is not none else '-' }}</td>
+                                                {% endif %}
+                                                {# --- END: แก้ไขส่วนข้อมูลยาง --- #}
                                                 {% if current_user.can_view_retail_price() %}
                                                     <td class="text-end">{{ "{:,.0f}".format(item.get('price_per_item')) if item.get('price_per_item') is not none else '-' }}</td>
                                                     <td class="text-center">{% if item.get('promotion_id') and item.get('promo_is_active') == 1 %}<span class="badge text-bg-info" title="{{ item.get('promo_name') }}: {{ item.get('display_promo_description_text') }}">{{ item.get('promo_name') }}</span>{% else %}-{% endif %}</td>
@@ -102,12 +108,11 @@
                                                 {% endif %}
                                             </tr>
                                         {% endfor %}
-                                        {# --- เพิ่มเงื่อนไขการแสดงผลแถบสรุป --- #}
                                         {% if brand_data.summary.is_summary_to_show and current_user.is_admin() %}
                                             <tr class="table-light">
                                                 <td colspan="2" class="text-end fw-bold">ยอดรวม {{ brand_name | title }}</td>
                                                 <td class="text-center fw-bold">{{ brand_data.summary.quantity }}</td>
-                                                <td colspan="{{ 10 if current_user.can_view_cost() and current_user.can_view_wholesale_price() and current_user.can_view_retail_price() else (7 if (current_user.can_view_cost() and current_user.can_view_wholesale_price()) or (current_user.can_view_cost() and current_user.can_view_retail_price()) or (current_user.can_view_wholesale_price() and current_user.can_view_retail_price()) else (4 if current_user.can_view_cost() or current_user.can_view_wholesale_price() or current_user.can_view_retail_price() else 1)) }}"></td>
+                                                <td colspan="{{ 10 if current_user.can_view_cost() and current_user.can_view_wholesale_price_1() and current_user.can_view_wholesale_price_2() and current_user.can_view_retail_price() else 1 }}"></td>
                                                 {% if current_user.can_edit() %}<td></td>{% endif %}
                                             </tr>
                                         {% endif %}
@@ -132,7 +137,14 @@
                                     <tr>
                                         <th class="text-center">รูป</th><th>ลาย</th><th>ขนาด</th><th>รู/ET</th><th>สี</th><th class="text-center">สต็อก</th>
                                         {% if current_user.can_view_cost() %}<th class="text-end">ทุน(ปกติ/ONL)</th>{% endif %}
-                                        {% if current_user.can_view_wholesale_price() %}<th class="text-end">ส่ง 1</th><th class="text-end">ส่ง 2</th>{% endif %}
+                                        {# --- START: แก้ไขส่วนหัวตารางแม็ก --- #}
+                                        {% if current_user.can_view_wholesale_price_1() %}
+                                            <th class="text-end">ค้าส่ง 1</th>
+                                        {% endif %}
+                                        {% if current_user.can_view_wholesale_price_2() %}
+                                            <th class="text-end">ค้าส่ง 2</th>
+                                        {% endif %}
+                                        {# --- END: แก้ไขส่วนหัวตารางแม็ก --- #}
                                         {% if current_user.can_view_retail_price() %}<th class="text-end">ราคาปลีก</th>{% endif %}
                                         {% if current_user.can_edit() %}<th class="text-center">จัดการ</th>{% endif %}
                                     </tr>
@@ -147,7 +159,14 @@
                                             <td>{{ item.color if item.color else '-' }}</td>
                                             <td class="text-center fw-bold">{{ item.quantity }}</td>
                                             {% if current_user.can_view_cost() %}<td class="text-end small">{{ "{:,.0f}".format(item.get('cost')) if item.get('cost') is not none else '-' }} / {{ "{:,.0f}".format(item.get('cost_online')) if item.get('cost_online') is not none else '-' }}</td>{% endif %}
-                                            {% if current_user.can_view_wholesale_price() %}<td class="text-end">{{ "{:,.0f}".format(item.get('wholesale_price1')) if item.get('wholesale_price1') is not none else '-' }}</td><td class="text-end">{{ "{:,.0f}".format(item.get('wholesale_price2')) if item.get('wholesale_price2') is not none else '-' }}</td>{% endif %}
+                                            {# --- START: แก้ไขส่วนข้อมูลแม็ก --- #}
+                                            {% if current_user.can_view_wholesale_price_1() %}
+                                                <td class="text-center">{{ "{:,.0f}".format(item.get('wholesale_price1')) if item.get('wholesale_price1') is not none else '-' }}</td>
+                                            {% endif %}
+                                            {% if current_user.can_view_wholesale_price_2() %}
+                                                <td class="text-center ">{{ "{:,.0f}".format(item.get('wholesale_price2')) if item.get('wholesale_price2') is not none else '-' }}</td>
+                                            {% endif %}
+                                            {# --- END: แก้ไขส่วนข้อมูลแม็ก --- #}
                                             {% if current_user.can_view_retail_price() %}<td class="text-end">{{ "{:,.0f}".format(item.get('retail_price')) if item.get('retail_price') is not none else '-' }}</td>{% endif %}
                                             {% if current_user.can_edit() %}
                                             <td class="text-center">
@@ -158,12 +177,11 @@
                                             {% endif %}
                                         </tr>
                                     {% endfor %}
-                                     {# --- เพิ่มเงื่อนไขการแสดงผลแถบสรุป --- #}
                                     {% if brand_data.summary.is_summary_to_show and current_user.is_admin() %}
                                         <tr class="table-light">
                                             <td colspan="5" class="text-end fw-bold">ยอดรวม {{ brand_name | title }}</td>
                                             <td class="text-center fw-bold">{{ brand_data.summary.quantity }}</td>
-                                            <td colspan="{{ 5 if current_user.can_view_cost() and current_user.can_view_wholesale_price() and current_user.can_view_retail_price() else (3 if (current_user.can_view_cost() and current_user.can_view_wholesale_price()) or (current_user.can_view_cost() and current_user.can_view_retail_price()) else (2 if current_user.can_view_wholesale_price() else (1 if current_user.can_view_cost() or current_user.can_view_retail_price() else 0))) }}"></td>
+                                            <td colspan="{{ 5 if current_user.can_view_cost() and current_user.can_view_wholesale_price_1() and current_user.can_view_wholesale_price_2() and current_user.can_view_retail_price() else 1 }}"></td>
                                             {% if current_user.can_edit() %}<td></td>{% endif %}
                                         </tr>
                                     {% endif %}

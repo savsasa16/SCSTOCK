@@ -170,8 +170,11 @@ class User(UserMixin):
     def can_view_cost(self):
         return self.is_admin()
 
-    def can_view_wholesale_price(self):
-        return self.is_admin() or self.is_wholesale_sales()
+    def can_view_wholesale_price_1(self):
+        return self.role in ['admin', 'wholesale_sales', 'viewer']
+
+    def can_view_wholesale_price_2(self):
+        return self.role in ['admin', 'wholesale_sales']
         
     def can_view_retail_price(self):
         return self.is_admin() or self.is_editor() or self.is_retail_sales()
@@ -366,8 +369,9 @@ def index():
             filtered_tire['cost_sc'] = None
             filtered_tire['cost_dunlop'] = None
             filtered_tire['cost_online'] = None
-        if not current_user.can_view_wholesale_price(): # If no permission to view wholesale price
+        if not current_user.can_view_wholesale_price_1():
             filtered_tire['wholesale_price1'] = None
+        if not current_user.can_view_wholesale_price_2():
             filtered_tire['wholesale_price2'] = None
             
         # NOTE: Logic for hiding retail price and promotions for 'wholesale_sales' and 'viewer' roles
@@ -408,8 +412,9 @@ def index():
         if not current_user.can_view_cost(): # If no permission to view cost
             filtered_wheel['cost'] = None
             filtered_wheel['cost_online'] = None
-        if not current_user.can_view_wholesale_price(): # If no permission to view wholesale price
+        if not current_user.can_view_wholesale_price_1():
             filtered_wheel['wholesale_price1'] = None
+        if not current_user.can_view_wholesale_price_2():
             filtered_wheel['wholesale_price2'] = None
         if not current_user.can_view_retail_price(): # If no permission to view retail price
             filtered_wheel['retail_price'] = None
