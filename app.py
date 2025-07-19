@@ -3019,6 +3019,20 @@ def summary_stock_report():
         flash(f"เกิดข้อผิดพลาดในการคำนวณสรุปแม็กตามยี่ห้อ: {e}", "danger")
         # wheel_brand_totals_for_summary_report ถูกกำหนดค่าเริ่มต้นแล้ว ไม่ต้องกำหนดซ้ำ
 
+    tires_with_movement = {}
+    for brand, items in tires_by_brand_for_summary_report.items():
+        # กรองเฉพาะ item ที่มีการเคลื่อนไหว (IN, OUT, หรือ RETURN มากกว่า 0)
+        moved_items = [item for item in items if item['IN'] > 0 or item['OUT'] > 0 or item['RETURN'] > 0]
+        # ถ้าหลังจากกรองแล้วยังมี item เหลืออยู่ ให้เพิ่ม brand และ item ที่กรองแล้วเข้าไปใน dict ใหม่
+        if moved_items:
+            tires_with_movement[brand] = moved_items
+
+    wheels_with_movement = {}
+    for brand, items in wheels_by_brand_for_summary_report.items():
+        moved_items = [item for item in items if item['IN'] > 0 or item['OUT'] > 0 or item['RETURN'] > 0]
+        if moved_items:
+            wheels_with_movement[brand] = moved_items
+
 
     return render_template('summary_stock_report.html',
                            start_date_param=start_date_obj.strftime('%Y-%m-%d'),
@@ -3039,9 +3053,9 @@ def summary_stock_report():
                            overall_wheel_out=overall_wheel_out_period,
                            overall_wheel_return=overall_wheel_return_period,
                            overall_wheel_final=overall_wheel_final,
-
-                           tires_by_brand_for_summary_report=tires_by_brand_for_summary_report,
-                           wheels_by_brand_for_summary_report=wheels_by_brand_for_summary_report,
+                        
+                           tires_by_brand_for_summary_report=tires_with_movement,
+                           wheels_by_brand_for_summary_report=wheels_with_movement,
                            tire_brand_totals_for_summary_report=tire_brand_totals_for_summary_report,
                            wheel_brand_totals_for_summary_report=wheel_brand_totals_for_summary_report,
                            current_user=current_user)
