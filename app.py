@@ -3,7 +3,7 @@ from datetime import datetime, timedelta
 import pytz
 from collections import OrderedDict, defaultdict
 import re
-from flask import Flask, render_template, request, redirect, url_for, flash, g, send_file, current_app, jsonify
+from flask import Flask, render_template, request, redirect, url_for, flash, g, send_file, current_app, jsonify, session
 import pandas as pd
 from io import BytesIO
 from werkzeug.utils import secure_filename
@@ -90,13 +90,45 @@ def convert_to_bkk_time(timestamp_obj):
 def inject_global_data():
     unread_count = 0
     latest_announcement = None
+
     if current_user.is_authenticated:
         conn = get_db()
-        unread_count = database.get_unread_notification_count(conn)
+
+        # --- START: ส่วนที่แก้ไข ---
+
+        # 1. กำหนดระยะเวลาของ Cache (เช่น 60 วินาที)
+        cache_duration = timedelta(seconds=300)
+        now = get_bkk_time()
+
+        # 2. ดึงข้อมูลจาก session cache
+        last_checked_str = session.get('unread_count_ts')
+        
+        # 3. ตรวจสอบว่า cache ยังใช้ได้หรือไม่
+        if last_checked_str:
+            last_checked_dt = datetime.fromisoformat(last_checked_str)
+            if (now - last_checked_dt) < cache_duration:
+                # ถ้า cache ยังไม่หมดอายุ ให้ใช้ค่าจาก session
+                unread_count = session.get('unread_count', 0)
+            else:
+                # ถ้า cache หมดอายุ ให้ดึงข้อมูลใหม่จากฐานข้อมูล
+                unread_count = database.get_unread_notification_count(conn)
+                # แล้วอัปเดตค่าใหม่ลง session
+                session['unread_count'] = unread_count
+                session['unread_count_ts'] = now.isoformat()
+        else:
+            # ถ้าไม่มี cache เลย ให้ดึงข้อมูลใหม่จากฐานข้อมูลเป็นครั้งแรก
+            unread_count = database.get_unread_notification_count(conn)
+            session['unread_count'] = unread_count
+            session['unread_count_ts'] = now.isoformat()
+
+        # --- END: ส่วนที่แก้ไข ---
+
+        # ส่วนของ Announcement ยังคงดึงข้อมูลทุกครั้ง เพราะอาจมีการเปลี่ยนแปลงที่สำคัญ
         latest_announcement = database.get_latest_active_announcement(conn)
+        
     return dict(
         get_bkk_time=get_bkk_time, 
-        unread_notification_count=unread_count, # ส่งตัวแปรนี้ไปให้ทุกหน้า
+        unread_notification_count=unread_count,
         latest_announcement=latest_announcement
     )
 
@@ -4361,11 +4393,24 @@ def log_activity(response):
     if not current_user.is_authenticated or \
        not request.endpoint or \
        request.endpoint.startswith('static') or \
-       'api' in request.endpoint: # ไม่ต้อง log API call เพื่อลดจำนวน log
+       'api' in request.endpoint:
         return response
 
-    # Log เฉพาะ GET request ที่สำเร็จ
-    if request.method == "GET" and response.status_code == 200:
+    # --- START: ส่วนที่แก้ไขและปรับปรุง ---
+
+    # 1. กำหนด Endpoint ของ GET Request ที่เราสนใจเป็นพิเศษ (เช่น การ Export)
+    important_get_endpoints = ['export_tires_action', 'export_wheels_action']
+
+    # 2. ตรวจสอบเงื่อนไขการบันทึก
+    #    - บันทึกถ้าเป็น Method ที่เปลี่ยนแปลงข้อมูล (POST, PUT, DELETE) และสำเร็จ
+    #    - หรือ บันทึกถ้าเป็น GET Request ที่อยู่ในลิสต์ Endpoint สำคัญของเรา และสำเร็จ
+    should_log = (
+        request.method in ['POST', 'PUT', 'DELETE'] and response.status_code in [200, 201, 302]
+    ) or (
+        request.method == 'GET' and request.endpoint in important_get_endpoints and response.status_code == 200
+    )
+
+    if should_log:
         try:
             conn = get_db()
             database.add_activity_log(
@@ -4377,7 +4422,10 @@ def log_activity(response):
             )
             conn.commit()
         except Exception as e:
-            print(f"Error logging activity: {e}")
+            # หากการ log ผิดพลาด ก็ไม่ควรทำให้แอปทั้งหมดพัง
+            print(f"CRITICAL: Error logging activity: {e}")
+
+    # --- END: ส่วนที่แก้ไขและปรับปรุง ---
 
     return response
 
