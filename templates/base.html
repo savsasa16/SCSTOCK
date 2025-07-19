@@ -58,8 +58,10 @@
                     <i class="fas fa-home me-2"></i><span class="sidebar-text">หน้าหลัก</span>
                 </a>
             </li>
-            {% if current_user.is_authenticated and current_user.can_edit() %}
+            {% if current_user.is_authenticated and current_user.is_admin() %}
             <li><a href="{{ url_for('add_item') }}" class="nav-link text-white {% if request.endpoint == 'add_item' %}active{% endif %}"><i class="fas fa-plus-circle me-2"></i><span class="sidebar-text">เพิ่มสินค้า</span></a></li>
+            {% endif %}
+            {% if current_user.is_authenticated and current_user.can_edit() %}
             <li><a href="{{ url_for('stock_movement') }}" class="nav-link text-white {% if request.endpoint == 'stock_movement' %}active{% endif %}"><i class="fas fa-exchange-alt me-2"></i><span class="sidebar-text">รับเข้า/จ่ายออก</span></a></li>
             <li><a href="{{ url_for('barcode_scanner_page') }}" class="nav-link text-white {% if request.endpoint == 'barcode_scanner_page' %}active{% endif %}"><i class="fas fa-barcode me-2"></i><span class="sidebar-text">ตัดสต๊อกด้วยบาร์โค้ด</span></a></li>
             {% endif %}
@@ -78,7 +80,9 @@
                 <a href="{{ url_for('wholesale_dashboard') }}" class="nav-link text-white {% if 'wholesale_dashboard' in request.endpoint or 'wholesale_customer_detail' in request.endpoint %}active{% endif %}">
                     <i class="fas fa-users me-2"></i><span class="sidebar-text">ลูกค้าค้าส่ง</span>
                 </a>
+            {% endif %}
             </li>
+            {% if current_user.is_authenticated and current_user.is_admin() %}
             <li><a href="{{ url_for('promotions') }}" class="nav-link text-white {% if 'promotion' in request.endpoint %}active{% endif %}"><i class="fas fa-tags me-2"></i><span class="sidebar-text">จัดการโปรโมชัน</span></a></li>
             <li><a href="{{ url_for('export_import') }}" class="nav-link text-white {% if request.endpoint == 'export_import' %}active{% endif %}"><i class="fas fa-file-excel me-2"></i><span class="sidebar-text">นำเข้า/ส่งออก</span></a></li>
             {% endif %}
@@ -137,7 +141,7 @@
                     <i class="fas fa-bars"></i>
                 </button>
                 <span class="navbar-brand mb-0 h1 text-dark fs-4 fw-bold">{% block page_title %}ภาพรวมสต็อกสินค้า{% endblock %}</span>
-                
+                {% if current_user.is_authenticated and current_user.can_edit() %}
                 <div class="ms-auto d-flex align-items-center">
                     <a class="notification-bell me-3" href="{{ url_for('mark_notifications_read') }}">
                         <i class="fas fa-bell"></i>
@@ -146,7 +150,7 @@
                         {% endif %}
                     </a>
                     </div>
-
+                {% endif %}
                 <div class="d-none d-lg-block">
                     {% if current_user.is_authenticated %}
                     <span class="text-muted"><i class="fas fa-user-circle me-1"></i> สวัสดี, {{ current_user.username }} ({{ current_user.role }})!</span>
@@ -176,8 +180,10 @@
                             {% endif %}
                         </a>
                         </li>
-                    {% if current_user.is_authenticated and current_user.can_edit() %}
+                    {% if current_user.is_authenticated and current_user.is_admin() %}
                     <li><a href="{{ url_for('add_item') }}" class="nav-link text-white {% if request.endpoint == 'add_item' %}active{% endif %}"><i class="fas fa-plus-circle me-2"></i> เพิ่มสินค้า</a></li>
+                    {% endif %}
+                    {% if current_user.is_authenticated and current_user.can_edit() %}
                     <li><a href="{{ url_for('stock_movement') }}" class="nav-link text-white {% if request.endpoint == 'stock_movement' %}active{% endif %}"><i class="fas fa-exchange-alt me-2"></i> รับเข้า/จ่ายออก</a></li>
                     <li><a href="{{ url_for('barcode_scanner_page') }}" class="nav-link text-white {% if request.endpoint == 'barcode_scanner_page' %}active{% endif %}"><i class="fas fa-barcode me-2"></i> ตัดสต๊อกด้วยบาร์โค้ด</a></li>
                     {% endif %}
@@ -199,7 +205,11 @@
                             <i class="fas fa-users me-2"></i> ลูกค้าค้าส่ง
                         </a>
                     </li>
+                    {% endif %}
+                    {% if current_user.is_authenticated and current_user.is_admin() %}
                     <li><a href="{{ url_for('promotions') }}" class="nav-link text-white {% if 'promotion' in request.endpoint %}active{% endif %}"><i class="fas fa-tags me-2"></i> จัดการโปรโมชัน</a></li>
+                    {% endif %}
+                    {% if current_user.is_authenticated and current_user.is_admin() %}
                     <li><a href="{{ url_for('export_import') }}" class="nav-link text-white {% if request.endpoint == 'export_import' %}active{% endif %}"><i class="fas fa-file-excel me-2"></i> นำเข้า/ส่งออก</a></li>
                     {% endif %}
                     {% if current_user.is_authenticated and current_user.is_admin() %}

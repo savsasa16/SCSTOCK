@@ -29,7 +29,7 @@
                 <button type="submit" class="btn btn-primary btn-sm"><i class="fas fa-search"></i></button>
                 <a href="{{ url_for('index') }}" class="btn btn-secondary btn-sm" title="ล้างค่าค้นหา"><i class="fas fa-redo"></i></a>
             </form>
-            {% if current_user.is_authenticated and current_user.can_edit() %}<a href="{{ url_for('add_item') }}" class="btn btn-success btn-sm ms-lg-auto"><i class="fas fa-plus me-1"></i> เพิ่มสินค้าใหม่</a>{% endif %}
+            {% if current_user.is_authenticated and current_user.is_admin() %}<a href="{{ url_for('add_item') }}" class="btn btn-success btn-sm ms-lg-auto"><i class="fas fa-plus me-1"></i> เพิ่มสินค้าใหม่</a>{% endif %}
         </div>
         <ul class="nav nav-tabs card-header-tabs" id="stockTabs" role="tablist">
             <li class="nav-item" role="presentation"><button class="nav-link {% if active_tab == 'tires' or not active_tab %}active{% endif %}" id="tires-tab" data-bs-toggle="tab" data-bs-target="#tires-pane" type="button"><i class="fas fa-tire me-1"></i> สต็อกยาง</button></li>
