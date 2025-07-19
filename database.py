@@ -526,6 +526,22 @@ def init_db(conn):
                 FOREIGN KEY (wheel_id) REFERENCES wheels(id) ON DELETE CASCADE
             );
         """)
+
+    # Automatic deleted Activity LOGS
+    if is_postgres:
+            cursor.execute("""
+        CREATE TABLE IF NOT EXISTS app_settings (
+            key VARCHAR(255) PRIMARY KEY,
+            value TEXT NOT NULL
+        );
+    """)
+    else: # SQLite
+            cursor.execute("""
+        CREATE TABLE IF NOT EXISTS app_settings (
+            key TEXT PRIMARY KEY,
+            value TEXT NOT NULL
+        );
+    """)
     
     # --- INSERT DEFAULT DATA (MOVED HERE TO ENSURE COMMIT) ---
     # เพิ่มข้อมูลเริ่มต้นสำหรับ sales_channels (ถ้ายังไม่มี)
@@ -577,20 +593,6 @@ def init_db(conn):
         print(f"Error inserting default wholesale customers: {e}")
         conn.rollback() # Rollback if default customers insertion fails
 
-        if is_postgres:
-            cursor.execute("""
-        CREATE TABLE IF NOT EXISTS app_settings (
-            key VARCHAR(255) PRIMARY KEY,
-            value TEXT NOT NULL
-        );
-    """)
-        else: # SQLite
-            cursor.execute("""
-        CREATE TABLE IF NOT EXISTS app_settings (
-            key TEXT PRIMARY KEY,
-            value TEXT NOT NULL
-        );
-    """)
 
     conn.commit() # <--- IMPORTANT: COMMIT ALL CHANGES AFTER CREATING TABLES AND INSERTING DEFAULTS
     print("Database schema and default data initialized successfully.")
