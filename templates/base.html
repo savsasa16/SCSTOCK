@@ -73,12 +73,12 @@
                     <li><a href="{{ url_for('summary_stock_report') }}" class="nav-link text-white {% if request.endpoint == 'summary_stock_report' %}active{% endif %}"><i class="fas fa-chart-pie me-2"></i><span class="sidebar-text">สรุปรายงานสต็อกรายช่วง</span></a></li>
                 </ul>
             </li>
+            {% if current_user.is_authenticated and current_user.can_edit() %}
             <li>
                 <a href="{{ url_for('wholesale_dashboard') }}" class="nav-link text-white {% if 'wholesale_dashboard' in request.endpoint or 'wholesale_customer_detail' in request.endpoint %}active{% endif %}">
                     <i class="fas fa-users me-2"></i><span class="sidebar-text">ลูกค้าค้าส่ง</span>
                 </a>
             </li>
-            {% if current_user.is_authenticated and current_user.can_edit() %}
             <li><a href="{{ url_for('promotions') }}" class="nav-link text-white {% if 'promotion' in request.endpoint %}active{% endif %}"><i class="fas fa-tags me-2"></i><span class="sidebar-text">จัดการโปรโมชัน</span></a></li>
             <li><a href="{{ url_for('export_import') }}" class="nav-link text-white {% if request.endpoint == 'export_import' %}active{% endif %}"><i class="fas fa-file-excel me-2"></i><span class="sidebar-text">นำเข้า/ส่งออก</span></a></li>
             {% endif %}
@@ -186,17 +186,15 @@
                         </ul>
                     </li>
 
+                    {% if current_user.is_authenticated and current_user.can_edit() %}
                     <li>
                         <a href="{{ url_for('wholesale_dashboard') }}" class="nav-link text-white {% if 'wholesale_dashboard' in request.endpoint or 'wholesale_customer_detail' in request.endpoint %}active{% endif %}">
                             <i class="fas fa-users me-2"></i> ลูกค้าค้าส่ง
                         </a>
                     </li>
-                    
-                    {% if current_user.is_authenticated and current_user.can_edit() %}
                     <li><a href="{{ url_for('promotions') }}" class="nav-link text-white {% if 'promotion' in request.endpoint %}active{% endif %}"><i class="fas fa-tags me-2"></i> จัดการโปรโมชัน</a></li>
                     <li><a href="{{ url_for('export_import') }}" class="nav-link text-white {% if request.endpoint == 'export_import' %}active{% endif %}"><i class="fas fa-file-excel me-2"></i> นำเข้า/ส่งออก</a></li>
                     {% endif %}
-
                     {% if current_user.is_authenticated and current_user.is_admin() %}
                     <li>
                         <a href="#admin-submenu-mobile" data-bs-toggle="collapse" class="nav-link text-white d-flex justify-content-between align-items-center {% if 'admin' in request.endpoint or 'manage_users' in request.endpoint or 'wholesale_customers' in request.endpoint or 'view_feedback' in request.endpoint or 'manage_announcements' in request.endpoint %}active{% endif %}">

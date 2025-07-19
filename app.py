@@ -4212,6 +4212,9 @@ def update_announcement_status(ann_id):
 @app.route('/wholesale_dashboard')
 @login_required
 def wholesale_dashboard():
+    if not current_user.can_edit():
+        flash('คุณไม่มีสิทธิ์เข้าถึงหน้านี้', 'danger')
+        return redirect(url_for('index'))
     conn = get_db()
     search_query = request.args.get('search_query', '').strip()
 
@@ -4225,6 +4228,8 @@ def wholesale_dashboard():
 @app.route('/api/search_wholesale_customers')
 @login_required
 def api_search_wholesale_customers():
+    if not current_user.can_edit():
+        return jsonify({"error": "Unauthorized"}), 403
     conn = get_db()
     # รับคำค้นหาจาก query parameter ที่ชื่อว่า 'term'
     search_term = request.args.get('term', '').strip()
@@ -4243,13 +4248,17 @@ def api_search_wholesale_customers():
 @app.route('/wholesale_customer/<int:customer_id>')
 @login_required
 def wholesale_customer_detail(customer_id):
-    conn = get_db()
+    if not current_user.can_edit():
+        flash('คุณไม่มีสิทธิ์เข้าถึงหน้านี้', 'danger')
+        return redirect(url_for('index'))
 
+    conn = get_db()
+    
     start_date_str = request.args.get('start_date')
     end_date_str = request.args.get('end_date')
 
     # Default to last 30 days if no dates are provided
-    if not start_date_str:
+    if not start_date_str or not end_date_str:
         end_date_obj = get_bkk_time()
         start_date_obj = end_date_obj - timedelta(days=30)
     else:
@@ -4265,6 +4274,15 @@ def wholesale_customer_detail(customer_id):
     if not customer:
         flash(f"ไม่พบข้อมูลลูกค้า ID: {customer_id}", "danger")
         return redirect(url_for('wholesale_dashboard'))
+    
+    history = database.get_wholesale_customer_purchase_history(conn, customer_id, start_date=start_date_obj, end_date=end_date_obj)
+
+    return render_template('wholesale_customer_detail.html',
+                           customer=customer,
+                           history=history,
+                           start_date_param=start_date_obj.strftime('%Y-%m-%d'),
+                           end_date_param=end_date_obj.strftime('%Y-%m-%d'),
+                           current_user=current_user)
 
     history = database.get_wholesale_customer_purchase_history(conn, customer_id, start_date=start_date_obj, end_date=end_date_obj)
 
