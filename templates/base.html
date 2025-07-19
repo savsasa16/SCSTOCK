@@ -127,13 +127,13 @@
                 <span class="navbar-brand mb-0 h1 text-dark fs-4 fw-bold">{% block page_title %}ภาพรวมสต็อกสินค้า{% endblock %}</span>
                 
                 <div class="ms-auto d-flex align-items-center">
-                    <a class="notification-bell me-3" href="{{ url_for('notifications') }}">
+                    <a class="notification-bell me-3" href="{{ url_for('mark_notifications_read') }}">
                         <i class="fas fa-bell"></i>
                         {% if unread_notification_count > 0 %}
                             <span class="notification-badge">{{ unread_notification_count }}</span>
                         {% endif %}
                     </a>
-                </div>
+                    </div>
 
                 <div class="d-none d-lg-block">
                     {% if current_user.is_authenticated %}
@@ -156,14 +156,14 @@
                         </a>
                     </li>
                     <li class="nav-item">
-                        <a href="{{ url_for('notifications') }}" class="nav-link text-white {% if request.endpoint == 'notifications' %}active{% endif %}">
+                        <a href="{{ url_for('mark_notifications_read') }}" class="nav-link text-white {% if request.endpoint == 'notifications' %}active{% endif %}">
                             <i class="fas fa-bell me-2"></i>
                             <span>แจ้งเตือน</span>
                             {% if unread_notification_count > 0 %}
                                 <span class="badge bg-danger rounded-pill ms-2">{{ unread_notification_count }}</span>
                             {% endif %}
                         </a>
-                    </li>
+                        </li>
                     {% if current_user.is_authenticated and current_user.can_edit() %}
                     <li><a href="{{ url_for('add_item') }}" class="nav-link text-white {% if request.endpoint == 'add_item' %}active{% endif %}"><i class="fas fa-plus-circle me-2"></i> เพิ่มสินค้า</a></li>
                     <li><a href="{{ url_for('stock_movement') }}" class="nav-link text-white {% if request.endpoint == 'stock_movement' %}active{% endif %}"><i class="fas fa-exchange-alt me-2"></i> รับเข้า/จ่ายออก</a></li>
