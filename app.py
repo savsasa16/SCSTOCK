@@ -4253,14 +4253,23 @@ def wholesale_customer_detail(customer_id):
         return redirect(url_for('index'))
 
     conn = get_db()
-    
+
+    # ดึงข้อมูลพื้นฐานของลูกค้าก่อนเพื่อตรวจสอบว่ามีตัวตนจริง
+    customer_name = database.get_wholesale_customer_name(conn, customer_id)
+    if not customer_name:
+        flash(f"ไม่พบข้อมูลลูกค้า ID: {customer_id}", "danger")
+        return redirect(url_for('wholesale_dashboard'))
+
     start_date_str = request.args.get('start_date')
     end_date_str = request.args.get('end_date')
 
-    # Default to last 30 days if no dates are provided
+    # หากไม่มีการระบุวันที่ ให้ใช้ค่าเริ่มต้นเป็น 30 วันล่าสุด
     if not start_date_str or not end_date_str:
-        end_date_obj = get_bkk_time()
-        start_date_obj = end_date_obj - timedelta(days=30)
+        today = get_bkk_time()
+    # วันที่สิ้นสุดคือวันนี้
+        end_date_obj = today.replace(hour=23, minute=59, second=59)
+    # วันที่เริ่มต้นคือวันที่ 1 ของเดือนปัจจุบัน
+        start_date_obj = today.replace(day=1, hour=0, minute=0, second=0)
     else:
         try:
             start_date_obj = BKK_TZ.localize(datetime.strptime(start_date_str, '%Y-%m-%d')).replace(hour=0, minute=0, second=0)
@@ -4270,24 +4279,28 @@ def wholesale_customer_detail(customer_id):
             end_date_obj = get_bkk_time()
             start_date_obj = end_date_obj - timedelta(days=30)
 
-    customer = database.get_wholesale_customer_details(conn, customer_id)
-    if not customer:
-        flash(f"ไม่พบข้อมูลลูกค้า ID: {customer_id}", "danger")
-        return redirect(url_for('wholesale_dashboard'))
-    
+    # ---- START: ส่วนที่แก้ไข ----
+
+    # 1. ดึงประวัติการซื้อตามช่วงวันที่ที่เลือกมาก่อน
     history = database.get_wholesale_customer_purchase_history(conn, customer_id, start_date=start_date_obj, end_date=end_date_obj)
 
-    return render_template('wholesale_customer_detail.html',
-                           customer=customer,
-                           history=history,
-                           start_date_param=start_date_obj.strftime('%Y-%m-%d'),
-                           end_date_param=end_date_obj.strftime('%Y-%m-%d'),
-                           current_user=current_user)
+    # 2. คำนวณยอดสรุปจาก "ประวัติที่ถูกฟิลเตอร์แล้ว"
+    total_items_in_period = sum(item['quantity_change'] for item in history)
+    # วันที่ซื้อล่าสุดในข่วงเวลานี้ (คือรายการแรกสุดเพราะเราเรียงลำดับ DESC)
+    last_purchase_in_period = history[0]['timestamp'] if history else None
 
-    history = database.get_wholesale_customer_purchase_history(conn, customer_id, start_date=start_date_obj, end_date=end_date_obj)
+    # 3. สร้าง Dictionary ใหม่เพื่อส่งไปหน้าเว็บ
+    customer_data = {
+        'id': customer_id,
+        'name': customer_name,
+        'total_items_purchased': total_items_in_period,
+        'last_purchase_date': last_purchase_in_period
+    }
+
+    # ---- END: ส่วนที่แก้ไข ----
 
     return render_template('wholesale_customer_detail.html',
-                           customer=customer,
+                           customer=customer_data, # ส่ง Dictionary ใหม่นี้ไปแทน
                            history=history,
                            start_date_param=start_date_obj.strftime('%Y-%m-%d'),
                            end_date_param=end_date_obj.strftime('%Y-%m-%d'),
