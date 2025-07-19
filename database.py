@@ -2235,7 +2235,10 @@ def get_unread_notification_count(conn):
         cursor.execute("SELECT COUNT(id) FROM notifications WHERE is_read = FALSE")
     else:
         cursor.execute("SELECT COUNT(id) FROM notifications WHERE is_read = 0")
+
+    # ดึงข้อมูลจาก cursor และปิดการใช้งาน
     count = cursor.fetchone()[0]
+    cursor.close()
     return count
 
 def mark_all_notifications_as_read(conn):
@@ -2243,8 +2246,11 @@ def mark_all_notifications_as_read(conn):
     cursor = conn.cursor()
     if "psycopg2" in str(type(conn)):
         cursor.execute("UPDATE notifications SET is_read = TRUE WHERE is_read = FALSE")
-    else:
+    else: # SQLite
         cursor.execute("UPDATE notifications SET is_read = 1 WHERE is_read = 0")
+
+    # ปิด cursor และ commit การเปลี่ยนแปลง
+    cursor.close()
     conn.commit()
 
 def add_feedback(conn, user_id, feedback_type, message):
