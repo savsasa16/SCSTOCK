@@ -61,6 +61,41 @@ def close_db(e=None):
 def get_bkk_time():
     return datetime.now(BKK_TZ)
 
+def get_cached_data(key, fetch_func, duration_seconds=300):
+    """
+    ฟังก์ชันกลางสำหรับดึงข้อมูลจาก Cache หรือฐานข้อมูล
+    key: ชื่อ key ที่จะใช้เก็บใน session
+    fetch_func: ฟังก์ชันที่จะเรียกใช้เพื่อดึงข้อมูลจาก DB (ถ้าไม่มี cache)
+    duration_seconds: อายุของ cache (วินาที), ค่าเริ่มต้น 5 นาที
+    """
+    cache_key = f"cache_{key}"
+    timestamp_key = f"cache_{key}_ts"
+    
+    now = get_bkk_time()
+    last_checked_str = session.get(timestamp_key)
+    
+    if last_checked_str:
+        last_checked_dt = datetime.fromisoformat(last_checked_str)
+        if (now - last_checked_dt) < timedelta(seconds=duration_seconds):
+            # ถ้า cache ยังไม่หมดอายุ ให้ใช้ค่าจาก session
+            return session.get(cache_key)
+
+    # ถ้าไม่มี cache หรือหมดอายุ ให้ดึงข้อมูลใหม่จากฐานข้อมูล
+    print(f"CACHE MISS: Fetching fresh data for '{key}' from database.") # <--- บรรทัดนี้สำหรับ Debug
+    fresh_data = fetch_func()
+    
+    # แล้วอัปเดตค่าใหม่ลง session
+    session[cache_key] = fresh_data
+    session[timestamp_key] = now.isoformat()
+    
+    return fresh_data
+
+def clear_cache(key):
+    """ฟังก์ชันสำหรับล้างค่า cache ใน session"""
+    session.pop(f"cache_{key}", None)
+    session.pop(f"cache_{key}_ts", None)
+    print(f"CACHE CLEARED: Cleared cache for key '{key}'.")
+
 # Helper to convert a timestamp to BKK timezone
 def convert_to_bkk_time(timestamp_obj):
     if timestamp_obj is None:
@@ -391,7 +426,10 @@ def index():
     is_tire_search_active = bool(tire_query or (tire_selected_brand and tire_selected_brand != 'all'))
 
     all_tires_raw = database.get_all_tires(conn, query=tire_query, brand_filter=tire_selected_brand, include_deleted=False)
-    available_tire_brands = database.get_all_tire_brands(conn)
+    available_tire_brands =get_cached_data(
+        'tire_brands', 
+        lambda: database.get_all_tire_brands(conn)
+    )
     
     # NEW: Filter tire data based on viewing permissions before sending to template
     tires_for_display_filtered_by_permissions = []
@@ -435,7 +473,10 @@ def index():
     is_wheel_search_active = bool(wheel_query or (wheel_selected_brand and wheel_selected_brand != 'all'))
 
     all_wheels = database.get_all_wheels(conn, query=wheel_query, brand_filter=wheel_selected_brand, include_deleted=False)
-    available_wheel_brands = database.get_all_wheel_brands(conn)
+    available_wheel_brands = get_cached_data(
+        'wheel_brands', 
+        lambda: database.get_all_wheel_brands(conn)
+    )
     
     # NEW: Filter wheel data based on viewing permissions before sending to template
     wheels_for_display = []
@@ -513,6 +554,7 @@ def add_promotion():
 
                 conn = get_db()
                 database.add_promotion(conn, name, promo_type, value1, value2, is_active)
+                clear_cache('all_promotions')
                 flash('เพิ่มโปรโมชันใหม่สำเร็จ!', 'success')
                 return redirect(url_for('promotions'))
             except ValueError as e:
@@ -612,7 +654,10 @@ def add_item():
     form_data = None
     active_tab = request.args.get('tab', 'tire')
 
-    all_promotions = database.get_all_promotions(conn, include_inactive=False)
+    all_promotions = get_cached_data(
+    'all_promotions',
+    lambda: database.get_all_promotions(conn, include_inactive=True) # หรือ False ตามต้องการ
+    )
 
     if request.method == 'POST':
         submit_type = request.form.get('submit_type')
@@ -690,6 +735,7 @@ def add_item():
                         database.add_tire_barcode(conn, new_tire_id, scanned_barcode_for_add, is_primary=True)
                     conn.commit()
                     flash(f'เพิ่มยาง {brand.title()} รุ่น {model.title()} เบอร์ {size} จำนวน {quantity} เส้น สำเร็จ!', 'success')
+                    clear_cache('tire_brands')
                 return redirect(url_for('add_item', tab='tire'))
 
             except ValueError:
@@ -786,6 +832,7 @@ def add_item():
                         database.add_wheel_barcode(conn, new_wheel_id, scanned_barcode_for_add, is_primary=True)
                     conn.commit()
                     flash(f'เพิ่มแม็ก {brand.title()} ลาย {model.title()} จำนวน {quantity} วง สำเร็จ!', 'success')
+                    clear_cache('wheel_brands')
                 return redirect(url_for('index', tab='wheels'))
             except ValueError:
                 conn.rollback()
@@ -819,7 +866,10 @@ def edit_tire(tire_id):
         flash('ไม่พบยางที่ระบุ', 'danger')
         return redirect(url_for('index', tab='tires'))
 
-    all_promotions = database.get_all_promotions(conn, include_inactive=True)
+    all_promotions = get_cached_data(
+    'all_promotions',
+    lambda: database.get_all_promotions(conn, include_inactive=True) # หรือ False ตามต้องการ
+    )
     tire_barcodes = database.get_barcodes_for_tire(conn, tire_id)
 
     if request.method == 'POST':
@@ -1184,9 +1234,18 @@ def stock_movement():
     tires = database.get_all_tires(conn)
     wheels = database.get_all_wheels(conn)
     
-    sales_channels = database.get_all_sales_channels(conn)
-    online_platforms = database.get_all_online_platforms(conn)
-    wholesale_customers = database.get_all_wholesale_customers(conn) # ดึงรายชื่อลูกค้าค้าส่งมาทั้งหมด
+    sales_channels = get_cached_data(
+        'sales_channels', 
+        lambda: database.get_all_sales_channels(conn)
+    )
+    online_platforms = get_cached_data(
+        'online_platforms', 
+        lambda: database.get_all_online_platforms(conn)
+    )
+    wholesale_customers = get_cached_data(
+        'wholesale_customers', 
+        lambda: database.get_all_wholesale_customers(conn)
+    )
 
     active_tab = request.args.get('tab', 'tire_movements') 
 
@@ -3948,6 +4007,7 @@ def add_wholesale_customer_action():
         customer_id = database.add_wholesale_customer(conn, customer_name)
         if customer_id:
             flash(f'เพิ่มลูกค้าค้าส่ง "{customer_name}" สำเร็จ!', 'success')
+            clear_cache('wholesale_customers')
         else:
             flash(f'ไม่สามารถเพิ่มลูกค้าค้าส่ง "{customer_name}" ได้ อาจมีชื่อนี้อยู่ในระบบแล้ว', 'warning')
     return redirect(url_for('manage_wholesale_customers'))
@@ -3990,6 +4050,7 @@ def edit_wholesale_customer(customer_id):
                     cursor.execute("UPDATE wholesale_customers SET name = ? WHERE id = ?", (new_name, customer_id))
                 conn.commit()
                 flash(f'แก้ไขชื่อลูกค้าค้าส่งเป็น "{new_name}" สำเร็จ!', 'success')
+                clear_cache('wholesale_customers')
                 return redirect(url_for('manage_wholesale_customers'))
             except Exception as e:
                 conn.rollback()
@@ -4027,6 +4088,7 @@ def delete_wholesale_customer(customer_id):
         
         conn.commit()
         flash('ลบลูกค้าค้าส่งสำเร็จ!', 'success')
+        clear_cache('wholesale_customers')
     except Exception as e:
         conn.rollback()
         flash(f'เกิดข้อผิดพลาดในการลบลูกค้าค้าส่ง: {e}', 'danger')
