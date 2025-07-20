@@ -9,3 +9,4 @@ python-dotenv # เพิ่มบรรทัดนี้
 cloudinary # เพิ่มบรรทัดนี้
 openpyxl
 xlsxwriter
+Flask-Caching

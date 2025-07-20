@@ -9,6 +9,7 @@ from io import BytesIO
 from werkzeug.utils import secure_filename
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
+from flask_caching import Cache
 import os
 import json
 import database # Your existing database.py file
@@ -22,8 +23,17 @@ load_dotenv()
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'your_super_secret_key_here_please_change_this_to_a_complex_random_string')
 
+config = {
+    "DEBUG": True,          # some Flask specific configs
+    "CACHE_TYPE": "SimpleCache",  # ใช้ In-memory cache
+    "CACHE_DEFAULT_TIMEOUT": 300 # ค่า Default Timeout 5 นาที
+}
+app.config.from_mapping(config)
+cache = Cache(app)
+
 app.config['UPLOAD_FOLDER'] = 'uploads'
 app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(hours=8)
+
 
 # *** Cloudinary settings (using Environment Variables) ***
 cloudinary.config(
@@ -62,41 +72,6 @@ def close_db(e=None):
 def get_bkk_time():
     return datetime.now(BKK_TZ)
 
-def get_cached_data(key, fetch_func, duration_seconds=300):
-    """
-    ฟังก์ชันกลางสำหรับดึงข้อมูลจาก Cache หรือฐานข้อมูล
-    key: ชื่อ key ที่จะใช้เก็บใน session
-    fetch_func: ฟังก์ชันที่จะเรียกใช้เพื่อดึงข้อมูลจาก DB (ถ้าไม่มี cache)
-    duration_seconds: อายุของ cache (วินาที), ค่าเริ่มต้น 5 นาที
-    """
-    cache_key = f"cache_{key}"
-    timestamp_key = f"cache_{key}_ts"
-    
-    now = get_bkk_time()
-    last_checked_str = session.get(timestamp_key)
-    
-    if last_checked_str:
-        last_checked_dt = datetime.fromisoformat(last_checked_str)
-        if (now - last_checked_dt) < timedelta(seconds=duration_seconds):
-            # ถ้า cache ยังไม่หมดอายุ ให้ใช้ค่าจาก session
-            return session.get(cache_key)
-
-    # ถ้าไม่มี cache หรือหมดอายุ ให้ดึงข้อมูลใหม่จากฐานข้อมูล
-    print(f"CACHE MISS: Fetching fresh data for '{key}' from database.") # <--- บรรทัดนี้สำหรับ Debug
-    fresh_data = fetch_func()
-    
-    # แล้วอัปเดตค่าใหม่ลง session
-    session[cache_key] = fresh_data
-    session[timestamp_key] = now.isoformat()
-    
-    return fresh_data
-
-def clear_cache(key):
-    """ฟังก์ชันสำหรับล้างค่า cache ใน session"""
-    session.pop(f"cache_{key}", None)
-    session.pop(f"cache_{key}_ts", None)
-    print(f"CACHE CLEARED: Cleared cache for key '{key}'.")
-
 # Helper to convert a timestamp to BKK timezone
 def convert_to_bkk_time(timestamp_obj):
     if timestamp_obj is None:
@@ -128,6 +103,7 @@ def inject_global_data():
     latest_announcement = None
 
     if current_user.is_authenticated:
+        unread_count = get_cached_unread_notification_count()
         conn = get_db()
 
         # --- START: ส่วนที่แก้ไข ---
@@ -167,6 +143,11 @@ def inject_global_data():
         unread_notification_count=unread_count,
         latest_announcement=latest_announcement
     )
+
+@cache.memoize(timeout=300) # Cache 5 นาที
+def get_cached_unread_notification_count():
+    conn = get_db()
+    return database.get_unread_notification_count(conn)
 
 # --- Flask-Login Setup (assuming these are already in your app.py) ---
 login_manager = LoginManager()
@@ -420,19 +401,15 @@ def process_wheel_report_data(all_wheels, include_summary_in_output=True):
 
 @app.route('/')
 @login_required
+@cache.cached(timeout=120, key_prefix='view_%s')
 def index():
     conn = get_db()
 
     tire_query = request.args.get('tire_query', '').strip()
     tire_selected_brand = request.args.get('tire_brand_filter', 'all').strip()
     is_tire_search_active = bool(tire_query or (tire_selected_brand and tire_selected_brand != 'all'))
-
     all_tires_raw = database.get_all_tires(conn, query=tire_query, brand_filter=tire_selected_brand, include_deleted=False)
-    available_tire_brands =get_cached_data(
-        'tire_brands', 
-        lambda: database.get_all_tire_brands(conn),
-        duration_seconds=900
-    )
+    available_tire_brands = database.get_all_tire_brands(conn)
     
     # NEW: Filter tire data based on viewing permissions before sending to template
     tires_for_display_filtered_by_permissions = []
@@ -474,12 +451,8 @@ def index():
     wheel_query = request.args.get('wheel_query', '').strip()
     wheel_selected_brand = request.args.get('wheel_brand_filter', 'all').strip()
     is_wheel_search_active = bool(wheel_query or (wheel_selected_brand and wheel_selected_brand != 'all'))
-
     all_wheels = database.get_all_wheels(conn, query=wheel_query, brand_filter=wheel_selected_brand, include_deleted=False)
-    available_wheel_brands = get_cached_data(
-        'wheel_brands', 
-        lambda: database.get_all_wheel_brands(conn)
-    )
+    available_wheel_brands = database.get_all_wheel_brands(conn)
     
     # NEW: Filter wheel data based on viewing permissions before sending to template
     wheels_for_display = []
@@ -512,6 +485,26 @@ def index():
                            active_tab=active_tab,
                            current_user=current_user # Pass current_user to template
                           )
+
+@cache.memoize(timeout=10800) # Cache 3 ชั่วโมง
+def get_all_sales_channels_cached():
+    conn = get_db()
+    return database.get_all_sales_channels(conn)
+
+@cache.memoize(timeout=10800)
+def get_all_online_platforms_cached():
+    conn = get_db()
+    return database.get_all_online_platforms(conn)
+
+@cache.memoize(timeout=3600) # Cache 1 ชั่วโมง
+def get_all_wholesale_customers_cached():
+    conn = get_db()
+    return database.get_all_wholesale_customers(conn)
+
+@cache.memoize(timeout=3600) # Cache 1 ชั่วโมง
+def get_all_promotions_cached():
+    conn = get_db()
+    return database.get_all_promotions(conn, include_inactive=True)
 
 # --- Promotions Routes (assuming these are already in your app.py) ---
 @app.route('/promotions')
@@ -557,8 +550,9 @@ def add_promotion():
 
                 conn = get_db()
                 database.add_promotion(conn, name, promo_type, value1, value2, is_active)
-                clear_cache('all_promotions')
+                cache.clear()
                 flash('เพิ่มโปรโมชันใหม่สำเร็จ!', 'success')
+                cache.delete_memoized(get_all_promotions_cached)
                 return redirect(url_for('promotions'))
             except ValueError as e:
                 flash(f'ข้อมูลไม่ถูกต้อง: {e}', 'danger')
@@ -609,7 +603,7 @@ def edit_promotion(promo_id):
                 conn = get_db()
                 database.update_promotion(conn, promo_id, name, promo_type, value1, value2, is_active)
                 flash('แก้ไขโปรโมชันสำเร็จ!', 'success')
-                clear_cache('all_promotions')
+                cache.delete_memoized(get_all_promotions_cached)
                 return redirect(url_for('promotions'))
             except ValueError as e:
                 flash(f'ข้อมูลไม่ถูกต้อง: {e}', 'danger')
@@ -638,7 +632,7 @@ def delete_promotion(promo_id):
         try:
             database.delete_promotion(conn, promo_id)
             flash('ลบโปรโมชันสำเร็จ! สินค้าที่เคยใช้โปรโมชันนี้จะถูกตั้งค่าโปรโมชันเป็น "ไม่มี"', 'success')
-            clear_cache('all_promotions')
+            cache.delete_memoized(get_all_promotions_cached)
         except Exception as e:
             flash(f'เกิดข้อผิดพลาดในการลบโปรโมชัน: {e}', 'danger')
 
@@ -659,10 +653,8 @@ def add_item():
     form_data = None
     active_tab = request.args.get('tab', 'tire')
 
-    all_promotions = get_cached_data(
-    'all_promotions',
-    lambda: database.get_all_promotions(conn, include_inactive=True) # หรือ False ตามต้องการ
-    )
+    all_promotions = get_all_promotions_cached()
+    
 
     if request.method == 'POST':
         submit_type = request.form.get('submit_type')
@@ -740,7 +732,7 @@ def add_item():
                         database.add_tire_barcode(conn, new_tire_id, scanned_barcode_for_add, is_primary=True)
                     conn.commit()
                     flash(f'เพิ่มยาง {brand.title()} รุ่น {model.title()} เบอร์ {size} จำนวน {quantity} เส้น สำเร็จ!', 'success')
-                    clear_cache('tire_brands')
+                    cache.clear()
                 return redirect(url_for('add_item', tab='tire'))
 
             except ValueError:
@@ -837,7 +829,7 @@ def add_item():
                         database.add_wheel_barcode(conn, new_wheel_id, scanned_barcode_for_add, is_primary=True)
                     conn.commit()
                     flash(f'เพิ่มแม็ก {brand.title()} ลาย {model.title()} จำนวน {quantity} วง สำเร็จ!', 'success')
-                    clear_cache('wheel_brands')
+                    cache.clear()
                 return redirect(url_for('index', tab='wheels'))
             except ValueError:
                 conn.rollback()
@@ -871,10 +863,7 @@ def edit_tire(tire_id):
         flash('ไม่พบยางที่ระบุ', 'danger')
         return redirect(url_for('index', tab='tires'))
 
-    all_promotions = get_cached_data(
-    'all_promotions',
-    lambda: database.get_all_promotions(conn, include_inactive=True) # หรือ False ตามต้องการ
-    )
+    all_promotions = get_all_promotions_cached()
     tire_barcodes = database.get_barcodes_for_tire(conn, tire_id)
 
     if request.method == 'POST':
@@ -917,7 +906,7 @@ def edit_tire(tire_id):
                                      promotion_id_db, 
                                      year_of_manufacture)
                 flash('แก้ไขข้อมูลยางสำเร็จ!', 'success')
-                clear_cache('tire_brands')
+                cache.clear()
                 return redirect(url_for('index', tab='tires'))
             except ValueError:
                 flash('ข้อมูลตัวเลขไม่ถูกต้อง กรุณาตรวจสอบ', 'danger')
@@ -993,7 +982,7 @@ def delete_tire(tire_id):
         try:
             database.delete_tire(conn, tire_id)
             flash('ลบยางสำเร็จ!', 'success')
-            clear_cache('tire_brands')
+            cache.clear()
         except Exception as e:
             flash(f'เกิดข้อผิดพลาดในการลบ: {e}', 'danger')
     
@@ -1085,7 +1074,7 @@ def edit_wheel(wheel_id):
 
                 database.update_wheel(conn, wheel_id, brand, model, diameter, pcd, width, et, color, cost, cost_online, wholesale_price1, wholesale_price2, retail_price, current_image_url)
                 flash('แก้ไขข้อมูลแม็กสำเร็จ!', 'success')
-                clear_cache('wheel_brands')
+                cache.clear()
                 return redirect(url_for('wheel_detail', wheel_id=wheel_id))
             except ValueError:
                 flash('ข้อมูลตัวเลขไม่ถูกต้อง กรุณาตรวจสอบ', 'danger')
@@ -1174,7 +1163,7 @@ def delete_wheel(wheel_id):
         try:
             database.delete_wheel(conn, wheel_id)
             flash('ลบแม็กสำเร็จ!', 'success')
-            clear_cache('wheel_brands')
+            cache.clear()
         except Exception as e:
             flash(f'เกิดข้อผิดพลาดในการลบแม็ก: {e}', 'danger')
     
@@ -1185,7 +1174,7 @@ def delete_wheel(wheel_id):
 def add_fitment(wheel_id):
     # Check permission directly inside the route function
     if not current_user.can_edit(): # Admin or Editor
-        flash('คุณไม่มีสิทธิ์ในการเพิ่มข้อมูลการรองรับรถยนต์', 'danger')
+        flash('คุณไม่มีสิทธิ์ในการเพิ่มข้อมูล', 'danger')
         return redirect(url_for('wheel_detail', wheel_id=wheel_id))
         
     conn = get_db()
@@ -1195,7 +1184,7 @@ def add_fitment(wheel_id):
     year_end = request.form.get('year_end', '').strip()
 
     if not brand or not model or not year_start:
-        flash('กรุณากรอกข้อมูลการรองรับรถยนต์ให้ครบถ้วน', 'danger')
+        flash('กรุณากรอกข้อมูลให้ครบถ้วน', 'danger')
     else:
         try:
             year_start = int(year_start)
@@ -1243,21 +1232,9 @@ def stock_movement():
     tires = database.get_all_tires(conn)
     wheels = database.get_all_wheels(conn)
     
-    sales_channels = get_cached_data(
-        'sales_channels', 
-        lambda: database.get_all_sales_channels(conn),
-        duration_seconds=36000
-        )
-    online_platforms = get_cached_data(
-        'online_platforms', 
-        lambda: database.get_all_online_platforms(conn),
-        duration_seconds=36000
-        )
-    wholesale_customers = get_cached_data(
-        'wholesale_customers', 
-        lambda: database.get_all_wholesale_customers(conn),
-        duration_seconds=10800
-        )
+    sales_channels = get_all_sales_channels_cached()
+    online_platforms = get_all_online_platforms_cached()
+    wholesale_customers = get_all_wholesale_customers_cached()
 
     active_tab = request.args.get('tab', 'tire_movements') 
 
@@ -1492,6 +1469,7 @@ def stock_movement():
                                             wholesale_customer_id=final_wholesale_customer_id,
                                             return_customer_type=return_customer_type)
                 flash(f'บันทึกการเคลื่อนไหวสต็อกยางสำเร็จ! คงเหลือ: {new_quantity} เส้น', 'success')
+                cache.clear()
 
                 tire_info = database.get_tire(conn, tire_id)
                 message = (
@@ -1528,6 +1506,7 @@ def stock_movement():
                                              wholesale_customer_id=final_wholesale_customer_id,
                                              return_customer_type=return_customer_type)
                 flash(f'บันทึกการเคลื่อนไหวสต็อกแม็กสำเร็จ! คงเหลือ: {new_quantity} วง', 'success')
+                cache.clear()
 
                 wheel_info = database.get_wheel(conn, wheel_id)
                 message = (
@@ -3369,7 +3348,7 @@ def import_tires_action():
                     error_rows.append(f"แถวที่ {index + 2}: {row_e} - {row.to_dict()}")
             
             conn.commit()
-            clear_cache('tire_brands')
+            cache.clear()
 
             message = f'นำเข้าข้อมูลยางสำเร็จ: เพิ่มใหม่ {imported_count} รายการ, อัปเดต {updated_count} รายการ.'
             if error_rows:
@@ -3570,7 +3549,7 @@ def import_wheels_action():
                     error_rows.append(f"แถวที่ {index + 2}: {row_e} - {row.to_dict()}")
             
             conn.commit()
-            clear_cache('wheel_brands')
+            cache.clear()
             
             message = f'นำเข้าข้อมูลแม็กสำเร็จ: เพิ่มใหม่ {imported_count} รายการ, อัปเดต {updated_count} รายการ.'
             if error_rows:
@@ -3747,7 +3726,7 @@ def restore_tire_action(tire_id):
     try:
         database.restore_tire(conn, tire_id)
         flash(f'กู้คืนยาง ID {tire_id} สำเร็จ!', 'success')
-        clear_cache('tire_brands')
+        cache.clear()
     except Exception as e:
         flash(f'เกิดข้อผิดพลาดในการกู้คืนยาง: {e}', 'danger')
     return redirect(url_for('admin_deleted_items', tab='deleted_tires'))
@@ -3764,7 +3743,7 @@ def restore_wheel_action(wheel_id):
     try:
         database.restore_wheel(conn, wheel_id)
         flash(f'กู้คืนแม็ก ID {wheel_id} สำเร็จ!', 'success')
-        clear_cache('wheel_brands')
+        cache.clear()
     except Exception as e:
         flash(f'เกิดข้อผิดพลาดในการกู้คืนแม็ก: {e}', 'danger')
     return redirect(url_for('admin_deleted_items', tab='deleted_wheels'))
@@ -3885,7 +3864,9 @@ def api_process_stock_transaction():
                 database.add_wheel_movement(conn, item_id, transaction_type, quantity_change, new_qty, notes, None, user_id)
 
         conn.commit()
+        cache.clear()
         return jsonify({"success": True, "message": f"ทำรายการ {transaction_type} สำเร็จสำหรับ {len(items_to_process)} รายการ"}), 200
+        
 
     except Exception as e:
         conn.rollback()
@@ -4023,7 +4004,7 @@ def add_wholesale_customer_action():
         customer_id = database.add_wholesale_customer(conn, customer_name)
         if customer_id:
             flash(f'เพิ่มลูกค้าค้าส่ง "{customer_name}" สำเร็จ!', 'success')
-            clear_cache('wholesale_customers')
+            cache.delete_memoized(get_cached_wholesale_summary)
         else:
             flash(f'ไม่สามารถเพิ่มลูกค้าค้าส่ง "{customer_name}" ได้ อาจมีชื่อนี้อยู่ในระบบแล้ว', 'warning')
     return redirect(url_for('manage_wholesale_customers'))
@@ -4066,7 +4047,7 @@ def edit_wholesale_customer(customer_id):
                     cursor.execute("UPDATE wholesale_customers SET name = ? WHERE id = ?", (new_name, customer_id))
                 conn.commit()
                 flash(f'แก้ไขชื่อลูกค้าค้าส่งเป็น "{new_name}" สำเร็จ!', 'success')
-                clear_cache('wholesale_customers')
+                cache.delete_memoized(get_cached_wholesale_summary)
                 return redirect(url_for('manage_wholesale_customers'))
             except Exception as e:
                 conn.rollback()
@@ -4104,7 +4085,7 @@ def delete_wholesale_customer(customer_id):
         
         conn.commit()
         flash('ลบลูกค้าค้าส่งสำเร็จ!', 'success')
-        clear_cache('wholesale_customers')
+        cache.delete_memoized(get_cached_wholesale_summary)
     except Exception as e:
         conn.rollback()
         flash(f'เกิดข้อผิดพลาดในการลบลูกค้าค้าส่ง: {e}', 'danger')
@@ -4144,6 +4125,7 @@ def notifications():
 def mark_notifications_read():
     conn = get_db()
     database.mark_all_notifications_as_read(conn)
+    cache.delete_memoized(get_cached_unread_notification_count)
     return redirect(url_for('notifications'))
 
 @app.route('/bulk_stock_movement', methods=['POST'])
@@ -4249,6 +4231,7 @@ def bulk_stock_movement():
                 f"จำนวน {quantity_change} {unit_for_notif} (คงเหลือ: {new_quantity}) "
                 f"โดย {current_user.username}"
             )
+            cache.clear()
             database.add_notification(conn, message, user_id)
             # ---- END: ส่วนที่เพิ่มเข้ามา ----
 
@@ -4368,6 +4351,11 @@ def update_announcement_status(ann_id):
     flash('อัปเดตสถานะประกาศสำเร็จ!', 'success')
     return redirect(url_for('manage_announcements'))
 
+@cache.memoize(timeout=900)
+def get_cached_wholesale_summary(query=""):
+    conn = get_db()
+    return database.get_wholesale_customers_with_summary(conn, query=query)
+
 @app.route('/wholesale_dashboard')
 @login_required
 def wholesale_dashboard():
@@ -4377,7 +4365,8 @@ def wholesale_dashboard():
     conn = get_db()
     search_query = request.args.get('search_query', '').strip()
 
-    customers = database.get_wholesale_customers_with_summary(conn, query=search_query)
+    cache_key = f"wholesalesummary_{search_query}"
+    customers = get_cached_wholesale_summary(query=search_query)
 
     return render_template('wholesale_dashboard.html', 
                            customers=customers, 

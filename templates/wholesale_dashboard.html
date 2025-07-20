@@ -55,15 +55,17 @@
 $(document).ready(function() {
     const searchInput = $('#search-input');
     const suggestionsBox = $('#suggestions-box');
+    let debounceTimeout; 
 
     searchInput.on('keyup', function() {
+        clearTimeout(debounceTimeout);
         let query = $(this).val();
 
         if (query.length < 2) {
             suggestionsBox.empty().hide();
             return;
         }
-
+        debounceTimeout = setTimeout(function() {
         $.ajax({
             url: "{{ url_for('api_search_wholesale_customers') }}",
             data: { term: query },
@@ -86,7 +88,8 @@ $(document).ready(function() {
                 }
             }
         });
-    });
+    }, 500);
+});
 
     // Hide suggestions when clicking outside
     $(document).on('click', function(e) {
