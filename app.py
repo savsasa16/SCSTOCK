@@ -23,12 +23,22 @@ load_dotenv()
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'your_super_secret_key_here_please_change_this_to_a_complex_random_string')
 
-config = {
-    "DEBUG": True,          # some Flask specific configs
-    "CACHE_TYPE": "RedisCache",  # ใช้ In-memory cache
-    "CACHE_DEFAULT_TIMEOUT": 300, # ค่า Default Timeout 5 
-    "CACHE_REDIS_URL": os.environ.get('REDIS_URL')
-}
+if os.environ.get('REDIS_URL'):
+    # Production configuration (e.g., on Render)
+    config = {
+        "DEBUG": False,
+        "CACHE_TYPE": "RedisCache",
+        "CACHE_DEFAULT_TIMEOUT": 300,
+        "CACHE_REDIS_URL": os.environ.get('REDIS_URL')
+    }
+else:
+    # Local development configuration
+    config = {
+        "DEBUG": True,
+        "CACHE_TYPE": "SimpleCache", # <--- ใช้ SimpleCache แทน
+        "CACHE_DEFAULT_TIMEOUT": 300
+    }
+
 app.config.from_mapping(config)
 cache = Cache(app)
 
@@ -104,43 +114,16 @@ def inject_global_data():
     latest_announcement = None
 
     if current_user.is_authenticated:
+        # ✅ เรียกใช้ฟังก์ชันที่มี @cache.memoize ได้เลย
+        # ระบบ Cache จะจัดการเรื่องเวลาและการดึงข้อมูลให้เอง
         unread_count = get_cached_unread_notification_count()
+
+        # ส่วนของ Announcement ยังคงดึงข้อมูลทุกครั้งเหมือนเดิม
         conn = get_db()
-
-        # --- START: ส่วนที่แก้ไข ---
-
-        # 1. กำหนดระยะเวลาของ Cache (เช่น 60 วินาที)
-        cache_duration = timedelta(seconds=300)
-        now = get_bkk_time()
-
-        # 2. ดึงข้อมูลจาก session cache
-        last_checked_str = session.get('unread_count_ts')
-        
-        # 3. ตรวจสอบว่า cache ยังใช้ได้หรือไม่
-        if last_checked_str:
-            last_checked_dt = datetime.fromisoformat(last_checked_str)
-            if (now - last_checked_dt) < cache_duration:
-                # ถ้า cache ยังไม่หมดอายุ ให้ใช้ค่าจาก session
-                unread_count = session.get('unread_count', 0)
-            else:
-                # ถ้า cache หมดอายุ ให้ดึงข้อมูลใหม่จากฐานข้อมูล
-                unread_count = database.get_unread_notification_count(conn)
-                # แล้วอัปเดตค่าใหม่ลง session
-                session['unread_count'] = unread_count
-                session['unread_count_ts'] = now.isoformat()
-        else:
-            # ถ้าไม่มี cache เลย ให้ดึงข้อมูลใหม่จากฐานข้อมูลเป็นครั้งแรก
-            unread_count = database.get_unread_notification_count(conn)
-            session['unread_count'] = unread_count
-            session['unread_count_ts'] = now.isoformat()
-
-        # --- END: ส่วนที่แก้ไข ---
-
-        # ส่วนของ Announcement ยังคงดึงข้อมูลทุกครั้ง เพราะอาจมีการเปลี่ยนแปลงที่สำคัญ
         latest_announcement = database.get_latest_active_announcement(conn)
-        
+
     return dict(
-        get_bkk_time=get_bkk_time, 
+        get_bkk_time=get_bkk_time,
         unread_notification_count=unread_count,
         latest_announcement=latest_announcement
     )
@@ -575,9 +558,8 @@ def add_promotion():
 
                 conn = get_db()
                 database.add_promotion(conn, name, promo_type, value1, value2, is_active)
-                cache.clear()
                 flash('เพิ่มโปรโมชันใหม่สำเร็จ!', 'success')
-                cache.delete_memoized(get_all_promotions_cached)
+                cache.clear()
                 return redirect(url_for('promotions'))
             except ValueError as e:
                 flash(f'ข้อมูลไม่ถูกต้อง: {e}', 'danger')
@@ -2161,28 +2143,33 @@ def daily_stock_report():
         tire_ids_involved.add(row['tire_id'])
 
 
-    for tire_id in tire_ids_involved:
-        history_query_up_to_day_before = f"""
-            SELECT type, quantity_change
-            FROM tire_movements
-            WHERE tire_id = {placeholder} AND timestamp <= {placeholder}{timestamp_cast}
-            ORDER BY timestamp ASC
+    tire_quantities_before_report = defaultdict(int)
+    if tire_ids_involved:
+        ids_list = list(tire_ids_involved)
+        placeholders_for_in = ', '.join([placeholder] * len(ids_list))
+
+        query_initial_quantities = f"""
+        SELECT
+        tire_id,
+        COALESCE(SUM(CASE WHEN type = 'IN' OR type = 'RETURN' THEN quantity_change ELSE -quantity_change END), 0) as initial_quantity
+        FROM tire_movements
+        WHERE tire_id IN ({placeholders_for_in}) AND timestamp < {placeholder}{timestamp_cast}
+        GROUP BY tire_id
         """
-        if is_psycopg2_conn:
-            cursor = conn.cursor() # New cursor for this query
-            cursor.execute(history_query_up_to_day_before, (tire_id, day_before_report_iso))
-            moves = cursor.fetchall() 
-            cursor.close()
-        else:
-            moves = conn.execute(history_query_up_to_day_before, (tire_id, day_before_report_iso,)).fetchall()
-        
-        calculated_qty_before_day = 0
-        for move in moves:
-            if move['type'] == 'IN' or move['type'] == 'RETURN': #
-                calculated_qty_before_day += move['quantity_change']
-            elif move['type'] == 'OUT':
-                calculated_qty_before_day -= move['quantity_change']
-        tire_quantities_before_report[tire_id] = calculated_qty_before_day
+    params = ids_list + [day_before_report_iso]
+    
+    if is_psycopg2_conn:
+        cursor = conn.cursor()
+        cursor.execute(query_initial_quantities, tuple(params))
+        initial_quantities_rows = cursor.fetchall()
+        cursor.close()
+    else:
+        # For SQLite, remove the ::timestamptz cast if it exists in the placeholder string
+        query_sqlite = query_initial_quantities.replace(timestamp_cast, "")
+        initial_quantities_rows = conn.execute(query_sqlite, tuple(params)).fetchall()
+
+    for row in initial_quantities_rows:
+        tire_quantities_before_report[row['tire_id']] = row['initial_quantity']
 
     sorted_detailed_tire_report = []
     # Add channel_name, online_platform_name, wholesale_customer_name, return_customer_type to detailed_tire_report
@@ -2327,9 +2314,9 @@ def daily_stock_report():
     day_before_report_iso = day_before_report.isoformat()
 
     distinct_wheel_ids_query_all_history = f"""
-        SELECT DISTINCT wheel_id
-        FROM wheel_movements
-        WHERE timestamp <= {placeholder}{timestamp_cast}
+    SELECT DISTINCT wheel_id
+    FROM wheel_movements
+    WHERE timestamp <= {placeholder}{timestamp_cast}
     """
     if is_psycopg2_conn:
         cursor_wheel = conn.cursor() 
@@ -2338,33 +2325,36 @@ def daily_stock_report():
         cursor_wheel.close()
     else:
         rows = conn.execute(distinct_wheel_ids_query_all_history, (sql_date_filter_end_of_day,)).fetchall()
-    
-    for row in rows:
-        wheel_ids_involved.add(row['wheel_id'])
+
+        for row in rows:
+            wheel_ids_involved.add(row['wheel_id'])
 
 
-    for wheel_id in wheel_ids_involved:
-        history_query_up_to_day_before = f"""
-            SELECT type, quantity_change
-            FROM wheel_movements
-            WHERE wheel_id = {placeholder} AND timestamp <= {placeholder}{timestamp_cast}
-            ORDER BY timestamp ASC
-        """
-        if is_psycopg2_conn:
-            cursor_wheel = conn.cursor() 
-            cursor_wheel.execute(history_query_up_to_day_before, (wheel_id, day_before_report_iso))
-            moves = cursor_wheel.fetchall() 
-            cursor_wheel.close()
-        else:
-            moves = conn.execute(history_query_up_to_day_before, (wheel_id, day_before_report_iso,)).fetchall()
-        
-        calculated_qty_before_day = 0
-        for move in moves:
-            if move['type'] == 'IN' or move['type'] == 'RETURN': #
-                calculated_qty_before_day += move['quantity_change']
-            elif move['type'] == 'OUT':
-                calculated_qty_before_day -= move['quantity_change']
-        wheel_quantities_before_report[wheel_id] = calculated_qty_before_day
+        if wheel_ids_involved:
+            ids_list = list(wheel_ids_involved)
+            placeholders_for_in = ', '.join([placeholder] * len(ids_list))
+
+    query_initial_quantities = f"""
+        SELECT
+            wheel_id,
+            COALESCE(SUM(CASE WHEN type = 'IN' OR type = 'RETURN' THEN quantity_change ELSE -quantity_change END), 0) as initial_quantity
+        FROM wheel_movements
+        WHERE wheel_id IN ({placeholders_for_in}) AND timestamp < {placeholder}{timestamp_cast}
+        GROUP BY wheel_id
+    """
+    params = ids_list + [day_before_report_iso]
+
+    if is_psycopg2_conn:
+        cursor = conn.cursor()
+        cursor.execute(query_initial_quantities, tuple(params))
+        initial_quantities_rows = cursor.fetchall()
+        cursor.close()
+    else:
+        query_sqlite = query_initial_quantities.replace(timestamp_cast, "")
+        initial_quantities_rows = conn.execute(query_sqlite, tuple(params)).fetchall()
+
+    for row in initial_quantities_rows:
+        wheel_quantities_before_report[row['wheel_id']] = row['initial_quantity']
 
 
     sorted_detailed_wheel_report = []
