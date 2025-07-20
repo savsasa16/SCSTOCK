@@ -25,9 +25,8 @@ app.secret_key = os.environ.get('SECRET_KEY', 'your_super_secret_key_here_please
 
 config = {
     "DEBUG": True,          # some Flask specific configs
-    "CACHE_TYPE": "RedisCache",  # ใช้ In-memory cache
-    "CACHE_DEFAULT_TIMEOUT": 300, # ค่า Default Timeout 5 
-    "CACHE_REDIS_URL": os.environ.get('REDIS_URL')
+    "CACHE_TYPE": "SimpleCache",  # ใช้ In-memory cache
+    "CACHE_DEFAULT_TIMEOUT": 300 # ค่า Default Timeout 5 
 }
 app.config.from_mapping(config)
 cache = Cache(app)
