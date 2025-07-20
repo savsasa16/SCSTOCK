@@ -23,6 +23,7 @@ app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'your_super_secret_key_here_please_change_this_to_a_complex_random_string')
 
 app.config['UPLOAD_FOLDER'] = 'uploads'
+app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(hours=8)
 
 # *** Cloudinary settings (using Environment Variables) ***
 cloudinary.config(
@@ -266,7 +267,8 @@ def login():
         user = database.User.get_by_username(conn, username)
 
         if user and check_password_hash(user.password, password):
-            login_user(user)
+            login_user(user, remember=True)
+            session.permanent = True
             flash('เข้าสู่ระบบสำเร็จ!', 'success')
             next_page = request.args.get('next')
             return redirect(next_page or url_for('index'))
@@ -428,7 +430,8 @@ def index():
     all_tires_raw = database.get_all_tires(conn, query=tire_query, brand_filter=tire_selected_brand, include_deleted=False)
     available_tire_brands =get_cached_data(
         'tire_brands', 
-        lambda: database.get_all_tire_brands(conn)
+        lambda: database.get_all_tire_brands(conn),
+        duration_seconds=900
     )
     
     # NEW: Filter tire data based on viewing permissions before sending to template
@@ -606,6 +609,7 @@ def edit_promotion(promo_id):
                 conn = get_db()
                 database.update_promotion(conn, promo_id, name, promo_type, value1, value2, is_active)
                 flash('แก้ไขโปรโมชันสำเร็จ!', 'success')
+                clear_cache('all_promotions')
                 return redirect(url_for('promotions'))
             except ValueError as e:
                 flash(f'ข้อมูลไม่ถูกต้อง: {e}', 'danger')
@@ -634,6 +638,7 @@ def delete_promotion(promo_id):
         try:
             database.delete_promotion(conn, promo_id)
             flash('ลบโปรโมชันสำเร็จ! สินค้าที่เคยใช้โปรโมชันนี้จะถูกตั้งค่าโปรโมชันเป็น "ไม่มี"', 'success')
+            clear_cache('all_promotions')
         except Exception as e:
             flash(f'เกิดข้อผิดพลาดในการลบโปรโมชัน: {e}', 'danger')
 
@@ -912,6 +917,7 @@ def edit_tire(tire_id):
                                      promotion_id_db, 
                                      year_of_manufacture)
                 flash('แก้ไขข้อมูลยางสำเร็จ!', 'success')
+                clear_cache('tire_brands')
                 return redirect(url_for('index', tab='tires'))
             except ValueError:
                 flash('ข้อมูลตัวเลขไม่ถูกต้อง กรุณาตรวจสอบ', 'danger')
@@ -986,9 +992,10 @@ def delete_tire(tire_id):
     else:
         try:
             database.delete_tire(conn, tire_id)
-            flash('ทำเครื่องหมายยางว่าถูกลบสำเร็จ!', 'success')
+            flash('ลบยางสำเร็จ!', 'success')
+            clear_cache('tire_brands')
         except Exception as e:
-            flash(f'เกิดข้อผิดพลาดในการทำเครื่องหมายยางว่าถูกลบ: {e}', 'danger')
+            flash(f'เกิดข้อผิดพลาดในการลบ: {e}', 'danger')
     
     return redirect(url_for('index', tab='tires'))
 
@@ -1078,6 +1085,7 @@ def edit_wheel(wheel_id):
 
                 database.update_wheel(conn, wheel_id, brand, model, diameter, pcd, width, et, color, cost, cost_online, wholesale_price1, wholesale_price2, retail_price, current_image_url)
                 flash('แก้ไขข้อมูลแม็กสำเร็จ!', 'success')
+                clear_cache('wheel_brands')
                 return redirect(url_for('wheel_detail', wheel_id=wheel_id))
             except ValueError:
                 flash('ข้อมูลตัวเลขไม่ถูกต้อง กรุณาตรวจสอบ', 'danger')
@@ -1166,6 +1174,7 @@ def delete_wheel(wheel_id):
         try:
             database.delete_wheel(conn, wheel_id)
             flash('ลบแม็กสำเร็จ!', 'success')
+            clear_cache('wheel_brands')
         except Exception as e:
             flash(f'เกิดข้อผิดพลาดในการลบแม็ก: {e}', 'danger')
     
@@ -1236,16 +1245,19 @@ def stock_movement():
     
     sales_channels = get_cached_data(
         'sales_channels', 
-        lambda: database.get_all_sales_channels(conn)
-    )
+        lambda: database.get_all_sales_channels(conn),
+        duration_seconds=36000
+        )
     online_platforms = get_cached_data(
         'online_platforms', 
-        lambda: database.get_all_online_platforms(conn)
-    )
+        lambda: database.get_all_online_platforms(conn),
+        duration_seconds=36000
+        )
     wholesale_customers = get_cached_data(
         'wholesale_customers', 
-        lambda: database.get_all_wholesale_customers(conn)
-    )
+        lambda: database.get_all_wholesale_customers(conn),
+        duration_seconds=10800
+        )
 
     active_tab = request.args.get('tab', 'tire_movements') 
 
@@ -3357,6 +3369,7 @@ def import_tires_action():
                     error_rows.append(f"แถวที่ {index + 2}: {row_e} - {row.to_dict()}")
             
             conn.commit()
+            clear_cache('tire_brands')
 
             message = f'นำเข้าข้อมูลยางสำเร็จ: เพิ่มใหม่ {imported_count} รายการ, อัปเดต {updated_count} รายการ.'
             if error_rows:
@@ -3557,6 +3570,7 @@ def import_wheels_action():
                     error_rows.append(f"แถวที่ {index + 2}: {row_e} - {row.to_dict()}")
             
             conn.commit()
+            clear_cache('wheel_brands')
             
             message = f'นำเข้าข้อมูลแม็กสำเร็จ: เพิ่มใหม่ {imported_count} รายการ, อัปเดต {updated_count} รายการ.'
             if error_rows:
@@ -3733,6 +3747,7 @@ def restore_tire_action(tire_id):
     try:
         database.restore_tire(conn, tire_id)
         flash(f'กู้คืนยาง ID {tire_id} สำเร็จ!', 'success')
+        clear_cache('tire_brands')
     except Exception as e:
         flash(f'เกิดข้อผิดพลาดในการกู้คืนยาง: {e}', 'danger')
     return redirect(url_for('admin_deleted_items', tab='deleted_tires'))
@@ -3749,6 +3764,7 @@ def restore_wheel_action(wheel_id):
     try:
         database.restore_wheel(conn, wheel_id)
         flash(f'กู้คืนแม็ก ID {wheel_id} สำเร็จ!', 'success')
+        clear_cache('wheel_brands')
     except Exception as e:
         flash(f'เกิดข้อผิดพลาดในการกู้คืนแม็ก: {e}', 'danger')
     return redirect(url_for('admin_deleted_items', tab='deleted_wheels'))
