@@ -10,3 +10,4 @@ cloudinary # เพิ่มบรรทัดนี้
 openpyxl
 xlsxwriter
 Flask-Caching
+redis
