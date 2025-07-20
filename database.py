@@ -98,539 +98,539 @@ def init_db(conn):
         # จะคืนค่า True หาก conn เป็น psycopg2 connection
         is_postgres = "psycopg2" in str(type(conn))
 
-    if is_postgres:
-        cursor.execute("""
-        CREATE TABLE IF NOT EXISTS activity_logs (
-            id SERIAL PRIMARY KEY,
-            user_id INTEGER NULL,
-            timestamp TIMESTAMP WITH TIME ZONE NOT NULL,
-            endpoint VARCHAR(255) NOT NULL,
-            method VARCHAR(10) NOT NULL,
-            url VARCHAR(2048) NOT NULL,
-            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
-            );
-        """)
-    else:  # SQLite
-        cursor.execute("""
-        CREATE TABLE IF NOT EXISTS activity_logs (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id INTEGER NULL,
-            timestamp TEXT NOT NULL,
-            endpoint TEXT NOT NULL,
-            method TEXT NOT NULL,
-            url TEXT NOT NULL,
-            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
-            );
-        """)
-
-    # Promotions Table
-    if is_postgres:
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS promotions (
+        if is_postgres:
+            cursor.execute("""
+            CREATE TABLE IF NOT EXISTS activity_logs (
                 id SERIAL PRIMARY KEY,
-                name VARCHAR(255) NOT NULL UNIQUE,
-                type VARCHAR(255) NOT NULL,
-                value1 FLOAT NOT NULL,
-                value2 FLOAT NULL,
-                is_active BOOLEAN DEFAULT TRUE,
-                is_deleted BOOLEAN DEFAULT FALSE, -- Corrected default for PostgreSQL
-                created_at TIMESTAMP WITH TIME ZONE NOT NULL
-            );
-        """)
-    else:  # SQLite
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS promotions (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                name TEXT NOT NULL UNIQUE,
-                type TEXT NOT NULL,
-                value1 REAL NOT NULL,
-                value2 REAL NULL,
-                is_active BOOLEAN DEFAULT 1,
-                is_deleted BOOLEAN DEFAULT 0,
-                created_at TEXT NOT NULL
-            );
-        """)
-
-    # Users Table
-    if is_postgres:
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS users (
-                id SERIAL PRIMARY KEY,
-                username VARCHAR(255) UNIQUE NOT NULL,
-                password TEXT NOT NULL,
-                role VARCHAR(50) NOT NULL DEFAULT 'viewer'
-            );
-        """)
-    else:  # SQLite
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS users (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                username TEXT UNIQUE NOT NULL,
-                password TEXT NOT NULL,
-                role TEXT NOT NULL DEFAULT 'viewer'
-            );
-        """)
-
-    # เพิ่มตารางประกาศ Announcment
-    if is_postgres:
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS announcements (
-                id SERIAL PRIMARY KEY,
-                title VARCHAR(255) NOT NULL,
-                content TEXT NOT NULL,
-                is_active BOOLEAN DEFAULT FALSE,
-                created_at TIMESTAMP WITH TIME ZONE NOT NULL
-            );
-        """)
-    else:  # SQLite
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS announcements (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                title TEXT NOT NULL,
-                content TEXT NOT NULL,
-                is_active BOOLEAN DEFAULT 0,
-                created_at TEXT NOT NULL
-            );
-        """)
-
-    # Sales Channels Table (ใหม่)
-    if is_postgres:
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS sales_channels (
-                id SERIAL PRIMARY KEY,
-                name VARCHAR(255) NOT NULL UNIQUE
-            );
-        """)
-    else:
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS sales_channels (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                name TEXT NOT NULL UNIQUE
-            );
-        """)
-
-    # Online Platforms Table (ใหม่)
-    if is_postgres:
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS online_platforms (
-                id SERIAL PRIMARY KEY,
-                name VARCHAR(255) NOT NULL UNIQUE
-            );
-        """)
-    else:
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS online_platforms (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                name TEXT NOT NULL UNIQUE
-            );
-        """)
-
-    # Wholesale Customers Table (ใหม่)
-    if is_postgres:
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS wholesale_customers (
-                id SERIAL PRIMARY KEY,
-                name VARCHAR(255) NOT NULL UNIQUE
-            );
-        """)
-    else:
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS wholesale_customers (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                name TEXT NOT NULL UNIQUE
-            );
-        """)
-
-    # Tires Table (เพิ่ม is_deleted)
-    if is_postgres:
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS tires (
-                id SERIAL PRIMARY KEY,
-                brand VARCHAR(255) NOT NULL,
-                model VARCHAR(255) NOT NULL,
-                size VARCHAR(255) NOT NULL,
-                quantity INTEGER DEFAULT 0,
-                cost_sc FLOAT NULL,
-                cost_dunlop FLOAT NULL,
-                cost_online FLOAT NULL,
-                wholesale_price1 FLOAT NULL,
-                wholesale_price2 FLOAT NULL,
-                price_per_item FLOAT NOT NULL,
-                promotion_id INTEGER NULL,
-                year_of_manufacture VARCHAR(255) NULL,
-                is_deleted BOOLEAN DEFAULT FALSE, -- ADDED FOR SOFT DELETE
-                UNIQUE(brand, model, size),
-                FOREIGN KEY (promotion_id) REFERENCES promotions(id) ON DELETE SET NULL
-            );
-        """)
-    else:  # SQLite
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS tires (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                brand TEXT NOT NULL,
-                model TEXT NOT NULL,
-                size TEXT NOT NULL,
-                quantity INTEGER DEFAULT 0,
-                cost_sc REAL NULL,
-                cost_dunlop REAL NULL,
-                cost_online REAL NULL,
-                wholesale_price1 REAL NULL,
-                wholesale_price2 REAL NULL,
-                price_per_item REAL NOT NULL,
-                promotion_id INTEGER NULL,
-                year_of_manufacture INTEGER NULL,
-                is_deleted BOOLEAN DEFAULT 0, -- ADDED FOR SOFT DELETE
-                UNIQUE(brand, model, size),
-                FOREIGN KEY (promotion_id) REFERENCES promotions(id) ON DELETE SET NULL
-            );
-        """)
-
-    # Wheels Table (เพิ่ม image_filename ให้ยาวขึ้น และ is_deleted)
-    if is_postgres:
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS wheels (
-                id SERIAL PRIMARY KEY,
-                brand VARCHAR(255) NOT NULL,
-                model VARCHAR(255) NOT NULL,
-                diameter FLOAT NOT NULL,
-                pcd VARCHAR(255) NOT NULL,
-                width FLOAT NOT NULL,
-                et INTEGER NULL,
-                color VARCHAR(255) NULL,
-                quantity INTEGER DEFAULT 0,
-                cost FLOAT NULL,
-                cost_online FLOAT NULL,
-                wholesale_price1 FLOAT NULL,
-                wholesale_price2 FLOAT NULL,
-                retail_price FLOAT NOT NULL,
-                image_filename VARCHAR(500) NULL,
-                is_deleted BOOLEAN DEFAULT FALSE, -- ADDED FOR SOFT DELETE
-                UNIQUE(brand, model, diameter, pcd, width, et, color)
-            );
-        """)
-    else:  # SQLite
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS wheels (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                brand TEXT NOT NULL,
-                model TEXT NOT NULL,
-                diameter REAL NOT NULL,
-                pcd TEXT NOT NULL,
-                width REAL NOT NULL,
-                et INTEGER NULL,
-                color TEXT NULL,
-                quantity INTEGER DEFAULT 0,
-                cost REAL NULL,
-                cost_online REAL NULL,
-                wholesale_price1 REAL NULL,
-                wholesale_price2 REAL NULL,
-                retail_price REAL NOT NULL,
-                image_filename TEXT NULL,
-                is_deleted BOOLEAN DEFAULT 0, -- ADDED FOR SOFT DELETE
-                UNIQUE(brand, model, diameter, pcd, width, et, color)
-            );
-        """)
-
-    # Tire Movements Table (เพิ่มคอลัมน์ใหม่สำหรับ Tracking)
-    if is_postgres:
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS tire_movements (
-                id SERIAL PRIMARY KEY,
-                tire_id INTEGER NOT NULL,
+                user_id INTEGER NULL,
                 timestamp TIMESTAMP WITH TIME ZONE NOT NULL,
-                type VARCHAR(50) NOT NULL, -- IN, OUT, RETURN
-                quantity_change INTEGER NOT NULL,
-                remaining_quantity INTEGER NOT NULL,
-                notes TEXT,
-                image_filename VARCHAR(500) NULL,
-                user_id INTEGER NULL,
-
-                -- NEW COLUMNS FOR DETAILED TRACKING
-                channel_id INTEGER NULL, -- หน้าร้าน, ออนไลน์, ค้าส่ง, ซื้อเข้า, รับคืน
-                online_platform_id INTEGER NULL, -- Shopee, Lazada, etc. (สำหรับ OUT/RETURN จากออนไลน์)
-                wholesale_customer_id INTEGER NULL, -- ร้าน 1, ร้าน 2 (สำหรับ OUT ค้าส่ง)
-                return_customer_type VARCHAR(50) NULL, -- 'หน้าร้านลูกค้า', 'หน้าร้านร้านยาง' (สำหรับ RETURN หน้าร้าน)
-
-                FOREIGN KEY (tire_id) REFERENCES tires(id),
-                FOREIGN KEY (user_id) REFERENCES users(id),
-                FOREIGN KEY (channel_id) REFERENCES sales_channels(id),
-                FOREIGN KEY (online_platform_id) REFERENCES online_platforms(id),
-                FOREIGN KEY (wholesale_customer_id) REFERENCES wholesale_customers(id)
-            );
-        """)
-    else:  # SQLite
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS tire_movements (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                tire_id INTEGER NOT NULL,
-                timestamp TEXT NOT NULL,
-                type TEXT NOT NULL, -- IN, OUT, RETURN
-                quantity_change INTEGER NOT NULL,
-                remaining_quantity INTEGER NOT NULL,
-                notes TEXT,
-                image_filename TEXT NULL,
-                user_id INTEGER NULL,
-
-                -- NEW COLUMNS FOR DETAILED TRACKING
-                channel_id INTEGER NULL,
-                online_platform_id INTEGER NULL,
-                wholesale_customer_id INTEGER NULL,
-                return_customer_type TEXT NULL,
-
-                FOREIGN KEY (tire_id) REFERENCES tires(id),
-                FOREIGN KEY (user_id) REFERENCES users(id),
-                FOREIGN KEY (channel_id) REFERENCES sales_channels(id),
-                FOREIGN KEY (online_platform_id) REFERENCES online_platforms(id),
-                FOREIGN KEY (wholesale_customer_id) REFERENCES wholesale_customers(id)
-            );
-        """)
-
-    # Wheel Movements Table (เพิ่มคอลัมน์ใหม่สำหรับ Tracking)
-    if is_postgres:
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS wheel_movements (
-                id SERIAL PRIMARY KEY,
-                wheel_id INTEGER NOT NULL,
-                timestamp TIMESTAMP WITH TIME ZONE NOT NULL,
-                type VARCHAR(50) NOT NULL, -- IN, OUT, RETURN
-                quantity_change INTEGER NOT NULL,
-                remaining_quantity INTEGER NOT NULL,
-                notes TEXT,
-                image_filename VARCHAR(500) NULL,
-                user_id INTEGER NULL,
-
-                -- NEW COLUMNS FOR DETAILED TRACKING
-                channel_id INTEGER NULL,
-                online_platform_id INTEGER NULL,
-                wholesale_customer_id INTEGER NULL,
-                return_customer_type VARCHAR(50) NULL,
-
-                FOREIGN KEY (wheel_id) REFERENCES wheels(id),
-                FOREIGN KEY (user_id) REFERENCES users(id),
-                FOREIGN KEY (channel_id) REFERENCES sales_channels(id),
-                FOREIGN KEY (online_platform_id) REFERENCES online_platforms(id),
-                FOREIGN KEY (wholesale_customer_id) REFERENCES wholesale_customers(id)
-            );
-        """)
-    else:  # SQLite
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS wheel_movements (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                wheel_id INTEGER NOT NULL,
-                timestamp TEXT NOT NULL,
-                type TEXT NOT NULL, -- IN, OUT, RETURN
-                quantity_change INTEGER NOT NULL,
-                remaining_quantity INTEGER NOT NULL,
-                notes TEXT,
-                image_filename TEXT NULL,
-                user_id INTEGER NULL,
-
-                -- NEW COLUMNS FOR DETAILED TRACKING
-                channel_id INTEGER NULL,
-                online_platform_id INTEGER NULL,
-                wholesale_customer_id INTEGER NULL,
-                return_customer_type TEXT NULL,
-
-                FOREIGN KEY (wheel_id) REFERENCES wheels(id),
-                FOREIGN KEY (user_id) REFERENCES users(id),
-                FOREIGN KEY (channel_id) REFERENCES sales_channels(id),
-                FOREIGN KEY (online_platform_id) REFERENCES online_platforms(id),
-                FOREIGN KEY (wholesale_customer_id) REFERENCES wholesale_customers(id)
-            );
-        """)
-
-    # Wheel Fitments Table
-    if is_postgres:
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS wheel_fitments (
-                id SERIAL PRIMARY KEY,
-                wheel_id INTEGER NOT NULL,
-                brand VARCHAR(255) NOT NULL,
-                model VARCHAR(255) NOT NULL,
-                year_start INTEGER NOT NULL,
-                year_end INTEGER NULL,
-                UNIQUE(wheel_id, brand, model, year_start, year_end),
-                FOREIGN KEY (wheel_id) REFERENCES wheels(id) ON DELETE CASCADE
-            );
-        """)
-    else:  # SQLite
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS wheel_fitments (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                wheel_id INTEGER NOT NULL,
-                brand TEXT NOT NULL,
-                model TEXT NOT NULL,
-                year_start INTEGER NOT NULL,
-                year_end INTEGER NULL,
-                UNIQUE(wheel_id, brand, model, year_start, year_end),
-                FOREIGN KEY (wheel_id) REFERENCES wheels(id) ON DELETE CASCADE
-            );
-        """)
-
-    # Feedback Table Add HERE
-    if is_postgres:
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS feedback (
-                id SERIAL PRIMARY KEY,
-                user_id INTEGER NULL,
-                feedback_type VARCHAR(50) NOT NULL, -- e.g., 'Bug', 'Suggestion', 'Other'
-                message TEXT NOT NULL,
-                status VARCHAR(50) NOT NULL DEFAULT 'ใหม่', -- e.g., 'New', 'In Progress', 'Done'
-                created_at TIMESTAMP WITH TIME ZONE NOT NULL,
+                endpoint VARCHAR(255) NOT NULL,
+                method VARCHAR(10) NOT NULL,
+                url VARCHAR(2048) NOT NULL,
                 FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
-            );
-        """)
-    else:  # SQLite
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS feedback (
+                );
+            """)
+        else:  # SQLite
+            cursor.execute("""
+            CREATE TABLE IF NOT EXISTS activity_logs (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 user_id INTEGER NULL,
-                feedback_type TEXT NOT NULL,
-                message TEXT NOT NULL,
-                status TEXT NOT NULL DEFAULT 'ใหม่',
-                created_at TEXT NOT NULL,
+                timestamp TEXT NOT NULL,
+                endpoint TEXT NOT NULL,
+                method TEXT NOT NULL,
+                url TEXT NOT NULL,
                 FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
-            );
-        """)
+                );
+            """)
 
-    # Barcodes Table for Tires
-    if is_postgres:
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS tire_barcodes (
-                id SERIAL PRIMARY KEY,
-                tire_id INTEGER NOT NULL,
-                barcode_string VARCHAR(255) NOT NULL UNIQUE,
-                is_primary_barcode BOOLEAN DEFAULT FALSE,
-                FOREIGN KEY (tire_id) REFERENCES tires(id) ON DELETE CASCADE
-            );
-        """)
-    else:  # SQLite
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS tire_barcodes (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                tire_id INTEGER NOT NULL,
-                barcode_string TEXT NOT NULL UNIQUE,
-                is_primary_barcode BOOLEAN DEFAULT 0,
-                FOREIGN KEY (tire_id) REFERENCES tires(id) ON DELETE CASCADE
-            );
-        """)
-
-    # Barcodes Table for Wheels
-    if is_postgres:
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS wheel_barcodes (
-                id SERIAL PRIMARY KEY,
-                wheel_id INTEGER NOT NULL,
-                barcode_string VARCHAR(255) NOT NULL UNIQUE,
-                is_primary_barcode BOOLEAN DEFAULT FALSE,
-                FOREIGN KEY (wheel_id) REFERENCES wheels(id) ON DELETE CASCADE
-            );
-        """)
-    else:  # SQLite
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS wheel_barcodes (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                wheel_id INTEGER NOT NULL,
-                barcode_string TEXT NOT NULL UNIQUE,
-                is_primary_barcode BOOLEAN DEFAULT 0,
-                FOREIGN KEY (wheel_id) REFERENCES wheels(id) ON DELETE CASCADE
-            );
-        """)
-
-    # Automatic deleted Activity LOGS
-    if is_postgres:
-        cursor.execute("""
-        CREATE TABLE IF NOT EXISTS app_settings (
-            key VARCHAR(255) PRIMARY KEY,
-            value TEXT NOT NULL
-        );
-    """)
-    else:  # SQLite
-        cursor.execute("""
-        CREATE TABLE IF NOT EXISTS app_settings (
-            key TEXT PRIMARY KEY,
-            value TEXT NOT NULL
-        );
-    """)
-
-    # --- INSERT DEFAULT DATA (MOVED HERE TO ENSURE COMMIT) ---
-    # เพิ่มข้อมูลเริ่มต้นสำหรับ sales_channels (ถ้ายังไม่มี)
-    try:
+        # Promotions Table
         if is_postgres:
-            cursor.execute(
-                "INSERT INTO sales_channels (name) VALUES ('หน้าร้าน') ON CONFLICT (name) DO NOTHING;")
-            cursor.execute(
-                "INSERT INTO sales_channels (name) VALUES ('ออนไลน์') ON CONFLICT (name) DO NOTHING;")
-            cursor.execute(
-                "INSERT INTO sales_channels (name) VALUES ('ค้าส่ง') ON CONFLICT (name) DO NOTHING;")
-            cursor.execute(
-                "INSERT INTO sales_channels (name) VALUES ('ซื้อเข้า') ON CONFLICT (name) DO NOTHING;")
-            cursor.execute(
-                "INSERT INTO sales_channels (name) VALUES ('รับคืน') ON CONFLICT (name) DO NOTHING;")
-        else:
-            cursor.execute(
-                "INSERT OR IGNORE INTO sales_channels (name) VALUES ('หน้าร้าน');")
-            cursor.execute(
-                "INSERT OR IGNORE INTO sales_channels (name) VALUES ('ออนไลน์');")
-            cursor.execute(
-                "INSERT OR IGNORE INTO sales_channels (name) VALUES ('ค้าส่ง');")
-            cursor.execute(
-                "INSERT OR IGNORE INTO sales_channels (name) VALUES ('ซื้อเข้า');")
-            cursor.execute(
-                "INSERT OR IGNORE INTO sales_channels (name) VALUES ('รับคืน');")
-    except Exception as e:
-        print(f"Error inserting default sales channels: {e}")
-        conn.rollback()  # Rollback if default channels insertion fails
-        # It's better to just log and continue, as failure here shouldn't stop
-        # table creation
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS promotions (
+                    id SERIAL PRIMARY KEY,
+                    name VARCHAR(255) NOT NULL UNIQUE,
+                    type VARCHAR(255) NOT NULL,
+                    value1 FLOAT NOT NULL,
+                    value2 FLOAT NULL,
+                    is_active BOOLEAN DEFAULT TRUE,
+                    is_deleted BOOLEAN DEFAULT FALSE, -- Corrected default for PostgreSQL
+                    created_at TIMESTAMP WITH TIME ZONE NOT NULL
+                );
+            """)
+        else:  # SQLite
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS promotions (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    name TEXT NOT NULL UNIQUE,
+                    type TEXT NOT NULL,
+                    value1 REAL NOT NULL,
+                    value2 REAL NULL,
+                    is_active BOOLEAN DEFAULT 1,
+                    is_deleted BOOLEAN DEFAULT 0,
+                    created_at TEXT NOT NULL
+                );
+            """)
 
-    # เพิ่มข้อมูลเริ่มต้นสำหรับ online_platforms (ถ้ายังไม่มี)
-    try:
+        # Users Table
         if is_postgres:
-            cursor.execute(
-                "INSERT INTO online_platforms (name) VALUES ('Shopee') ON CONFLICT (name) DO NOTHING;")
-            cursor.execute(
-                "INSERT INTO online_platforms (name) VALUES ('Lazada') ON CONFLICT (name) DO NOTHING;")
-            cursor.execute(
-                "INSERT INTO online_platforms (name) VALUES ('TikTok') ON CONFLICT (name) DO NOTHING;")
-            cursor.execute(
-                "INSERT INTO online_platforms (name) VALUES ('Facebook') ON CONFLICT (name) DO NOTHING;")
-            cursor.execute(
-                "INSERT INTO online_platforms (name) VALUES ('Line@') ON CONFLICT (name) DO NOTHING;")
-        else:
-            cursor.execute(
-                "INSERT OR IGNORE INTO online_platforms (name) VALUES ('Shopee');")
-            cursor.execute(
-                "INSERT OR IGNORE INTO online_platforms (name) VALUES ('Lazada');")
-            cursor.execute(
-                "INSERT OR IGNORE INTO online_platforms (name) VALUES ('TikTok');")
-            cursor.execute(
-                "INSERT OR IGNORE INTO online_platforms (name) VALUES ('Facebook');")
-            cursor.execute(
-                "INSERT OR IGNORE INTO online_platforms (name) VALUES ('Line@');")
-    except Exception as e:
-        print(f"Error inserting default online platforms: {e}")
-        conn.rollback()  # Rollback if default platforms insertion fails
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS users (
+                    id SERIAL PRIMARY KEY,
+                    username VARCHAR(255) UNIQUE NOT NULL,
+                    password TEXT NOT NULL,
+                    role VARCHAR(50) NOT NULL DEFAULT 'viewer'
+                );
+            """)
+        else:  # SQLite
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS users (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    username TEXT UNIQUE NOT NULL,
+                    password TEXT NOT NULL,
+                    role TEXT NOT NULL DEFAULT 'viewer'
+                );
+            """)
 
-    # เพิ่มข้อมูลเริ่มต้นสำหรับ wholesale_customers
-    # (หากต้องการมีลูกค้าตัวอย่าง)
-    try:
+        # เพิ่มตารางประกาศ Announcment
         if is_postgres:
-            cursor.execute(
-                "INSERT INTO wholesale_customers (name) VALUES ('ร้านตัวอย่าง 1') ON CONFLICT (name) DO NOTHING;")
-            cursor.execute(
-                "INSERT INTO wholesale_customers (name) VALUES ('ร้านตัวอย่าง 2') ON CONFLICT (name) DO NOTHING;")
-        else:
-            cursor.execute(
-                "INSERT OR IGNORE INTO wholesale_customers (name) VALUES ('ร้านตัวอย่าง 1');")
-            cursor.execute(
-                "INSERT OR IGNORE INTO wholesale_customers (name) VALUES ('ร้านตัวอย่าง 2');")
-    except Exception as e:
-        print(f"Error inserting default wholesale customers: {e}")
-        conn.rollback()  # Rollback if default customers insertion fails
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS announcements (
+                    id SERIAL PRIMARY KEY,
+                    title VARCHAR(255) NOT NULL,
+                    content TEXT NOT NULL,
+                    is_active BOOLEAN DEFAULT FALSE,
+                    created_at TIMESTAMP WITH TIME ZONE NOT NULL
+                );
+            """)
+        else:  # SQLite
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS announcements (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    title TEXT NOT NULL,
+                    content TEXT NOT NULL,
+                    is_active BOOLEAN DEFAULT 0,
+                    created_at TEXT NOT NULL
+                );
+            """)
 
-    conn.commit()  # <--- IMPORTANT: COMMIT ALL CHANGES AFTER CREATING TABLES AND INSERTING DEFAULTS
-    print("Database schema and default data initialized successfully.")
+        # Sales Channels Table (ใหม่)
+        if is_postgres:
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS sales_channels (
+                    id SERIAL PRIMARY KEY,
+                    name VARCHAR(255) NOT NULL UNIQUE
+                );
+            """)
+        else:
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS sales_channels (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    name TEXT NOT NULL UNIQUE
+                );
+            """)
+
+        # Online Platforms Table (ใหม่)
+        if is_postgres:
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS online_platforms (
+                    id SERIAL PRIMARY KEY,
+                    name VARCHAR(255) NOT NULL UNIQUE
+                );
+            """)
+        else:
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS online_platforms (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    name TEXT NOT NULL UNIQUE
+                );
+            """)
+
+        # Wholesale Customers Table (ใหม่)
+        if is_postgres:
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS wholesale_customers (
+                    id SERIAL PRIMARY KEY,
+                    name VARCHAR(255) NOT NULL UNIQUE
+                );
+            """)
+        else:
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS wholesale_customers (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    name TEXT NOT NULL UNIQUE
+                );
+            """)
+
+        # Tires Table (เพิ่ม is_deleted)
+        if is_postgres:
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS tires (
+                    id SERIAL PRIMARY KEY,
+                    brand VARCHAR(255) NOT NULL,
+                    model VARCHAR(255) NOT NULL,
+                    size VARCHAR(255) NOT NULL,
+                    quantity INTEGER DEFAULT 0,
+                    cost_sc FLOAT NULL,
+                    cost_dunlop FLOAT NULL,
+                    cost_online FLOAT NULL,
+                    wholesale_price1 FLOAT NULL,
+                    wholesale_price2 FLOAT NULL,
+                    price_per_item FLOAT NOT NULL,
+                    promotion_id INTEGER NULL,
+                    year_of_manufacture VARCHAR(255) NULL,
+                    is_deleted BOOLEAN DEFAULT FALSE, -- ADDED FOR SOFT DELETE
+                    UNIQUE(brand, model, size),
+                    FOREIGN KEY (promotion_id) REFERENCES promotions(id) ON DELETE SET NULL
+                );
+            """)
+        else:  # SQLite
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS tires (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    brand TEXT NOT NULL,
+                    model TEXT NOT NULL,
+                    size TEXT NOT NULL,
+                    quantity INTEGER DEFAULT 0,
+                    cost_sc REAL NULL,
+                    cost_dunlop REAL NULL,
+                    cost_online REAL NULL,
+                    wholesale_price1 REAL NULL,
+                    wholesale_price2 REAL NULL,
+                    price_per_item REAL NOT NULL,
+                    promotion_id INTEGER NULL,
+                    year_of_manufacture INTEGER NULL,
+                    is_deleted BOOLEAN DEFAULT 0, -- ADDED FOR SOFT DELETE
+                    UNIQUE(brand, model, size),
+                    FOREIGN KEY (promotion_id) REFERENCES promotions(id) ON DELETE SET NULL
+                );
+            """)
+
+        # Wheels Table (เพิ่ม image_filename ให้ยาวขึ้น และ is_deleted)
+        if is_postgres:
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS wheels (
+                    id SERIAL PRIMARY KEY,
+                    brand VARCHAR(255) NOT NULL,
+                    model VARCHAR(255) NOT NULL,
+                    diameter FLOAT NOT NULL,
+                    pcd VARCHAR(255) NOT NULL,
+                    width FLOAT NOT NULL,
+                    et INTEGER NULL,
+                    color VARCHAR(255) NULL,
+                    quantity INTEGER DEFAULT 0,
+                    cost FLOAT NULL,
+                    cost_online FLOAT NULL,
+                    wholesale_price1 FLOAT NULL,
+                    wholesale_price2 FLOAT NULL,
+                    retail_price FLOAT NOT NULL,
+                    image_filename VARCHAR(500) NULL,
+                    is_deleted BOOLEAN DEFAULT FALSE, -- ADDED FOR SOFT DELETE
+                    UNIQUE(brand, model, diameter, pcd, width, et, color)
+                );
+            """)
+        else:  # SQLite
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS wheels (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    brand TEXT NOT NULL,
+                    model TEXT NOT NULL,
+                    diameter REAL NOT NULL,
+                    pcd TEXT NOT NULL,
+                    width REAL NOT NULL,
+                    et INTEGER NULL,
+                    color TEXT NULL,
+                    quantity INTEGER DEFAULT 0,
+                    cost REAL NULL,
+                    cost_online REAL NULL,
+                    wholesale_price1 REAL NULL,
+                    wholesale_price2 REAL NULL,
+                    retail_price REAL NOT NULL,
+                    image_filename TEXT NULL,
+                    is_deleted BOOLEAN DEFAULT 0, -- ADDED FOR SOFT DELETE
+                    UNIQUE(brand, model, diameter, pcd, width, et, color)
+                );
+            """)
+
+        # Tire Movements Table (เพิ่มคอลัมน์ใหม่สำหรับ Tracking)
+        if is_postgres:
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS tire_movements (
+                    id SERIAL PRIMARY KEY,
+                    tire_id INTEGER NOT NULL,
+                    timestamp TIMESTAMP WITH TIME ZONE NOT NULL,
+                    type VARCHAR(50) NOT NULL, -- IN, OUT, RETURN
+                    quantity_change INTEGER NOT NULL,
+                    remaining_quantity INTEGER NOT NULL,
+                    notes TEXT,
+                    image_filename VARCHAR(500) NULL,
+                    user_id INTEGER NULL,
+
+                    -- NEW COLUMNS FOR DETAILED TRACKING
+                    channel_id INTEGER NULL, -- หน้าร้าน, ออนไลน์, ค้าส่ง, ซื้อเข้า, รับคืน
+                    online_platform_id INTEGER NULL, -- Shopee, Lazada, etc. (สำหรับ OUT/RETURN จากออนไลน์)
+                    wholesale_customer_id INTEGER NULL, -- ร้าน 1, ร้าน 2 (สำหรับ OUT ค้าส่ง)
+                    return_customer_type VARCHAR(50) NULL, -- 'หน้าร้านลูกค้า', 'หน้าร้านร้านยาง' (สำหรับ RETURN หน้าร้าน)
+
+                    FOREIGN KEY (tire_id) REFERENCES tires(id),
+                    FOREIGN KEY (user_id) REFERENCES users(id),
+                    FOREIGN KEY (channel_id) REFERENCES sales_channels(id),
+                    FOREIGN KEY (online_platform_id) REFERENCES online_platforms(id),
+                    FOREIGN KEY (wholesale_customer_id) REFERENCES wholesale_customers(id)
+                );
+            """)
+        else:  # SQLite
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS tire_movements (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    tire_id INTEGER NOT NULL,
+                    timestamp TEXT NOT NULL,
+                    type TEXT NOT NULL, -- IN, OUT, RETURN
+                    quantity_change INTEGER NOT NULL,
+                    remaining_quantity INTEGER NOT NULL,
+                    notes TEXT,
+                    image_filename TEXT NULL,
+                    user_id INTEGER NULL,
+
+                    -- NEW COLUMNS FOR DETAILED TRACKING
+                    channel_id INTEGER NULL,
+                    online_platform_id INTEGER NULL,
+                    wholesale_customer_id INTEGER NULL,
+                    return_customer_type TEXT NULL,
+
+                    FOREIGN KEY (tire_id) REFERENCES tires(id),
+                    FOREIGN KEY (user_id) REFERENCES users(id),
+                    FOREIGN KEY (channel_id) REFERENCES sales_channels(id),
+                    FOREIGN KEY (online_platform_id) REFERENCES online_platforms(id),
+                    FOREIGN KEY (wholesale_customer_id) REFERENCES wholesale_customers(id)
+                );
+            """)
+
+        # Wheel Movements Table (เพิ่มคอลัมน์ใหม่สำหรับ Tracking)
+        if is_postgres:
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS wheel_movements (
+                    id SERIAL PRIMARY KEY,
+                    wheel_id INTEGER NOT NULL,
+                    timestamp TIMESTAMP WITH TIME ZONE NOT NULL,
+                    type VARCHAR(50) NOT NULL, -- IN, OUT, RETURN
+                    quantity_change INTEGER NOT NULL,
+                    remaining_quantity INTEGER NOT NULL,
+                    notes TEXT,
+                    image_filename VARCHAR(500) NULL,
+                    user_id INTEGER NULL,
+
+                    -- NEW COLUMNS FOR DETAILED TRACKING
+                    channel_id INTEGER NULL,
+                    online_platform_id INTEGER NULL,
+                    wholesale_customer_id INTEGER NULL,
+                    return_customer_type VARCHAR(50) NULL,
+
+                    FOREIGN KEY (wheel_id) REFERENCES wheels(id),
+                    FOREIGN KEY (user_id) REFERENCES users(id),
+                    FOREIGN KEY (channel_id) REFERENCES sales_channels(id),
+                    FOREIGN KEY (online_platform_id) REFERENCES online_platforms(id),
+                    FOREIGN KEY (wholesale_customer_id) REFERENCES wholesale_customers(id)
+                );
+            """)
+        else:  # SQLite
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS wheel_movements (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    wheel_id INTEGER NOT NULL,
+                    timestamp TEXT NOT NULL,
+                    type TEXT NOT NULL, -- IN, OUT, RETURN
+                    quantity_change INTEGER NOT NULL,
+                    remaining_quantity INTEGER NOT NULL,
+                    notes TEXT,
+                    image_filename TEXT NULL,
+                    user_id INTEGER NULL,
+
+                    -- NEW COLUMNS FOR DETAILED TRACKING
+                    channel_id INTEGER NULL,
+                    online_platform_id INTEGER NULL,
+                    wholesale_customer_id INTEGER NULL,
+                    return_customer_type TEXT NULL,
+
+                    FOREIGN KEY (wheel_id) REFERENCES wheels(id),
+                    FOREIGN KEY (user_id) REFERENCES users(id),
+                    FOREIGN KEY (channel_id) REFERENCES sales_channels(id),
+                    FOREIGN KEY (online_platform_id) REFERENCES online_platforms(id),
+                    FOREIGN KEY (wholesale_customer_id) REFERENCES wholesale_customers(id)
+                );
+            """)
+
+        # Wheel Fitments Table
+        if is_postgres:
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS wheel_fitments (
+                    id SERIAL PRIMARY KEY,
+                    wheel_id INTEGER NOT NULL,
+                    brand VARCHAR(255) NOT NULL,
+                    model VARCHAR(255) NOT NULL,
+                    year_start INTEGER NOT NULL,
+                    year_end INTEGER NULL,
+                    UNIQUE(wheel_id, brand, model, year_start, year_end),
+                    FOREIGN KEY (wheel_id) REFERENCES wheels(id) ON DELETE CASCADE
+                );
+            """)
+        else:  # SQLite
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS wheel_fitments (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    wheel_id INTEGER NOT NULL,
+                    brand TEXT NOT NULL,
+                    model TEXT NOT NULL,
+                    year_start INTEGER NOT NULL,
+                    year_end INTEGER NULL,
+                    UNIQUE(wheel_id, brand, model, year_start, year_end),
+                    FOREIGN KEY (wheel_id) REFERENCES wheels(id) ON DELETE CASCADE
+                );
+            """)
+
+        # Feedback Table Add HERE
+        if is_postgres:
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS feedback (
+                    id SERIAL PRIMARY KEY,
+                    user_id INTEGER NULL,
+                    feedback_type VARCHAR(50) NOT NULL, -- e.g., 'Bug', 'Suggestion', 'Other'
+                    message TEXT NOT NULL,
+                    status VARCHAR(50) NOT NULL DEFAULT 'ใหม่', -- e.g., 'New', 'In Progress', 'Done'
+                    created_at TIMESTAMP WITH TIME ZONE NOT NULL,
+                    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
+                );
+            """)
+        else:  # SQLite
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS feedback (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id INTEGER NULL,
+                    feedback_type TEXT NOT NULL,
+                    message TEXT NOT NULL,
+                    status TEXT NOT NULL DEFAULT 'ใหม่',
+                    created_at TEXT NOT NULL,
+                    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
+                );
+            """)
+
+        # Barcodes Table for Tires
+        if is_postgres:
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS tire_barcodes (
+                    id SERIAL PRIMARY KEY,
+                    tire_id INTEGER NOT NULL,
+                    barcode_string VARCHAR(255) NOT NULL UNIQUE,
+                    is_primary_barcode BOOLEAN DEFAULT FALSE,
+                    FOREIGN KEY (tire_id) REFERENCES tires(id) ON DELETE CASCADE
+                );
+            """)
+        else:  # SQLite
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS tire_barcodes (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    tire_id INTEGER NOT NULL,
+                    barcode_string TEXT NOT NULL UNIQUE,
+                    is_primary_barcode BOOLEAN DEFAULT 0,
+                    FOREIGN KEY (tire_id) REFERENCES tires(id) ON DELETE CASCADE
+                );
+            """)
+
+        # Barcodes Table for Wheels
+        if is_postgres:
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS wheel_barcodes (
+                    id SERIAL PRIMARY KEY,
+                    wheel_id INTEGER NOT NULL,
+                    barcode_string VARCHAR(255) NOT NULL UNIQUE,
+                    is_primary_barcode BOOLEAN DEFAULT FALSE,
+                    FOREIGN KEY (wheel_id) REFERENCES wheels(id) ON DELETE CASCADE
+                );
+            """)
+        else:  # SQLite
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS wheel_barcodes (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    wheel_id INTEGER NOT NULL,
+                    barcode_string TEXT NOT NULL UNIQUE,
+                    is_primary_barcode BOOLEAN DEFAULT 0,
+                    FOREIGN KEY (wheel_id) REFERENCES wheels(id) ON DELETE CASCADE
+                );
+            """)
+
+        # Automatic deleted Activity LOGS
+        if is_postgres:
+            cursor.execute("""
+            CREATE TABLE IF NOT EXISTS app_settings (
+                key VARCHAR(255) PRIMARY KEY,
+                value TEXT NOT NULL
+            );
+        """)
+        else:  # SQLite
+            cursor.execute("""
+            CREATE TABLE IF NOT EXISTS app_settings (
+                key TEXT PRIMARY KEY,
+                value TEXT NOT NULL
+            );
+        """)
+
+        # --- INSERT DEFAULT DATA (MOVED HERE TO ENSURE COMMIT) ---
+        # เพิ่มข้อมูลเริ่มต้นสำหรับ sales_channels (ถ้ายังไม่มี)
+        try:
+            if is_postgres:
+                cursor.execute(
+                    "INSERT INTO sales_channels (name) VALUES ('หน้าร้าน') ON CONFLICT (name) DO NOTHING;")
+                cursor.execute(
+                    "INSERT INTO sales_channels (name) VALUES ('ออนไลน์') ON CONFLICT (name) DO NOTHING;")
+                cursor.execute(
+                    "INSERT INTO sales_channels (name) VALUES ('ค้าส่ง') ON CONFLICT (name) DO NOTHING;")
+                cursor.execute(
+                    "INSERT INTO sales_channels (name) VALUES ('ซื้อเข้า') ON CONFLICT (name) DO NOTHING;")
+                cursor.execute(
+                    "INSERT INTO sales_channels (name) VALUES ('รับคืน') ON CONFLICT (name) DO NOTHING;")
+            else:
+                cursor.execute(
+                    "INSERT OR IGNORE INTO sales_channels (name) VALUES ('หน้าร้าน');")
+                cursor.execute(
+                    "INSERT OR IGNORE INTO sales_channels (name) VALUES ('ออนไลน์');")
+                cursor.execute(
+                    "INSERT OR IGNORE INTO sales_channels (name) VALUES ('ค้าส่ง');")
+                cursor.execute(
+                    "INSERT OR IGNORE INTO sales_channels (name) VALUES ('ซื้อเข้า');")
+                cursor.execute(
+                    "INSERT OR IGNORE INTO sales_channels (name) VALUES ('รับคืน');")
+        except Exception as e:
+            print(f"Error inserting default sales channels: {e}")
+            conn.rollback()  # Rollback if default channels insertion fails
+            # It's better to just log and continue, as failure here shouldn't stop
+            # table creation
+
+        # เพิ่มข้อมูลเริ่มต้นสำหรับ online_platforms (ถ้ายังไม่มี)
+        try:
+            if is_postgres:
+                cursor.execute(
+                    "INSERT INTO online_platforms (name) VALUES ('Shopee') ON CONFLICT (name) DO NOTHING;")
+                cursor.execute(
+                    "INSERT INTO online_platforms (name) VALUES ('Lazada') ON CONFLICT (name) DO NOTHING;")
+                cursor.execute(
+                    "INSERT INTO online_platforms (name) VALUES ('TikTok') ON CONFLICT (name) DO NOTHING;")
+                cursor.execute(
+                    "INSERT INTO online_platforms (name) VALUES ('Facebook') ON CONFLICT (name) DO NOTHING;")
+                cursor.execute(
+                    "INSERT INTO online_platforms (name) VALUES ('Line@') ON CONFLICT (name) DO NOTHING;")
+            else:
+                cursor.execute(
+                    "INSERT OR IGNORE INTO online_platforms (name) VALUES ('Shopee');")
+                cursor.execute(
+                    "INSERT OR IGNORE INTO online_platforms (name) VALUES ('Lazada');")
+                cursor.execute(
+                    "INSERT OR IGNORE INTO online_platforms (name) VALUES ('TikTok');")
+                cursor.execute(
+                    "INSERT OR IGNORE INTO online_platforms (name) VALUES ('Facebook');")
+                cursor.execute(
+                    "INSERT OR IGNORE INTO online_platforms (name) VALUES ('Line@');")
+        except Exception as e:
+            print(f"Error inserting default online platforms: {e}")
+            conn.rollback()  # Rollback if default platforms insertion fails
+
+        # เพิ่มข้อมูลเริ่มต้นสำหรับ wholesale_customers
+        # (หากต้องการมีลูกค้าตัวอย่าง)
+        try:
+            if is_postgres:
+                cursor.execute(
+                    "INSERT INTO wholesale_customers (name) VALUES ('ร้านตัวอย่าง 1') ON CONFLICT (name) DO NOTHING;")
+                cursor.execute(
+                    "INSERT INTO wholesale_customers (name) VALUES ('ร้านตัวอย่าง 2') ON CONFLICT (name) DO NOTHING;")
+            else:
+                cursor.execute(
+                    "INSERT OR IGNORE INTO wholesale_customers (name) VALUES ('ร้านตัวอย่าง 1');")
+                cursor.execute(
+                    "INSERT OR IGNORE INTO wholesale_customers (name) VALUES ('ร้านตัวอย่าง 2');")
+        except Exception as e:
+            print(f"Error inserting default wholesale customers: {e}")
+            conn.rollback()  # Rollback if default customers insertion fails
+
+        conn.commit()  # <--- IMPORTANT: COMMIT ALL CHANGES AFTER CREATING TABLES AND INSERTING DEFAULTS
+        print("Database schema and default data initialized successfully.")
 
 # --- User Model ---
 
