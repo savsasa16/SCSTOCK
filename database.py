@@ -21,11 +21,12 @@ except ImportError:
 
 def get_bkk_time():
     return datetime.now(BKK_TZ)
-    
+
+
 def convert_to_bkk_time(timestamp_obj):
     if timestamp_obj is None:
         return None
-    
+
     # If the timestamp is a string, parse it first
     if isinstance(timestamp_obj, str):
         try:
@@ -33,24 +34,28 @@ def convert_to_bkk_time(timestamp_obj):
             dt_obj = datetime.fromisoformat(timestamp_obj)
         except ValueError:
             # Fallback for non-isoformat strings (if applicable), or return None
-            # For consistency, it's better to ensure all timestamps are ISO format.
+            # For consistency, it's better to ensure all timestamps are ISO
+            # format.
             return None
     elif isinstance(timestamp_obj, datetime):
         dt_obj = timestamp_obj
     else:
-        return None # Not a datetime object or string
+        return None  # Not a datetime object or string
 
-    # If datetime object is naive (no timezone info), assume it's UTC and localize
+    # If datetime object is naive (no timezone info), assume it's UTC and
+    # localize
     if dt_obj.tzinfo is None:
         dt_obj = pytz.utc.localize(dt_obj)
-    
+
     # Convert to BKK timezone
-    return dt_obj.astimezone(BKK_TZ)    
+    return dt_obj.astimezone(BKK_TZ)
+
 
 def get_db_connection():
-    # ตรวจสอบว่ามี DATABASE_URL Environment Variable หรือไม่ (สำหรับ Production บน Render)
+    # ตรวจสอบว่ามี DATABASE_URL Environment Variable หรือไม่ (สำหรับ
+    # Production บน Render)
     DATABASE_URL = os.environ.get('DATABASE_URL')
-    
+
     if DATABASE_URL and psycopg2:
         # Connect to PostgreSQL
         try:
@@ -61,32 +66,37 @@ def get_db_connection():
                 password=url.password,
                 host=url.hostname,
                 port=url.port,
-                sslmode='require', # For Render, usually requires SSL
-                cursor_factory=DictCursor # <--- เพิ่มบรรทัดนี้เข้ามา
+                sslmode='require',  # For Render, usually requires SSL
+                cursor_factory=DictCursor  # <--- เพิ่มบรรทัดนี้เข้ามา
             )
             print("Connected to PostgreSQL database!")
             return conn
         except Exception as e:
             print(f"Error connecting to PostgreSQL: {e}")
-            raise # Re-raise error if PostgreSQL is expected
+            raise  # Re-raise error if PostgreSQL is expected
     else:
         # Connect to SQLite (for Local Development)
         print("Connected to SQLite database (local development)!")
         conn = sqlite3.connect('inventory.db')
-        conn.row_factory = sqlite3.Row # This allows accessing columns by name (e.g., row['column_name'])
+        # This allows accessing columns by name (e.g., row['column_name'])
+        conn.row_factory = sqlite3.Row
         return conn
 
 # Helper function to get date format for SQL query based on DB type
+
+
 def get_sql_date_format_for_query(column_name):
-    if os.environ.get('DATABASE_URL'): # If running on Render with PostgreSQL
+    if os.environ.get('DATABASE_URL'):  # If running on Render with PostgreSQL
         return f"TO_CHAR({column_name}, 'YYYY-MM-DD')"
-    else: # If running locally with SQLite
+    else:  # If running locally with SQLite
         return f"STRFTIME('%Y-%m-%d', {column_name})"
 
+
 def init_db(conn):
-    cursor = conn.cursor()
-    
-    is_postgres = "psycopg2" in str(type(conn)) # จะคืนค่า True หาก conn เป็น psycopg2 connection
+    with conn.cursor() as cursor:
+
+        # จะคืนค่า True หาก conn เป็น psycopg2 connection
+        is_postgres = "psycopg2" in str(type(conn))
 
     if is_postgres:
         cursor.execute("""
@@ -100,7 +110,7 @@ def init_db(conn):
             FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
             );
         """)
-    else: # SQLite
+    else:  # SQLite
         cursor.execute("""
         CREATE TABLE IF NOT EXISTS activity_logs (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -127,7 +137,7 @@ def init_db(conn):
                 created_at TIMESTAMP WITH TIME ZONE NOT NULL
             );
         """)
-    else: # SQLite
+    else:  # SQLite
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS promotions (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -151,7 +161,7 @@ def init_db(conn):
                 role VARCHAR(50) NOT NULL DEFAULT 'viewer'
             );
         """)
-    else: # SQLite
+    else:  # SQLite
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS users (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -161,7 +171,7 @@ def init_db(conn):
             );
         """)
 
-    # เพิ่มตารางประกาศ Announcment     
+    # เพิ่มตารางประกาศ Announcment
     if is_postgres:
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS announcements (
@@ -172,7 +182,7 @@ def init_db(conn):
                 created_at TIMESTAMP WITH TIME ZONE NOT NULL
             );
         """)
-    else: # SQLite
+    else:  # SQLite
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS announcements (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -198,7 +208,7 @@ def init_db(conn):
                 name TEXT NOT NULL UNIQUE
             );
         """)
-    
+
     # Online Platforms Table (ใหม่)
     if is_postgres:
         cursor.execute("""
@@ -240,7 +250,7 @@ def init_db(conn):
                 model VARCHAR(255) NOT NULL,
                 size VARCHAR(255) NOT NULL,
                 quantity INTEGER DEFAULT 0,
-                cost_sc FLOAT NULL, 
+                cost_sc FLOAT NULL,
                 cost_dunlop FLOAT NULL,
                 cost_online FLOAT NULL,
                 wholesale_price1 FLOAT NULL,
@@ -253,7 +263,7 @@ def init_db(conn):
                 FOREIGN KEY (promotion_id) REFERENCES promotions(id) ON DELETE SET NULL
             );
         """)
-    else: # SQLite
+    else:  # SQLite
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS tires (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -261,7 +271,7 @@ def init_db(conn):
                 model TEXT NOT NULL,
                 size TEXT NOT NULL,
                 quantity INTEGER DEFAULT 0,
-                cost_sc REAL NULL, 
+                cost_sc REAL NULL,
                 cost_dunlop REAL NULL,
                 cost_online REAL NULL,
                 wholesale_price1 REAL NULL,
@@ -288,7 +298,7 @@ def init_db(conn):
                 et INTEGER NULL,
                 color VARCHAR(255) NULL,
                 quantity INTEGER DEFAULT 0,
-                cost FLOAT NULL, 
+                cost FLOAT NULL,
                 cost_online FLOAT NULL,
                 wholesale_price1 FLOAT NULL,
                 wholesale_price2 FLOAT NULL,
@@ -298,7 +308,7 @@ def init_db(conn):
                 UNIQUE(brand, model, diameter, pcd, width, et, color)
             );
         """)
-    else: # SQLite
+    else:  # SQLite
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS wheels (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -310,7 +320,7 @@ def init_db(conn):
                 et INTEGER NULL,
                 color TEXT NULL,
                 quantity INTEGER DEFAULT 0,
-                cost REAL NULL, 
+                cost REAL NULL,
                 cost_online REAL NULL,
                 wholesale_price1 REAL NULL,
                 wholesale_price2 REAL NULL,
@@ -334,7 +344,7 @@ def init_db(conn):
                 notes TEXT,
                 image_filename VARCHAR(500) NULL,
                 user_id INTEGER NULL,
-                
+
                 -- NEW COLUMNS FOR DETAILED TRACKING
                 channel_id INTEGER NULL, -- หน้าร้าน, ออนไลน์, ค้าส่ง, ซื้อเข้า, รับคืน
                 online_platform_id INTEGER NULL, -- Shopee, Lazada, etc. (สำหรับ OUT/RETURN จากออนไลน์)
@@ -348,7 +358,7 @@ def init_db(conn):
                 FOREIGN KEY (wholesale_customer_id) REFERENCES wholesale_customers(id)
             );
         """)
-    else: # SQLite
+    else:  # SQLite
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS tire_movements (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -362,7 +372,7 @@ def init_db(conn):
                 user_id INTEGER NULL,
 
                 -- NEW COLUMNS FOR DETAILED TRACKING
-                channel_id INTEGER NULL, 
+                channel_id INTEGER NULL,
                 online_platform_id INTEGER NULL,
                 wholesale_customer_id INTEGER NULL,
                 return_customer_type TEXT NULL,
@@ -390,7 +400,7 @@ def init_db(conn):
                 user_id INTEGER NULL,
 
                 -- NEW COLUMNS FOR DETAILED TRACKING
-                channel_id INTEGER NULL, 
+                channel_id INTEGER NULL,
                 online_platform_id INTEGER NULL,
                 wholesale_customer_id INTEGER NULL,
                 return_customer_type VARCHAR(50) NULL,
@@ -402,7 +412,7 @@ def init_db(conn):
                 FOREIGN KEY (wholesale_customer_id) REFERENCES wholesale_customers(id)
             );
         """)
-    else: # SQLite
+    else:  # SQLite
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS wheel_movements (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -416,7 +426,7 @@ def init_db(conn):
                 user_id INTEGER NULL,
 
                 -- NEW COLUMNS FOR DETAILED TRACKING
-                channel_id INTEGER NULL, 
+                channel_id INTEGER NULL,
                 online_platform_id INTEGER NULL,
                 wholesale_customer_id INTEGER NULL,
                 return_customer_type TEXT NULL,
@@ -443,7 +453,7 @@ def init_db(conn):
                 FOREIGN KEY (wheel_id) REFERENCES wheels(id) ON DELETE CASCADE
             );
         """)
-    else: # SQLite
+    else:  # SQLite
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS wheel_fitments (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -470,7 +480,7 @@ def init_db(conn):
                 FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
             );
         """)
-    else: # SQLite
+    else:  # SQLite
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS feedback (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -481,7 +491,7 @@ def init_db(conn):
                 created_at TEXT NOT NULL,
                 FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
             );
-        """)    
+        """)
 
     # Barcodes Table for Tires
     if is_postgres:
@@ -494,7 +504,7 @@ def init_db(conn):
                 FOREIGN KEY (tire_id) REFERENCES tires(id) ON DELETE CASCADE
             );
         """)
-    else: # SQLite
+    else:  # SQLite
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS tire_barcodes (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -516,7 +526,7 @@ def init_db(conn):
                 FOREIGN KEY (wheel_id) REFERENCES wheels(id) ON DELETE CASCADE
             );
         """)
-    else: # SQLite
+    else:  # SQLite
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS wheel_barcodes (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -529,75 +539,102 @@ def init_db(conn):
 
     # Automatic deleted Activity LOGS
     if is_postgres:
-            cursor.execute("""
+        cursor.execute("""
         CREATE TABLE IF NOT EXISTS app_settings (
             key VARCHAR(255) PRIMARY KEY,
             value TEXT NOT NULL
         );
     """)
-    else: # SQLite
-            cursor.execute("""
+    else:  # SQLite
+        cursor.execute("""
         CREATE TABLE IF NOT EXISTS app_settings (
             key TEXT PRIMARY KEY,
             value TEXT NOT NULL
         );
     """)
-    
+
     # --- INSERT DEFAULT DATA (MOVED HERE TO ENSURE COMMIT) ---
     # เพิ่มข้อมูลเริ่มต้นสำหรับ sales_channels (ถ้ายังไม่มี)
     try:
         if is_postgres:
-            cursor.execute("INSERT INTO sales_channels (name) VALUES ('หน้าร้าน') ON CONFLICT (name) DO NOTHING;")
-            cursor.execute("INSERT INTO sales_channels (name) VALUES ('ออนไลน์') ON CONFLICT (name) DO NOTHING;")
-            cursor.execute("INSERT INTO sales_channels (name) VALUES ('ค้าส่ง') ON CONFLICT (name) DO NOTHING;")
-            cursor.execute("INSERT INTO sales_channels (name) VALUES ('ซื้อเข้า') ON CONFLICT (name) DO NOTHING;")
-            cursor.execute("INSERT INTO sales_channels (name) VALUES ('รับคืน') ON CONFLICT (name) DO NOTHING;")
+            cursor.execute(
+                "INSERT INTO sales_channels (name) VALUES ('หน้าร้าน') ON CONFLICT (name) DO NOTHING;")
+            cursor.execute(
+                "INSERT INTO sales_channels (name) VALUES ('ออนไลน์') ON CONFLICT (name) DO NOTHING;")
+            cursor.execute(
+                "INSERT INTO sales_channels (name) VALUES ('ค้าส่ง') ON CONFLICT (name) DO NOTHING;")
+            cursor.execute(
+                "INSERT INTO sales_channels (name) VALUES ('ซื้อเข้า') ON CONFLICT (name) DO NOTHING;")
+            cursor.execute(
+                "INSERT INTO sales_channels (name) VALUES ('รับคืน') ON CONFLICT (name) DO NOTHING;")
         else:
-            cursor.execute("INSERT OR IGNORE INTO sales_channels (name) VALUES ('หน้าร้าน');")
-            cursor.execute("INSERT OR IGNORE INTO sales_channels (name) VALUES ('ออนไลน์');")
-            cursor.execute("INSERT OR IGNORE INTO sales_channels (name) VALUES ('ค้าส่ง');")
-            cursor.execute("INSERT OR IGNORE INTO sales_channels (name) VALUES ('ซื้อเข้า');")
-            cursor.execute("INSERT OR IGNORE INTO sales_channels (name) VALUES ('รับคืน');")
+            cursor.execute(
+                "INSERT OR IGNORE INTO sales_channels (name) VALUES ('หน้าร้าน');")
+            cursor.execute(
+                "INSERT OR IGNORE INTO sales_channels (name) VALUES ('ออนไลน์');")
+            cursor.execute(
+                "INSERT OR IGNORE INTO sales_channels (name) VALUES ('ค้าส่ง');")
+            cursor.execute(
+                "INSERT OR IGNORE INTO sales_channels (name) VALUES ('ซื้อเข้า');")
+            cursor.execute(
+                "INSERT OR IGNORE INTO sales_channels (name) VALUES ('รับคืน');")
     except Exception as e:
         print(f"Error inserting default sales channels: {e}")
-        conn.rollback() # Rollback if default channels insertion fails
-        # It's better to just log and continue, as failure here shouldn't stop table creation
-    
+        conn.rollback()  # Rollback if default channels insertion fails
+        # It's better to just log and continue, as failure here shouldn't stop
+        # table creation
+
     # เพิ่มข้อมูลเริ่มต้นสำหรับ online_platforms (ถ้ายังไม่มี)
     try:
         if is_postgres:
-            cursor.execute("INSERT INTO online_platforms (name) VALUES ('Shopee') ON CONFLICT (name) DO NOTHING;")
-            cursor.execute("INSERT INTO online_platforms (name) VALUES ('Lazada') ON CONFLICT (name) DO NOTHING;")
-            cursor.execute("INSERT INTO online_platforms (name) VALUES ('TikTok') ON CONFLICT (name) DO NOTHING;")
-            cursor.execute("INSERT INTO online_platforms (name) VALUES ('Facebook') ON CONFLICT (name) DO NOTHING;")
-            cursor.execute("INSERT INTO online_platforms (name) VALUES ('Line@') ON CONFLICT (name) DO NOTHING;")
+            cursor.execute(
+                "INSERT INTO online_platforms (name) VALUES ('Shopee') ON CONFLICT (name) DO NOTHING;")
+            cursor.execute(
+                "INSERT INTO online_platforms (name) VALUES ('Lazada') ON CONFLICT (name) DO NOTHING;")
+            cursor.execute(
+                "INSERT INTO online_platforms (name) VALUES ('TikTok') ON CONFLICT (name) DO NOTHING;")
+            cursor.execute(
+                "INSERT INTO online_platforms (name) VALUES ('Facebook') ON CONFLICT (name) DO NOTHING;")
+            cursor.execute(
+                "INSERT INTO online_platforms (name) VALUES ('Line@') ON CONFLICT (name) DO NOTHING;")
         else:
-            cursor.execute("INSERT OR IGNORE INTO online_platforms (name) VALUES ('Shopee');")
-            cursor.execute("INSERT OR IGNORE INTO online_platforms (name) VALUES ('Lazada');")
-            cursor.execute("INSERT OR IGNORE INTO online_platforms (name) VALUES ('TikTok');")
-            cursor.execute("INSERT OR IGNORE INTO online_platforms (name) VALUES ('Facebook');")
-            cursor.execute("INSERT OR IGNORE INTO online_platforms (name) VALUES ('Line@');")
+            cursor.execute(
+                "INSERT OR IGNORE INTO online_platforms (name) VALUES ('Shopee');")
+            cursor.execute(
+                "INSERT OR IGNORE INTO online_platforms (name) VALUES ('Lazada');")
+            cursor.execute(
+                "INSERT OR IGNORE INTO online_platforms (name) VALUES ('TikTok');")
+            cursor.execute(
+                "INSERT OR IGNORE INTO online_platforms (name) VALUES ('Facebook');")
+            cursor.execute(
+                "INSERT OR IGNORE INTO online_platforms (name) VALUES ('Line@');")
     except Exception as e:
         print(f"Error inserting default online platforms: {e}")
-        conn.rollback() # Rollback if default platforms insertion fails
-        
-    # เพิ่มข้อมูลเริ่มต้นสำหรับ wholesale_customers (หากต้องการมีลูกค้าตัวอย่าง)
+        conn.rollback()  # Rollback if default platforms insertion fails
+
+    # เพิ่มข้อมูลเริ่มต้นสำหรับ wholesale_customers
+    # (หากต้องการมีลูกค้าตัวอย่าง)
     try:
         if is_postgres:
-            cursor.execute("INSERT INTO wholesale_customers (name) VALUES ('ร้านตัวอย่าง 1') ON CONFLICT (name) DO NOTHING;")
-            cursor.execute("INSERT INTO wholesale_customers (name) VALUES ('ร้านตัวอย่าง 2') ON CONFLICT (name) DO NOTHING;")
+            cursor.execute(
+                "INSERT INTO wholesale_customers (name) VALUES ('ร้านตัวอย่าง 1') ON CONFLICT (name) DO NOTHING;")
+            cursor.execute(
+                "INSERT INTO wholesale_customers (name) VALUES ('ร้านตัวอย่าง 2') ON CONFLICT (name) DO NOTHING;")
         else:
-            cursor.execute("INSERT OR IGNORE INTO wholesale_customers (name) VALUES ('ร้านตัวอย่าง 1');")
-            cursor.execute("INSERT OR IGNORE INTO wholesale_customers (name) VALUES ('ร้านตัวอย่าง 2');")
+            cursor.execute(
+                "INSERT OR IGNORE INTO wholesale_customers (name) VALUES ('ร้านตัวอย่าง 1');")
+            cursor.execute(
+                "INSERT OR IGNORE INTO wholesale_customers (name) VALUES ('ร้านตัวอย่าง 2');")
     except Exception as e:
         print(f"Error inserting default wholesale customers: {e}")
-        conn.rollback() # Rollback if default customers insertion fails
+        conn.rollback()  # Rollback if default customers insertion fails
 
-
-    conn.commit() # <--- IMPORTANT: COMMIT ALL CHANGES AFTER CREATING TABLES AND INSERTING DEFAULTS
+    conn.commit()  # <--- IMPORTANT: COMMIT ALL CHANGES AFTER CREATING TABLES AND INSERTING DEFAULTS
     print("Database schema and default data initialized successfully.")
 
 # --- User Model ---
+
+
 class User:
     def __init__(self, id, username, password, role):
         self.id = id
@@ -607,32 +644,44 @@ class User:
 
     @staticmethod
     def get(conn, user_id):
-        cursor = conn.cursor()
-        if "psycopg2" in str(type(conn)):
-            cursor.execute("SELECT id, username, password, role FROM users WHERE id = %s", (user_id,))
-        else:
-            cursor.execute("SELECT id, username, password, role FROM users WHERE id = ?", (user_id,))
+        with conn.cursor() as cursor:
+            if "psycopg2" in str(type(conn)):
+                cursor.execute(
+                    "SELECT id, username, password, role FROM users WHERE id = %s", (user_id,))
+            else:
+                cursor.execute(
+                    "SELECT id, username, password, role FROM users WHERE id = ?", (user_id,))
         user_data = cursor.fetchone()
         if user_data:
             if isinstance(user_data, sqlite3.Row):
                 user_data = dict(user_data)
-            return User(user_data['id'], user_data['username'], user_data['password'], user_data['role'])
+            return User(
+                user_data['id'],
+                user_data['username'],
+                user_data['password'],
+                user_data['role'])
         return None
 
     @staticmethod
     def get_by_username(conn, username):
-        cursor = conn.cursor()
-        if "psycopg2" in str(type(conn)):
-            cursor.execute("SELECT id, username, password, role FROM users WHERE username = %s", (username,))
-        else:
-            cursor.execute("SELECT id, username, password, role FROM users WHERE username = ?", (username,))
+        with conn.cursor() as cursor:
+            if "psycopg2" in str(type(conn)):
+                cursor.execute(
+                    "SELECT id, username, password, role FROM users WHERE username = %s", (username,))
+            else:
+                cursor.execute(
+                    "SELECT id, username, password, role FROM users WHERE username = ?", (username,))
         user_data = cursor.fetchone()
         if user_data:
             if isinstance(user_data, sqlite3.Row):
                 user_data = dict(user_data)
-            return User(user_data['id'], user_data['username'], user_data['password'], user_data['role'])
+            return User(
+                user_data['id'],
+                user_data['username'],
+                user_data['password'],
+                user_data['role'])
         return None
-    
+
     def is_active(self):
         return True
 
@@ -655,40 +704,55 @@ class User:
         return self.role in ['admin', 'editor', 'viewer']
 
 # --- User Management Functions ---
+
+
 def add_user(conn, username, password, role='viewer'):
     hashed_password = generate_password_hash(password)
-    cursor = conn.cursor() 
-    try:
-        if "psycopg2" in str(type(conn)):
-            cursor.execute("INSERT INTO users (username, password, role) VALUES (%s, %s, %s) RETURNING id", (username, hashed_password, role))
-            user_id = cursor.fetchone()['id']
-        else: # สำหรับ SQLite
-            cursor.execute("INSERT INTO users (username, password, role) VALUES (?, ?, ?)", (username, hashed_password, role))
-            user_id = cursor.lastrowid
-        conn.commit()
-        return user_id
-    except (sqlite3.IntegrityError, Exception) as e:
-        if "UNIQUE constraint failed" in str(e) or "duplicate key value violates unique constraint" in str(e):
-            return None
-        else:
-            raise
+    with conn.cursor() as cursor:
+        try:
+            if "psycopg2" in str(type(conn)):
+                cursor.execute(
+                    "INSERT INTO users (username, password, role) VALUES (%s, %s, %s) RETURNING id",
+                    (username,
+                     hashed_password,
+                     role))
+                user_id = cursor.fetchone()['id']
+            else:  # สำหรับ SQLite
+                cursor.execute(
+                    "INSERT INTO users (username, password, role) VALUES (?, ?, ?)",
+                    (username,
+                     hashed_password,
+                     role))
+                user_id = cursor.lastrowid
+                conn.commit()
+                return user_id
+        except (sqlite3.IntegrityError, Exception) as e:
+            if "UNIQUE constraint failed" in str(
+                    e) or "duplicate key value violates unique constraint" in str(e):
+                return None
+            else:
+                raise
+
 
 def get_all_users(conn):
     if "psycopg2" in str(type(conn)):
-        cursor = conn.cursor() 
-        cursor.execute("SELECT id, username, role FROM users")
-        users = cursor.fetchall()
-    else: # สำหรับ SQLite
+        with conn.cursor() as cursor:
+            cursor.execute("SELECT id, username, role FROM users")
+            users = cursor.fetchall()
+    else:  # สำหรับ SQLite
         users = conn.execute("SELECT id, username, role FROM users").fetchall()
     return users
+
 
 def update_user_role(conn, user_id, new_role):
     try:
         if "psycopg2" in str(type(conn)):
-            cursor = conn.cursor() 
-            cursor.execute("UPDATE users SET role = %s WHERE id = %s", (new_role, user_id))
-        else: # สำหรับ SQLite
-            conn.execute("UPDATE users SET role = ? WHERE id = ?", (new_role, user_id))
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    "UPDATE users SET role = %s WHERE id = %s", (new_role, user_id))
+        else:  # สำหรับ SQLite
+            conn.execute("UPDATE users SET role = ? WHERE id = ?",
+                         (new_role, user_id))
         conn.commit()
         return True
     except Exception as e:
@@ -696,138 +760,178 @@ def update_user_role(conn, user_id, new_role):
         print(f"Error updating user role: {e}")
         return False
 
+
 def delete_user(conn, user_id):
-    cursor = conn.cursor()
-    if "psycopg2" in str(type(conn)):
-        cursor.execute("DELETE FROM users WHERE id = %s", (user_id,))
-    else:
-        cursor.execute("DELETE FROM users WHERE id = ?", (user_id,))
-    conn.commit()
+    with conn.cursor() as cursor:
+        if "psycopg2" in str(type(conn)):
+            cursor.execute("DELETE FROM users WHERE id = %s", (user_id,))
+        else:
+            cursor.execute("DELETE FROM users WHERE id = ?", (user_id,))
+        conn.commit()
 
 # --- Sales Channel, Online Platform, Wholesale Customer Functions (ใหม่) ---
+
+
 def get_sales_channel_id(conn, name):
-    cursor = conn.cursor()
-    if "psycopg2" in str(type(conn)):
-        cursor.execute("SELECT id FROM sales_channels WHERE name = %s", (name,))
-    else:
-        cursor.execute("SELECT id FROM sales_channels WHERE name = ?", (name,))
-    result = cursor.fetchone()
+    with conn.cursor() as cursor:
+        if "psycopg2" in str(type(conn)):
+            cursor.execute(
+                "SELECT id FROM sales_channels WHERE name = %s", (name,))
+        else:
+            cursor.execute(
+                "SELECT id FROM sales_channels WHERE name = ?", (name,))
+            result = cursor.fetchone()
     # Handle DictRow for psycopg2
-    if result and isinstance(result, dict):
-        return result['id']
-    elif result and hasattr(result, '__getitem__'): # For SQLite Row
-        return result['id']
-    return None
+        if result and isinstance(result, dict):
+            return result['id']
+        elif result and hasattr(result, '__getitem__'):  # For SQLite Row
+            return result['id']
+            return None
+
 
 def get_sales_channel_name(conn, channel_id):
-    cursor = conn.cursor()
-    if "psycopg2" in str(type(conn)):
-        cursor.execute("SELECT name FROM sales_channels WHERE id = %s", (channel_id,))
-    else:
-        cursor.execute("SELECT name FROM sales_channels WHERE id = ?", (channel_id,))
-    result = cursor.fetchone()
-    if result and isinstance(result, dict):
-        return result['name']
-    elif result and hasattr(result, '__getitem__'):
-        return result['name']
-    return None
+    with conn.cursor() as cursor:
+        if "psycopg2" in str(type(conn)):
+            cursor.execute(
+                "SELECT name FROM sales_channels WHERE id = %s", (channel_id,))
+        else:
+            cursor.execute(
+                "SELECT name FROM sales_channels WHERE id = ?", (channel_id,))
+            result = cursor.fetchone()
+        if result and isinstance(result, dict):
+            return result['name']
+        elif result and hasattr(result, '__getitem__'):
+            return result['name']
+            return None
+
 
 def get_all_sales_channels(conn):
-    cursor = conn.cursor()
-    if "psycopg2" in str(type(conn)):
-        cursor.execute("SELECT id, name FROM sales_channels ORDER BY name")
-    else:
-        cursor.execute("SELECT id, name FROM sales_channels ORDER BY name")
+    with conn.cursor() as cursor:
+        if "psycopg2" in str(type(conn)):
+            cursor.execute("SELECT id, name FROM sales_channels ORDER BY name")
+        else:
+            cursor.execute("SELECT id, name FROM sales_channels ORDER BY name")
     # Ensure all rows are converted to dict for consistency
-    return [dict(row) if not isinstance(row, dict) else row for row in cursor.fetchall()]
+        return [dict(row) if not isinstance(row, dict)
+                else row for row in cursor.fetchall()]
+
 
 def add_online_platform(conn, name):
-    cursor = conn.cursor()
-    try:
-        if "psycopg2" in str(type(conn)):
-            cursor.execute("INSERT INTO online_platforms (name) VALUES (%s) ON CONFLICT (name) DO NOTHING RETURNING id;", (name,))
-            platform_id = cursor.fetchone()
-            conn.commit() # Commit here for RETURNING clause and changes
-            return platform_id['id'] if platform_id else get_online_platform_id(conn, name)
-        else:
-            cursor.execute("INSERT OR IGNORE INTO online_platforms (name) VALUES (?)", (name,))
-            conn.commit() # Commit here for SQLite's IGNORE
-            return cursor.lastrowid if cursor.lastrowid else get_online_platform_id(conn, name)
-    except Exception as e:
-        conn.rollback()
-        print(f"Error adding online platform: {e}")
-        return None
+    with conn.cursor() as cursor:
+        try:
+            if "psycopg2" in str(type(conn)):
+                cursor.execute(
+                    "INSERT INTO online_platforms (name) VALUES (%s) ON CONFLICT (name) DO NOTHING RETURNING id;",
+                    (name,
+                     ))
+                platform_id = cursor.fetchone()
+                conn.commit()  # Commit here for RETURNING clause and changes
+                return platform_id['id'] if platform_id else get_online_platform_id(
+                    conn, name)
+            else:
+                cursor.execute(
+                    "INSERT OR IGNORE INTO online_platforms (name) VALUES (?)", (name,))
+                conn.commit()  # Commit here for SQLite's IGNORE
+                return cursor.lastrowid if cursor.lastrowid else get_online_platform_id(
+                    conn, name)
+        except Exception as e:
+            conn.rollback()
+            print(f"Error adding online platform: {e}")
+            return None
+
 
 def get_online_platform_id(conn, name):
-    cursor = conn.cursor()
-    if "psycopg2" in str(type(conn)):
-        cursor.execute("SELECT id FROM online_platforms WHERE name = %s", (name,))
-    else:
-        cursor.execute("SELECT id FROM online_platforms WHERE name = ?", (name,))
-    result = cursor.fetchone()
-    if result and isinstance(result, dict):
-        return result['id']
-    elif result and hasattr(result, '__getitem__'):
-        return result['id']
-    return None
+    with conn.cursor() as cursor:
+        if "psycopg2" in str(type(conn)):
+            cursor.execute(
+                "SELECT id FROM online_platforms WHERE name = %s", (name,))
+        else:
+            cursor.execute(
+                "SELECT id FROM online_platforms WHERE name = ?", (name,))
+            result = cursor.fetchone()
+        if result and isinstance(result, dict):
+            return result['id']
+        elif result and hasattr(result, '__getitem__'):
+            return result['id']
+            return None
+
 
 def get_online_platform_name(conn, platform_id):
-    cursor = conn.cursor()
-    if "psycopg2" in str(type(conn)):
-        cursor.execute("SELECT name FROM online_platforms WHERE id = %s", (platform_id,))
-    else:
-        cursor.execute("SELECT name FROM online_platforms WHERE id = ?", (platform_id,))
-    result = cursor.fetchone()
-    if result and isinstance(result, dict):
-        return result['name']
-    elif result and hasattr(result, '__getitem__'):
-        return result['name']
-    return None
+    with conn.cursor() as cursor:
+        if "psycopg2" in str(type(conn)):
+            cursor.execute(
+                "SELECT name FROM online_platforms WHERE id = %s", (platform_id,))
+        else:
+            cursor.execute(
+                "SELECT name FROM online_platforms WHERE id = ?", (platform_id,))
+            result = cursor.fetchone()
+        if result and isinstance(result, dict):
+            return result['name']
+        elif result and hasattr(result, '__getitem__'):
+            return result['name']
+            return None
+
 
 def get_all_online_platforms(conn):
-    cursor = conn.cursor()
-    if "psycopg2" in str(type(conn)):
-        cursor.execute("SELECT id, name FROM online_platforms ORDER BY name")
-    else:
-        cursor.execute("SELECT id, name FROM online_platforms ORDER BY name")
-    return [dict(row) if not isinstance(row, dict) else row for row in cursor.fetchall()]
+    with conn.cursor() as cursor:
+        if "psycopg2" in str(type(conn)):
+            cursor.execute(
+                "SELECT id, name FROM online_platforms ORDER BY name")
+        else:
+            cursor.execute(
+                "SELECT id, name FROM online_platforms ORDER BY name")
+            return [dict(row) if not isinstance(row, dict)
+                    else row for row in cursor.fetchall()]
+
 
 def add_wholesale_customer(conn, name):
-    cursor = conn.cursor()
-    try:
-        if "psycopg2" in str(type(conn)):
-            cursor.execute("INSERT INTO wholesale_customers (name) VALUES (%s) ON CONFLICT (name) DO NOTHING RETURNING id;", (name,))
-            customer_id = cursor.fetchone()
-            conn.commit() # Commit here for RETURNING clause and changes
-            return customer_id['id'] if customer_id else get_wholesale_customer_id(conn, name)
-        else:
-            cursor.execute("INSERT OR IGNORE INTO wholesale_customers (name) VALUES (?)", (name,))
-            conn.commit() # Commit here for SQLite's IGNORE
-            return cursor.lastrowid if cursor.lastrowid else get_wholesale_customer_id(conn, name)
-    except Exception as e:
-        conn.rollback()
-        print(f"Error adding wholesale customer: {e}")
-        return None
+    with conn.cursor() as cursor:
+        try:
+            if "psycopg2" in str(type(conn)):
+                cursor.execute(
+                    "INSERT INTO wholesale_customers (name) VALUES (%s) ON CONFLICT (name) DO NOTHING RETURNING id;",
+                    (name,
+                     ))
+                customer_id = cursor.fetchone()
+                conn.commit()  # Commit here for RETURNING clause and changes
+                return customer_id['id'] if customer_id else get_wholesale_customer_id(
+                    conn, name)
+            else:
+                cursor.execute(
+                    "INSERT OR IGNORE INTO wholesale_customers (name) VALUES (?)", (name,))
+                conn.commit()  # Commit here for SQLite's IGNORE
+                return cursor.lastrowid if cursor.lastrowid else get_wholesale_customer_id(
+                    conn, name)
+        except Exception as e:
+            conn.rollback()
+            print(f"Error adding wholesale customer: {e}")
+            return None
+
 
 def get_wholesale_customer_id(conn, name):
-    cursor = conn.cursor()
-    if "psycopg2" in str(type(conn)):
-        cursor.execute("SELECT id FROM wholesale_customers WHERE name = %s", (name,))
-    else:
-        cursor.execute("SELECT id FROM wholesale_customers WHERE name = ?", (name,))
+    with conn.cursor() as cursor:
+        if "psycopg2" in str(type(conn)):
+            cursor.execute(
+                "SELECT id FROM wholesale_customers WHERE name = %s", (name,))
+        else:
+            cursor.execute(
+                "SELECT id FROM wholesale_customers WHERE name = ?", (name,))
     result = cursor.fetchone()
     if result and isinstance(result, dict):
         return result['id']
     elif result and hasattr(result, '__getitem__'):
         return result['id']
     return None
+
 
 def get_wholesale_customer_name(conn, customer_id):
-    cursor = conn.cursor()
-    if "psycopg2" in str(type(conn)):
-        cursor.execute("SELECT name FROM wholesale_customers WHERE id = %s", (customer_id,))
-    else:
-        cursor.execute("SELECT name FROM wholesale_customers WHERE id = ?", (customer_id,))
+    with conn.cursor() as cursor:
+        if "psycopg2" in str(type(conn)):
+            cursor.execute(
+                "SELECT name FROM wholesale_customers WHERE id = %s", (customer_id,))
+        else:
+            cursor.execute(
+                "SELECT name FROM wholesale_customers WHERE id = ?", (customer_id,))
     result = cursor.fetchone()
     if result and isinstance(result, dict):
         return result['name']
@@ -835,26 +939,32 @@ def get_wholesale_customer_name(conn, customer_id):
         return result['name']
     return None
 
+
 def get_all_wholesale_customers(conn):
-    cursor = conn.cursor()
-    if "psycopg2" in str(type(conn)):
-        cursor.execute("SELECT id, name FROM wholesale_customers ORDER BY name")
-    else:
-        cursor.execute("SELECT id, name FROM wholesale_customers ORDER BY name")
-    return [dict(row) if not isinstance(row, dict) else row for row in cursor.fetchall()]
+    with conn.cursor() as cursor:
+        if "psycopg2" in str(type(conn)):
+            cursor.execute(
+                "SELECT id, name FROM wholesale_customers ORDER BY name")
+        else:
+            cursor.execute(
+                "SELECT id, name FROM wholesale_customers ORDER BY name")
+    return [dict(row) if not isinstance(row, dict)
+            else row for row in cursor.fetchall()]
 
 # --- Promotion Functions ---
+
+
 def add_promotion(conn, name, promo_type, value1, value2, is_active):
     created_at = get_bkk_time().isoformat()
-    cursor = conn.cursor()
-    if "psycopg2" in str(type(conn)):
-        cursor.execute("""
+    with conn.cursor() as cursor:
+        if "psycopg2" in str(type(conn)):
+            cursor.execute("""
             INSERT INTO promotions (name, type, value1, value2, is_active, created_at)
             VALUES (%s, %s, %s, %s, %s, %s) RETURNING id
         """, (name, promo_type, value1, value2, is_active, created_at))
-        promo_id = cursor.fetchone()['id']
-    else:
-        cursor.execute("""
+            promo_id = cursor.fetchone()['id']
+        else:
+            cursor.execute("""
             INSERT INTO promotions (name, type, value1, value2, is_active, created_at)
             VALUES (?, ?, ?, ?, ?, ?)
         """, (name, promo_type, value1, value2, is_active, created_at))
@@ -862,27 +972,31 @@ def add_promotion(conn, name, promo_type, value1, value2, is_active):
     conn.commit()
     return promo_id
 
+
 def get_promotion(conn, promo_id):
-    cursor = conn.cursor()
-    if "psycopg2" in str(type(conn)):
-        cursor.execute("SELECT * FROM promotions WHERE id = %s", (promo_id,))
-    else:
-        cursor.execute("SELECT * FROM promotions WHERE id = ?", (promo_id,))
+    with conn.cursor() as cursor:
+        if "psycopg2" in str(type(conn)):
+            cursor.execute(
+                "SELECT * FROM promotions WHERE id = %s", (promo_id,))
+        else:
+            cursor.execute(
+                "SELECT * FROM promotions WHERE id = ?", (promo_id,))
     promo_data = cursor.fetchone()
     if isinstance(promo_data, sqlite3.Row):
         promo_data = dict(promo_data)
     return promo_data
 
+
 def get_all_promotions(conn, include_inactive=False):
-    cursor = conn.cursor()
-    if "psycopg2" in str(type(conn)):
-        query = "SELECT id, name, type, value1, value2, is_active, created_at FROM promotions"
+    with conn.cursor() as cursor:
+        if "psycopg2" in str(type(conn)):
+            query = "SELECT id, name, type, value1, value2, is_active, created_at FROM promotions"
         if not include_inactive:
             query += " WHERE is_active = TRUE AND is_deleted = FALSE"
-        query += " ORDER BY created_at DESC"
-        cursor.execute(query)
-    else: # SQLite
-        query = "SELECT id, name, type, value1, value2, is_active, created_at FROM promotions"
+            query += " ORDER BY created_at DESC"
+            cursor.execute(query)
+        else:  # SQLite
+            query = "SELECT id, name, type, value1, value2, is_active, created_at FROM promotions"
         if not include_inactive:
             query += " WHERE is_active = 1 AND is_deleted = 0"
         query += " ORDER BY created_at DESC"
@@ -890,31 +1004,44 @@ def get_all_promotions(conn, include_inactive=False):
 
     promotions = cursor.fetchall()
 
-    # แก้ไขส่วนนี้: Convert created_at to datetime objects for SQLite using fromisoformat
+    # แก้ไขส่วนนี้: Convert created_at to datetime objects for SQLite using
+    # fromisoformat
     if "sqlite3" in str(type(conn)):
-        bkk_tz = pytz.timezone('Asia/Bangkok') # Ensure BKK_TZ is defined or imported
+        # Ensure BKK_TZ is defined or imported
+        bkk_tz = pytz.timezone('Asia/Bangkok')
         converted_promotions = []
         for promo in promotions:
-            promo_dict = dict(promo) # Convert sqlite3.Row to a dictionary
+            promo_dict = dict(promo)  # Convert sqlite3.Row to a dictionary
             if promo_dict['created_at']:
                 try:
-                    # Use fromisoformat for ISO 8601 strings (including timezone offset)
+                    # Use fromisoformat for ISO 8601 strings (including
+                    # timezone offset)
                     dt_obj = datetime.fromisoformat(promo_dict['created_at'])
                     # Ensure it's in BKK timezone (it might already be timezone-aware from fromisoformat)
                     # and convert if necessary
                     promo_dict['created_at'] = dt_obj.astimezone(bkk_tz)
                 except ValueError:
-                    print(f"Warning: Could not parse created_at string with fromisoformat: {promo_dict['created_at']}")
-                    promo_dict['created_at'] = None # Set to None if parsing fails
+                    print(
+                        f"Warning: Could not parse created_at string with fromisoformat: {promo_dict['created_at']}")
+                    # Set to None if parsing fails
+                    promo_dict['created_at'] = None
             converted_promotions.append(promo_dict)
         return converted_promotions
 
     return promotions
 
-def update_promotion(conn, promo_id, name, promo_type, value1, value2, is_active):
-    cursor = conn.cursor()
-    if "psycopg2" in str(type(conn)):
-        cursor.execute("""
+
+def update_promotion(
+        conn,
+        promo_id,
+        name,
+        promo_type,
+        value1,
+        value2,
+        is_active):
+    with conn.cursor() as cursor:
+        if "psycopg2" in str(type(conn)):
+            cursor.execute("""
             UPDATE promotions SET
                 name = %s,
                 type = %s,
@@ -923,8 +1050,8 @@ def update_promotion(conn, promo_id, name, promo_type, value1, value2, is_active
                 is_active = %s
             WHERE id = %s
         """, (name, promo_type, value1, value2, is_active, promo_id))
-    else:
-        cursor.execute("""
+        else:
+            cursor.execute("""
             UPDATE promotions SET
                 name = ?,
                 type = ?,
@@ -935,20 +1062,39 @@ def update_promotion(conn, promo_id, name, promo_type, value1, value2, is_active
         """, (name, promo_type, value1, value2, is_active, promo_id))
     conn.commit()
 
+
 def delete_promotion(conn, promo_id):
-    cursor = conn.cursor()
-    if "psycopg2" in str(type(conn)):
-        cursor.execute("UPDATE tires SET promotion_id = NULL WHERE promotion_id = %s", (promo_id,))
-        cursor.execute("DELETE FROM promotions WHERE id = %s", (promo_id,))
-    else:
-        cursor.execute("UPDATE tires SET promotion_id = NULL WHERE promotion_id = ?", (promo_id,))
-        cursor.execute("DELETE FROM promotions WHERE id = ?", (promo_id,))
-    conn.commit()
+    with conn.cursor() as cursor:
+        if "psycopg2" in str(type(conn)):
+            cursor.execute(
+                "UPDATE tires SET promotion_id = NULL WHERE promotion_id = %s", (promo_id,))
+            cursor.execute("DELETE FROM promotions WHERE id = %s", (promo_id,))
+        else:
+            cursor.execute(
+                "UPDATE tires SET promotion_id = NULL WHERE promotion_id = ?", (promo_id,))
+            cursor.execute("DELETE FROM promotions WHERE id = ?", (promo_id,))
+        conn.commit()
 
 # --- Tire Functions ---
-def add_tire(conn, brand, model, size, quantity, cost_sc, cost_dunlop, cost_online, wholesale_price1, wholesale_price2, price_per_item, promotion_id, year_of_manufacture, user_id=None):
-    cursor = conn.cursor()
-    is_postgres = "psycopg2" in str(type(conn))
+
+
+def add_tire(
+        conn,
+        brand,
+        model,
+        size,
+        quantity,
+        cost_sc,
+        cost_dunlop,
+        cost_online,
+        wholesale_price1,
+        wholesale_price2,
+        price_per_item,
+        promotion_id,
+        year_of_manufacture,
+        user_id=None):
+    with conn.cursor() as cursor:
+        is_postgres = "psycopg2" in str(type(conn))
 
     if is_postgres:
         cursor.execute("""
@@ -962,34 +1108,44 @@ def add_tire(conn, brand, model, size, quantity, cost_sc, cost_dunlop, cost_onli
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
         """, (brand, model, size, quantity, cost_sc, cost_dunlop, cost_online, wholesale_price1, wholesale_price2, price_per_item, promotion_id, year_of_manufacture))
         tire_id = cursor.lastrowid
-    
+
     # เมื่อเพิ่มยางใหม่ ให้บันทึกการเคลื่อนไหวเป็น "ซื้อเข้า"
     buy_in_channel_id = get_sales_channel_id(conn, 'ซื้อเข้า')
-    add_tire_movement(conn, tire_id, 'IN', quantity, quantity, 'เพิ่มยางใหม่เข้าสต็อก (ซื้อเข้า)', None, user_id=user_id, channel_id=buy_in_channel_id)
-    
+    add_tire_movement(
+        conn,
+        tire_id,
+        'IN',
+        quantity,
+        quantity,
+        'เพิ่มยางใหม่เข้าสต็อก (ซื้อเข้า)',
+        None,
+        user_id=user_id,
+        channel_id=buy_in_channel_id)
+
     conn.commit()
     return tire_id
 
+
 def get_tire(conn, tire_id):
-    cursor = conn.cursor()
-    if "psycopg2" in str(type(conn)):
-        cursor.execute("""
-            SELECT t.*, 
-                   p.name AS promo_name, 
-                   p.type AS promo_type, 
-                   p.value1 AS promo_value1, 
+    with conn.cursor() as cursor:
+        if "psycopg2" in str(type(conn)):
+            cursor.execute("""
+            SELECT t.*,
+                   p.name AS promo_name,
+                   p.type AS promo_type,
+                   p.value1 AS promo_value1,
                    p.value2 AS promo_value2,
                    p.is_active AS promo_is_active
             FROM tires t
             LEFT JOIN promotions p ON t.promotion_id = p.id
             WHERE t.id = %s
         """, (tire_id,))
-    else:
-        cursor.execute("""
-            SELECT t.*, 
-                   p.name AS promo_name, 
-                   p.type AS promo_type, 
-                   p.value1 AS promo_value1, 
+        else:
+            cursor.execute("""
+            SELECT t.*,
+                   p.name AS promo_name,
+                   p.type AS promo_type,
+                   p.value1 AS promo_value1,
                    p.value2 AS promo_value2,
                    p.is_active AS promo_is_active
             FROM tires t
@@ -997,12 +1153,13 @@ def get_tire(conn, tire_id):
             WHERE t.id = ?
         """, (tire_id,))
     tire = cursor.fetchone()
-    
+
     if tire:
-        tire_dict = dict(tire) 
-        
+        tire_dict = dict(tire)
+
         tire_dict['display_promo_price_per_item'] = None
-        tire_dict['display_price_for_4'] = tire_dict['price_per_item'] * 4 if tire_dict['price_per_item'] is not None else None
+        tire_dict['display_price_for_4'] = tire_dict['price_per_item'] * \
+            4 if tire_dict['price_per_item'] is not None else None
         tire_dict['display_promo_description'] = None
 
         promo_active_check = tire_dict['promo_is_active']
@@ -1021,14 +1178,28 @@ def get_tire(conn, tire_id):
             tire_dict['display_promo_price_per_item'] = promo_calc_result['price_per_item_promo']
             tire_dict['display_price_for_4'] = promo_calc_result['price_for_4_promo']
             tire_dict['display_promo_description'] = promo_calc_result['promo_description_text']
-        
-        return tire_dict 
+
+        return tire_dict
     return tire
 
-def update_tire(conn, tire_id, brand, model, size, cost_sc, cost_dunlop, cost_online, wholesale_price1, wholesale_price2, price_per_item, promotion_id, year_of_manufacture):
-    cursor = conn.cursor()
-    if "psycopg2" in str(type(conn)):
-        cursor.execute("""
+
+def update_tire(
+        conn,
+        tire_id,
+        brand,
+        model,
+        size,
+        cost_sc,
+        cost_dunlop,
+        cost_online,
+        wholesale_price1,
+        wholesale_price2,
+        price_per_item,
+        promotion_id,
+        year_of_manufacture):
+    with conn.cursor() as cursor:
+        if "psycopg2" in str(type(conn)):
+            cursor.execute("""
             UPDATE tires SET
                 brand = %s,
                 model = %s,
@@ -1043,8 +1214,8 @@ def update_tire(conn, tire_id, brand, model, size, cost_sc, cost_dunlop, cost_on
                 year_of_manufacture = %s
             WHERE id = %s
         """, (brand, model, size, cost_sc, cost_dunlop, cost_online, wholesale_price1, wholesale_price2, price_per_item, promotion_id, year_of_manufacture, tire_id))
-    else:
-        cursor.execute("""
+        else:
+            cursor.execute("""
             UPDATE tires SET
                 brand = ?,
                 model = ?,
@@ -1061,77 +1232,112 @@ def update_tire(conn, tire_id, brand, model, size, cost_sc, cost_dunlop, cost_on
         """, (brand, model, size, cost_sc, cost_dunlop, cost_online, wholesale_price1, wholesale_price2, price_per_item, promotion_id, year_of_manufacture, tire_id))
     conn.commit()
 
-def add_tire_import(conn, brand, model, size, quantity, cost_sc, cost_dunlop, cost_online, wholesale_price1, wholesale_price2, price_per_item, promotion_id, year_of_manufacture): 
-    cursor = conn.cursor()
-    if "psycopg2" in str(type(conn)):
-        cursor.execute("""
+
+def add_tire_import(
+        conn,
+        brand,
+        model,
+        size,
+        quantity,
+        cost_sc,
+        cost_dunlop,
+        cost_online,
+        wholesale_price1,
+        wholesale_price2,
+        price_per_item,
+        promotion_id,
+        year_of_manufacture):
+    with conn.cursor() as cursor:
+        if "psycopg2" in str(type(conn)):
+            cursor.execute("""
             INSERT INTO tires (brand, model, size, quantity, cost_sc, cost_dunlop, cost_online, wholesale_price1, wholesale_price2, price_per_item, promotion_id, year_of_manufacture, is_deleted)
             VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, FALSE) RETURNING id
-        """, (brand, model, size, quantity, cost_sc, cost_dunlop, cost_online, wholesale_price1, wholesale_price2, price_per_item, promotion_id, year_of_manufacture))
-        tire_id = cursor.fetchone()['id']
-    else:
-        cursor.execute("""
+            """, (brand, model, size, quantity, cost_sc, cost_dunlop, cost_online, wholesale_price1, wholesale_price2, price_per_item, promotion_id, year_of_manufacture))
+            tire_id = cursor.fetchone()['id']
+        else:
+            cursor.execute("""
             INSERT INTO tires (brand, model, size, quantity, cost_sc, cost_dunlop, cost_online, wholesale_price1, wholesale_price2, price_per_item, promotion_id, year_of_manufacture, is_deleted)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
-        """, (brand, model, size, quantity, cost_sc, cost_dunlop, cost_online, wholesale_price1, wholesale_price2, price_per_item, promotion_id, year_of_manufacture))
-        tire_id = cursor.lastrowid
-    conn.commit()
-    return tire_id
+            """, (brand, model, size, quantity, cost_sc, cost_dunlop, cost_online, wholesale_price1, wholesale_price2, price_per_item, promotion_id, year_of_manufacture))
+            tire_id = cursor.lastrowid
+            conn.commit()
+        return tire_id
 
-def update_tire_import(conn, tire_id, brand, model, size, quantity, cost_sc, cost_dunlop, cost_online, wholesale_price1, wholesale_price2, price_per_item, promotion_id, year_of_manufacture): 
-    cursor = conn.cursor()
-    if "psycopg2" in str(type(conn)):
-        cursor.execute("""
-            UPDATE tires SET
-                brand = %s,
-                model = %s,
-                size = %s,
-                quantity = %s, 
-                cost_sc = %s,
-                cost_dunlop = %s,
-                cost_online = %s,
-                wholesale_price1 = %s,
-                wholesale_price2 = %s,
-                price_per_item = %s,
-                promotion_id = %s,
-                year_of_manufacture = %s
-            WHERE id = %s
-        """, (brand, model, size, quantity, cost_sc, cost_dunlop, cost_online, wholesale_price1, wholesale_price2, price_per_item, promotion_id, year_of_manufacture, tire_id))
-    else:
-        cursor.execute("""
-            UPDATE tires SET
-                brand = ?,
-                model = ?,
-                size = ?,
-                quantity = ?, 
-                cost_sc = ?,
-                cost_dunlop = ?,
-                cost_online = ?,
-                wholesale_price1 = ?,
-                wholesale_price2 = ?,
-                price_per_item = ?,
-                promotion_id = ?,
-                year_of_manufacture = ?
-            WHERE id = ?
-        """, (brand, model, size, quantity, cost_sc, cost_dunlop, cost_online, wholesale_price1, wholesale_price2, price_per_item, promotion_id, year_of_manufacture, tire_id))
-    conn.commit()
 
-def calculate_tire_promo_prices(price_per_item, promo_type, promo_value1, promo_value2):
+def update_tire_import(
+        conn,
+        tire_id,
+        brand,
+        model,
+        size,
+        quantity,
+        cost_sc,
+        cost_dunlop,
+        cost_online,
+        wholesale_price1,
+        wholesale_price2,
+        price_per_item,
+        promotion_id,
+        year_of_manufacture):
+    with conn.cursor() as cursor:
+        if "psycopg2" in str(type(conn)):
+            cursor.execute("""
+                UPDATE tires SET
+                    brand = %s,
+                    model = %s,
+                    size = %s,
+                    quantity = %s,
+                    cost_sc = %s,
+                    cost_dunlop = %s,
+                    cost_online = %s,
+                    wholesale_price1 = %s,
+                    wholesale_price2 = %s,
+                    price_per_item = %s,
+                    promotion_id = %s,
+                    year_of_manufacture = %s
+                WHERE id = %s
+            """, (brand, model, size, quantity, cost_sc, cost_dunlop, cost_online, wholesale_price1, wholesale_price2, price_per_item, promotion_id, year_of_manufacture, tire_id))
+        else:
+            cursor.execute("""
+                UPDATE tires SET
+                    brand = ?,
+                    model = ?,
+                    size = ?,
+                    quantity = ?,
+                    cost_sc = ?,
+                    cost_dunlop = ?,
+                    cost_online = ?,
+                    wholesale_price1 = ?,
+                    wholesale_price2 = ?,
+                    price_per_item = ?,
+                    promotion_id = ?,
+                    year_of_manufacture = ?
+                WHERE id = ?
+            """, (brand, model, size, quantity, cost_sc, cost_dunlop, cost_online, wholesale_price1, wholesale_price2, price_per_item, promotion_id, year_of_manufacture, tire_id))
+        conn.commit()
+
+
+def calculate_tire_promo_prices(
+        price_per_item,
+        promo_type,
+        promo_value1,
+        promo_value2):
     price_per_item_promo = price_per_item
     price_for_4_promo = price_per_item * 4
     promo_description_text = None
 
     if price_per_item is None or promo_type is None:
         return {
-            'price_per_item_promo': None, 
-            'price_for_4_promo': price_per_item * 4 if price_per_item is not None else None,
-            'promo_description_text': None
-        }
+            'price_per_item_promo': None,
+            'price_for_4_promo': price_per_item *
+            4 if price_per_item is not None else None,
+            'promo_description_text': None}
 
     if promo_type == 'buy_x_get_y' and promo_value1 is not None and promo_value2 is not None:
         if (promo_value1 > 0 and promo_value2 >= 0):
             if (promo_value1 + promo_value2) > 0:
-                price_per_item_promo = (price_per_item * promo_value1) / (promo_value1 + promo_value2)
+                price_per_item_promo = (
+                    price_per_item * promo_value1) / (promo_value1 + promo_value2)
                 price_for_4_promo = price_per_item_promo * 4
                 promo_description_text = f"ซื้อ {int(promo_value1)} แถม {int(promo_value2)} ฟรี"
             else:
@@ -1142,7 +1348,7 @@ def calculate_tire_promo_prices(price_per_item, promo_type, promo_value1, promo_
             price_per_item_promo = None
             price_for_4_promo = None
             promo_description_text = "โปรไม่ถูกต้อง (X,Y<=0)"
-    
+
     elif promo_type == 'percentage_discount' and promo_value1 is not None:
         if (promo_value1 >= 0 and promo_value1 <= 100):
             price_per_item_promo = price_per_item * (1 - (promo_value1 / 100))
@@ -1152,7 +1358,7 @@ def calculate_tire_promo_prices(price_per_item, promo_type, promo_value1, promo_
             price_per_item_promo = None
             price_for_4_promo = None
             promo_description_text = "โปรไม่ถูกต้อง (%ไม่ถูกต้อง)"
-    
+
     elif promo_type == 'fixed_price_per_n' and promo_value1 is not None and promo_value2 is not None:
         if promo_value2 > 0:
             price_per_item_promo = promo_value1 / promo_value2
@@ -1162,48 +1368,54 @@ def calculate_tire_promo_prices(price_per_item, promo_type, promo_value1, promo_
             price_per_item_promo = None
             price_for_4_promo = None
             promo_description_text = "โปรไม่ถูกต้อง (N<=0)"
-            
+
     if price_per_item_promo is None:
         price_per_item_promo = price_per_item
         price_for_4_promo = price_per_item * 4
         promo_description_text = None
 
     return {
-        'price_per_item_promo': price_per_item_promo, 
+        'price_per_item_promo': price_per_item_promo,
         'price_for_4_promo': price_for_4_promo,
         'promo_description_text': promo_description_text
     }
 
 
-def get_all_tires(conn, query=None, brand_filter='all', include_deleted=False): # ADDED include_deleted
-    cursor = conn.cursor()
-    sql_query = """
-        SELECT t.*,
-               p.name AS promo_name,
-               p.type AS promo_type,
-               p.value1 AS promo_value1,
-               p.value2 AS promo_value2,
-               p.is_active AS promo_is_active
-        FROM tires t
-        LEFT JOIN promotions p ON t.promotion_id = p.id
-    """
-    params = []
-    conditions = []
+# ADDED include_deleted
+def get_all_tires(conn, query=None, brand_filter='all', include_deleted=False):
+    with conn.cursor() as cursor:
+        sql_query = """
+            SELECT t.*,
+                p.name AS promo_name,
+                p.type AS promo_type,
+                p.value1 AS promo_value1,
+                p.value2 AS promo_value2,
+                p.is_active AS promo_is_active
+            FROM tires t
+            LEFT JOIN promotions p ON t.promotion_id = p.id
+        """
+        params = []
+        conditions = []
 
-    if not include_deleted: # Conditionally add is_deleted filter
-        conditions.append("t.is_deleted = FALSE" if "psycopg2" in str(type(conn)) else "t.is_deleted = 0")
+    if not include_deleted:  # Conditionally add is_deleted filter
+        conditions.append("t.is_deleted = FALSE" if "psycopg2" in str(
+            type(conn)) else "t.is_deleted = 0")
 
     if query:
         search_term = f"%{query}%"
-        conditions.append("(t.brand ILIKE %s OR t.model ILIKE %s OR t.size ILIKE %s)" if "psycopg2" in str(type(conn)) else "(t.brand LIKE ? OR t.model LIKE ? OR t.size LIKE ?)")
+        conditions.append(
+            "(t.brand ILIKE %s OR t.model ILIKE %s OR t.size ILIKE %s)" if "psycopg2" in str(
+                type(conn)) else "(t.brand LIKE ? OR t.model LIKE ? OR t.size LIKE ?)")
         params.extend([search_term, search_term, search_term])
 
     if brand_filter != 'all':
-        conditions.append("t.brand = %s" if "psycopg2" in str(type(conn)) else "t.brand = ?")
+        conditions.append("t.brand = %s" if "psycopg2" in str(
+            type(conn)) else "t.brand = ?")
         params.append(brand_filter)
 
     if conditions:
-        sql_query += " WHERE " + " AND ".join(conditions) # Changed WHERE to AND for filtering soft deleted items
+        # Changed WHERE to AND for filtering soft deleted items
+        sql_query += " WHERE " + " AND ".join(conditions)
 
     sql_query += " ORDER BY t.brand, t.model"
 
@@ -1216,13 +1428,13 @@ def get_all_tires(conn, query=None, brand_filter='all', include_deleted=False): 
 
     processed_tires = []
     for tire in tires:
-        tire_dict = dict(tire) 
+        tire_dict = dict(tire)
 
         promo_calc_result = {
             'price_per_item_promo': None,
-            'price_for_4_promo': tire_dict['price_per_item'] * 4 if tire_dict['price_per_item'] is not None else None,
-            'promo_description_text': None
-        }
+            'price_for_4_promo': tire_dict['price_per_item'] *
+            4 if tire_dict['price_per_item'] is not None else None,
+            'promo_description_text': None}
 
         promo_active_check = tire_dict['promo_is_active']
         if "psycopg2" in str(type(conn)):
@@ -1255,162 +1467,212 @@ def get_all_tires(conn, query=None, brand_filter='all', include_deleted=False): 
             return rim_size
         except ValueError:
             return 0
-    
-    sorted_processed_tires = sorted(processed_tires, key=lambda x: (x.get('brand', ''), x.get('model', ''), sort_key_for_tire_size(x)))
+
+    sorted_processed_tires = sorted(processed_tires, key=lambda x: (
+        x.get('brand', ''), x.get('model', ''), sort_key_for_tire_size(x)))
 
     return sorted_processed_tires
 
+
 def get_tire_movement(conn, movement_id):
-    cursor = conn.cursor()
-    # เพิ่มการดึงข้อมูล channel, platform, customer, return_customer_type
-    if "psycopg2" in str(type(conn)):
-        cursor.execute("""
-            SELECT tm.*, t.brand, t.model, t.size, u.username,
-                   sc.name AS channel_name,
-                   op.name AS online_platform_name,
-                   wc.name AS wholesale_customer_name
-            FROM tire_movements tm
-            JOIN tires t ON tm.tire_id = t.id
-            LEFT JOIN users u ON tm.user_id = u.id
-            LEFT JOIN sales_channels sc ON tm.channel_id = sc.id
-            LEFT JOIN online_platforms op ON tm.online_platform_id = op.id
-            LEFT JOIN wholesale_customers wc ON tm.wholesale_customer_id = wc.id
-            WHERE tm.id = %s
-        """, (movement_id,))
-    else:
-        cursor.execute("""
-            SELECT tm.*, t.brand, t.model, t.size, u.username,
-                   sc.name AS channel_name,
-                   op.name AS online_platform_name,
-                   wc.name AS wholesale_customer_name
-            FROM tire_movements tm
-            JOIN tires t ON tm.tire_id = t.id
-            LEFT JOIN users u ON tm.user_id = u.id
-            LEFT JOIN sales_channels sc ON tm.channel_id = sc.id
-            LEFT JOIN online_platforms op ON tm.online_platform_id = op.id
-            LEFT JOIN wholesale_customers wc ON tm.wholesale_customer_id = wc.id
-            WHERE tm.id = ?
-        """, (movement_id,))
-    movement_data = cursor.fetchone()
-    if isinstance(movement_data, sqlite3.Row):
-        movement_data = dict(movement_data)
-    return movement_data
+    with conn.cursor() as cursor:
+        # เพิ่มการดึงข้อมูล channel, platform, customer, return_customer_type
+        if "psycopg2" in str(type(conn)):
+            cursor.execute("""
+                SELECT tm.*, t.brand, t.model, t.size, u.username,
+                    sc.name AS channel_name,
+                    op.name AS online_platform_name,
+                    wc.name AS wholesale_customer_name
+                FROM tire_movements tm
+                JOIN tires t ON tm.tire_id = t.id
+                LEFT JOIN users u ON tm.user_id = u.id
+                LEFT JOIN sales_channels sc ON tm.channel_id = sc.id
+                LEFT JOIN online_platforms op ON tm.online_platform_id = op.id
+                LEFT JOIN wholesale_customers wc ON tm.wholesale_customer_id = wc.id
+                WHERE tm.id = %s
+            """, (movement_id,))
+        else:
+            cursor.execute("""
+                SELECT tm.*, t.brand, t.model, t.size, u.username,
+                    sc.name AS channel_name,
+                    op.name AS online_platform_name,
+                    wc.name AS wholesale_customer_name
+                FROM tire_movements tm
+                JOIN tires t ON tm.tire_id = t.id
+                LEFT JOIN users u ON tm.user_id = u.id
+                LEFT JOIN sales_channels sc ON tm.channel_id = sc.id
+                LEFT JOIN online_platforms op ON tm.online_platform_id = op.id
+                LEFT JOIN wholesale_customers wc ON tm.wholesale_customer_id = wc.id
+                WHERE tm.id = ?
+            """, (movement_id,))
+        movement_data = cursor.fetchone()
+        if isinstance(movement_data, sqlite3.Row):
+            movement_data = dict(movement_data)
+        return movement_data
+
 
 def get_wheel_movement(conn, movement_id):
-    cursor = conn.cursor()
-    # เพิ่มการดึงข้อมูล channel, platform, customer, return_customer_type
-    if "psycopg2" in str(type(conn)):
-        cursor.execute("""
-            SELECT wm.*, w.brand, w.model, w.diameter, u.username,
-                   sc.name AS channel_name,
-                   op.name AS online_platform_name,
-                   wc.name AS wholesale_customer_name
-            FROM wheel_movements wm
-            JOIN wheels w ON wm.wheel_id = w.id
-            LEFT JOIN users u ON wm.user_id = u.id
-            LEFT JOIN sales_channels sc ON wm.channel_id = sc.id
-            LEFT JOIN online_platforms op ON wm.online_platform_id = op.id
-            LEFT JOIN wholesale_customers wc ON wm.wholesale_customer_id = wc.id
-            WHERE wm.id = %s
-        """, (movement_id,))
-    else:
-        cursor.execute("""
-            SELECT wm.*, w.brand, w.model, w.diameter, u.username,
-                   sc.name AS channel_name,
-                   op.name AS online_platform_name,
-                   wc.name AS wholesale_customer_name
-            FROM wheel_movements wm
-            JOIN wheels w ON wm.wheel_id = w.id
-            LEFT JOIN users u ON wm.user_id = u.id
-            LEFT JOIN sales_channels sc ON wm.channel_id = sc.id
-            LEFT JOIN online_platforms op ON wm.online_platform_id = op.id
-            LEFT JOIN wholesale_customers wc ON wm.wholesale_customer_id = wc.id
-            WHERE wm.id = ?
-        """, (movement_id,))
-    movement_data = cursor.fetchone()
-    if isinstance(movement_data, sqlite3.Row):
-        movement_data = dict(movement_data)
-    return movement_data
+    with conn.cursor() as cursor:
+        # เพิ่มการดึงข้อมูล channel, platform, customer, return_customer_type
+        if "psycopg2" in str(type(conn)):
+            cursor.execute("""
+                SELECT wm.*, w.brand, w.model, w.diameter, u.username,
+                    sc.name AS channel_name,
+                    op.name AS online_platform_name,
+                    wc.name AS wholesale_customer_name
+                FROM wheel_movements wm
+                JOIN wheels w ON wm.wheel_id = w.id
+                LEFT JOIN users u ON wm.user_id = u.id
+                LEFT JOIN sales_channels sc ON wm.channel_id = sc.id
+                LEFT JOIN online_platforms op ON wm.online_platform_id = op.id
+                LEFT JOIN wholesale_customers wc ON wm.wholesale_customer_id = wc.id
+                WHERE wm.id = %s
+            """, (movement_id,))
+        else:
+            cursor.execute("""
+                SELECT wm.*, w.brand, w.model, w.diameter, u.username,
+                    sc.name AS channel_name,
+                    op.name AS online_platform_name,
+                    wc.name AS wholesale_customer_name
+                FROM wheel_movements wm
+                JOIN wheels w ON wm.wheel_id = w.id
+                LEFT JOIN users u ON wm.user_id = u.id
+                LEFT JOIN sales_channels sc ON wm.channel_id = sc.id
+                LEFT JOIN online_platforms op ON wm.online_platform_id = op.id
+                LEFT JOIN wholesale_customers wc ON wm.wholesale_customer_id = wc.id
+                WHERE wm.id = ?
+            """, (movement_id,))
+        movement_data = cursor.fetchone()
+        if isinstance(movement_data, sqlite3.Row):
+            movement_data = dict(movement_data)
+        return movement_data
 
-def update_wheel_movement(conn, movement_id, new_notes, new_image_filename, new_type, new_quantity_change, 
-                          new_channel_id, new_online_platform_id, new_wholesale_customer_id, new_return_customer_type):
+
+def update_wheel_movement(
+        conn,
+        movement_id,
+        new_notes,
+        new_image_filename,
+        new_type,
+        new_quantity_change,
+        new_channel_id,
+        new_online_platform_id,
+        new_wholesale_customer_id,
+        new_return_customer_type):
     """
     อัปเดตข้อมูลการเคลื่อนไหวสต็อกแม็กและปรับยอดคงเหลือของแม็กหลัก
     """
-    cursor = conn.cursor()
-    
-    # 1. ดึงข้อมูลการเคลื่อนไหวเดิม
-    if "psycopg2" in str(type(conn)):
-        cursor.execute("SELECT wheel_id, type, quantity_change FROM wheel_movements WHERE id = %s", (movement_id,))
-    else:
-        cursor.execute("SELECT wheel_id, type, quantity_change FROM wheel_movements WHERE id = ?", (movement_id,))
-    
-    old_movement = cursor.fetchone()
-    if not old_movement:
-        raise ValueError("ไม่พบข้อมูลการเคลื่อนไหวแม็กที่ระบุ")
-    
-    old_wheel_id = old_movement['wheel_id']
-    old_type = old_movement['type']
-    old_quantity_change = old_movement['quantity_change']
+    with conn.cursor() as cursor:
+
+        # 1. ดึงข้อมูลการเคลื่อนไหวเดิม
+        if "psycopg2" in str(type(conn)):
+            cursor.execute(
+                "SELECT wheel_id, type, quantity_change FROM wheel_movements WHERE id = %s",
+                (movement_id,
+                 ))
+        else:
+            cursor.execute(
+                "SELECT wheel_id, type, quantity_change FROM wheel_movements WHERE id = ?",
+                (movement_id,
+                 ))
+
+        old_movement = cursor.fetchone()
+        if not old_movement:
+            raise ValueError("ไม่พบข้อมูลการเคลื่อนไหวแม็กที่ระบุ")
+
+        old_wheel_id = old_movement['wheel_id']
+        old_type = old_movement['type']
+        old_quantity_change = old_movement['quantity_change']
 
     # 2. ปรับยอดสต็อกของแม็กหลักกลับไปก่อนการเคลื่อนไหวเดิม
     current_wheel = get_wheel(conn, old_wheel_id)
     if not current_wheel:
         raise ValueError("ไม่พบแม็กหลักที่เกี่ยวข้องกับการเคลื่อนไหวนี้")
-    
+
     current_quantity_in_stock = current_wheel['quantity']
 
     # ย้อนกลับการเปลี่ยนแปลงเก่า
-    if old_type == 'IN' or old_type == 'RETURN': # รับเข้าหรือรับคืน (เพิ่มสต็อก)
+    # รับเข้าหรือรับคืน (เพิ่มสต็อก)
+    if old_type == 'IN' or old_type == 'RETURN':
         current_quantity_in_stock -= old_quantity_change
-    elif old_type == 'OUT': # จ่ายออก (ลดสต็อก)
+    elif old_type == 'OUT':  # จ่ายออก (ลดสต็อก)
         current_quantity_in_stock += old_quantity_change
 
     # 3. อัปเดตข้อมูลการเคลื่อนไหวในตาราง wheel_movements
     if "psycopg2" in str(type(conn)):
-        cursor.execute("""
+        cursor.execute(
+            """
             UPDATE wheel_movements
             SET notes = %s, image_filename = %s, type = %s, quantity_change = %s,
                 channel_id = %s, online_platform_id = %s, wholesale_customer_id = %s, return_customer_type = %s
             WHERE id = %s
-        """, (new_notes, new_image_filename, new_type, new_quantity_change,
-              new_channel_id, new_online_platform_id, new_wholesale_customer_id, new_return_customer_type,
-              movement_id))
+        """,
+            (new_notes,
+             new_image_filename,
+             new_type,
+             new_quantity_change,
+             new_channel_id,
+             new_online_platform_id,
+             new_wholesale_customer_id,
+             new_return_customer_type,
+             movement_id))
     else:
-        cursor.execute("""
+        cursor.execute(
+            """
             UPDATE wheel_movements
             SET notes = ?, image_filename = ?, type = ?, quantity_change = ?,
                 channel_id = ?, online_platform_id = ?, wholesale_customer_id = ?, return_customer_type = ?
             WHERE id = ?
-        """, (new_notes, new_image_filename, new_type, new_quantity_change,
-              new_channel_id, new_online_platform_id, new_wholesale_customer_id, new_return_customer_type,
-              movement_id))
-    
+        """,
+            (new_notes,
+             new_image_filename,
+             new_type,
+             new_quantity_change,
+             new_channel_id,
+             new_online_platform_id,
+             new_wholesale_customer_id,
+             new_return_customer_type,
+             movement_id))
+
     # 4. ปรับยอดสต็อกของแม็กหลักตามการเคลื่อนไหวใหม่
-    if new_type == 'IN' or new_type == 'RETURN': # รับเข้าหรือรับคืน (เพิ่มสต็อก)
+    # รับเข้าหรือรับคืน (เพิ่มสต็อก)
+    if new_type == 'IN' or new_type == 'RETURN':
         current_quantity_in_stock += new_quantity_change
-    elif new_type == 'OUT': # จ่ายออก (ลดสต็อก)
+    elif new_type == 'OUT':  # จ่ายออก (ลดสต็อก)
         current_quantity_in_stock -= new_quantity_change
-    
+
     # 5. อัปเดตยอดคงเหลือในตาราง wheels
     update_wheel_quantity(conn, old_wheel_id, current_quantity_in_stock)
 
     # 6. อัปเดต remaining_quantity ในรายการ movement ที่แก้ไขและรายการหลังจากนั้น
-    # ดึงรายการ movement ทั้งหมดสำหรับ wheel_id นั้นๆ ที่ timestamp มากกว่าหรือเท่ากับรายการที่แก้ไข
+    # ดึงรายการ movement ทั้งหมดสำหรับ wheel_id นั้นๆ ที่ timestamp
+    # มากกว่าหรือเท่ากับรายการที่แก้ไข
     is_postgres = "psycopg2" in str(type(conn))
     if is_postgres:
-        cursor.execute("SELECT id, type, quantity_change, timestamp FROM wheel_movements WHERE wheel_id = %s AND timestamp >= (SELECT timestamp FROM wheel_movements WHERE id = %s) ORDER BY timestamp ASC, id ASC", (old_wheel_id, movement_id))
+        cursor.execute(
+            "SELECT id, type, quantity_change, timestamp FROM wheel_movements WHERE wheel_id = %s AND timestamp >= (SELECT timestamp FROM wheel_movements WHERE id = %s) ORDER BY timestamp ASC, id ASC",
+            (old_wheel_id,
+             movement_id))
     else:
-        cursor.execute("SELECT id, type, quantity_change, timestamp FROM wheel_movements WHERE wheel_id = ? AND timestamp >= (SELECT timestamp FROM wheel_movements WHERE id = ?) ORDER BY timestamp ASC, id ASC", (old_wheel_id, movement_id))
-    
+        cursor.execute(
+            "SELECT id, type, quantity_change, timestamp FROM wheel_movements WHERE wheel_id = ? AND timestamp >= (SELECT timestamp FROM wheel_movements WHERE id = ?) ORDER BY timestamp ASC, id ASC",
+            (old_wheel_id,
+             movement_id))
+
     subsequent_movements = cursor.fetchall()
 
     # คำนวณยอดคงเหลือเริ่มต้นก่อนรายการที่แก้ไข
     if is_postgres:
-        cursor.execute("SELECT COALESCE(SUM(CASE WHEN type = 'IN' THEN quantity_change ELSE -quantity_change END), 0) FROM wheel_movements WHERE wheel_id = %s AND timestamp < (SELECT timestamp FROM wheel_movements WHERE id = %s)", (old_wheel_id, movement_id))
+        cursor.execute(
+            "SELECT COALESCE(SUM(CASE WHEN type = 'IN' THEN quantity_change ELSE -quantity_change END), 0) FROM wheel_movements WHERE wheel_id = %s AND timestamp < (SELECT timestamp FROM wheel_movements WHERE id = %s)",
+            (old_wheel_id,
+             movement_id))
     else:
-        cursor.execute("SELECT COALESCE(SUM(CASE WHEN type = 'IN' THEN quantity_change ELSE -quantity_change END), 0) FROM wheel_movements WHERE wheel_id = ? AND timestamp < (SELECT timestamp FROM wheel_movements WHERE id = ?)", (old_wheel_id, movement_id))
-    
+        cursor.execute(
+            "SELECT COALESCE(SUM(CASE WHEN type = 'IN' THEN quantity_change ELSE -quantity_change END), 0) FROM wheel_movements WHERE wheel_id = ? AND timestamp < (SELECT timestamp FROM wheel_movements WHERE id = ?)",
+            (old_wheel_id,
+             movement_id))
+
     initial_qty_before_edited_movement = cursor.fetchone()[0] or 0
 
     new_remaining_qty = initial_qty_before_edited_movement
@@ -1419,41 +1681,62 @@ def update_wheel_movement(conn, movement_id, new_notes, new_image_filename, new_
             # ใช้ค่าใหม่ที่แก้ไข
             if new_type == 'IN' or new_type == 'RETURN':
                 new_remaining_qty += new_quantity_change
-            else: # new_type == 'OUT'
+            else:  # new_type == 'OUT'
                 new_remaining_qty -= new_quantity_change
         else:
             # ใช้ค่าเดิมของ movement ที่ตามมา
             if sub_move['type'] == 'IN' or sub_move['type'] == 'RETURN':
                 new_remaining_qty += sub_move['quantity_change']
-            else: # sub_move['type'] == 'OUT'
+            else:  # sub_move['type'] == 'OUT'
                 new_remaining_qty -= sub_move['quantity_change']
-        
+
         # อัปเดต remaining_quantity ในฐานข้อมูล
         if is_postgres:
-            cursor.execute("UPDATE wheel_movements SET remaining_quantity = %s WHERE id = %s", (new_remaining_qty, sub_move['id']))
+            cursor.execute(
+                "UPDATE wheel_movements SET remaining_quantity = %s WHERE id = %s",
+                (new_remaining_qty,
+                 sub_move['id']))
         else:
-            cursor.execute("UPDATE wheel_movements SET remaining_quantity = ? WHERE id = ?", (new_remaining_qty, sub_move['id']))
+            cursor.execute(
+                "UPDATE wheel_movements SET remaining_quantity = ? WHERE id = ?",
+                (new_remaining_qty,
+                 sub_move['id']))
 
     conn.commit()
 
 
-def update_tire_movement(conn, movement_id, new_notes, new_image_filename, new_type, new_quantity_change,
-                         new_channel_id, new_online_platform_id, new_wholesale_customer_id, new_return_customer_type):
+def update_tire_movement(
+        conn,
+        movement_id,
+        new_notes,
+        new_image_filename,
+        new_type,
+        new_quantity_change,
+        new_channel_id,
+        new_online_platform_id,
+        new_wholesale_customer_id,
+        new_return_customer_type):
     """
     อัปเดตข้อมูลการเคลื่อนไหวสต็อกยางและปรับยอดคงเหลือของยางหลัก
     """
-    cursor = conn.cursor()
+    with conn.cursor() as cursor:
 
-    # 1. ดึงข้อมูลการเคลื่อนไหวเดิม
-    if "psycopg2" in str(type(conn)):
-        cursor.execute("SELECT tire_id, type, quantity_change FROM tire_movements WHERE id = %s", (movement_id,))
-    else:
-        cursor.execute("SELECT tire_id, type, quantity_change FROM tire_movements WHERE id = ?", (movement_id,))
-    
-    old_movement = cursor.fetchone()
-    if not old_movement:
-        raise ValueError("ไม่พบข้อมูลการเคลื่อนไหวสต็อกยางที่ระบุ")
-    
+        # 1. ดึงข้อมูลการเคลื่อนไหวเดิม
+        if "psycopg2" in str(type(conn)):
+            cursor.execute(
+                "SELECT tire_id, type, quantity_change FROM tire_movements WHERE id = %s",
+                (movement_id,
+                 ))
+        else:
+            cursor.execute(
+                "SELECT tire_id, type, quantity_change FROM tire_movements WHERE id = ?",
+                (movement_id,
+                 ))
+
+        old_movement = cursor.fetchone()
+        if not old_movement:
+            raise ValueError("ไม่พบข้อมูลการเคลื่อนไหวสต็อกยางที่ระบุ")
+
     old_tire_id = old_movement['tire_id']
     old_type = old_movement['type']
     old_quantity_change = old_movement['quantity_change']
@@ -1462,60 +1745,91 @@ def update_tire_movement(conn, movement_id, new_notes, new_image_filename, new_t
     current_tire = get_tire(conn, old_tire_id)
     if not current_tire:
         raise ValueError("ไม่พบยางหลักที่เกี่ยวข้องกับการเคลื่อนไหวนี้")
-    
+
     current_quantity_in_stock = current_tire['quantity']
 
     # ย้อนกลับการเปลี่ยนแปลงเก่า
-    if old_type == 'IN' or old_type == 'RETURN': # รับเข้าหรือรับคืน (เพิ่มสต็อก)
+    # รับเข้าหรือรับคืน (เพิ่มสต็อก)
+    if old_type == 'IN' or old_type == 'RETURN':
         current_quantity_in_stock -= old_quantity_change
-    elif old_type == 'OUT': # จ่ายออก (ลดสต็อก)
+    elif old_type == 'OUT':  # จ่ายออก (ลดสต็อก)
         current_quantity_in_stock += old_quantity_change
 
     # 3. อัปเดตข้อมูลการเคลื่อนไหวในตาราง tire_movements
     if "psycopg2" in str(type(conn)):
-        cursor.execute("""
+        cursor.execute(
+            """
             UPDATE tire_movements
             SET notes = %s, image_filename = %s, type = %s, quantity_change = %s,
                 channel_id = %s, online_platform_id = %s, wholesale_customer_id = %s, return_customer_type = %s
             WHERE id = %s
-        """, (new_notes, new_image_filename, new_type, new_quantity_change,
-              new_channel_id, new_online_platform_id, new_wholesale_customer_id, new_return_customer_type,
-              movement_id))
+        """,
+            (new_notes,
+             new_image_filename,
+             new_type,
+             new_quantity_change,
+             new_channel_id,
+             new_online_platform_id,
+             new_wholesale_customer_id,
+             new_return_customer_type,
+             movement_id))
     else:
-        cursor.execute("""
+        cursor.execute(
+            """
             UPDATE tire_movements
             SET notes = ?, image_filename = ?, type = ?, quantity_change = ?,
                 channel_id = ?, online_platform_id = ?, wholesale_customer_id = ?, return_customer_type = ?
             WHERE id = ?
-        """, (new_notes, new_image_filename, new_type, new_quantity_change,
-              new_channel_id, new_online_platform_id, new_wholesale_customer_id, new_return_customer_type,
-              movement_id))
-    
+        """,
+            (new_notes,
+             new_image_filename,
+             new_type,
+             new_quantity_change,
+             new_channel_id,
+             new_online_platform_id,
+             new_wholesale_customer_id,
+             new_return_customer_type,
+             movement_id))
+
     # 4. ปรับยอดสต็อกของยางหลักตามการเคลื่อนไหวใหม่
-    if new_type == 'IN' or new_type == 'RETURN': # รับเข้าหรือรับคืน (เพิ่มสต็อก)
+    # รับเข้าหรือรับคืน (เพิ่มสต็อก)
+    if new_type == 'IN' or new_type == 'RETURN':
         current_quantity_in_stock += new_quantity_change
-    elif new_type == 'OUT': # จ่ายออก (ลดสต็อก)
+    elif new_type == 'OUT':  # จ่ายออก (ลดสต็อก)
         current_quantity_in_stock -= new_quantity_change
-    
+
     # 5. อัปเดตยอดคงเหลือในตาราง tires
     update_tire_quantity(conn, old_tire_id, current_quantity_in_stock)
 
     # 6. อัปเดต remaining_quantity ในรายการ movement ที่แก้ไขและรายการหลังจากนั้น
-    # ดึงรายการ movement ทั้งหมดสำหรับ tire_id นั้นๆ ที่ timestamp มากกว่าหรือเท่ากับรายการที่แก้ไข
+    # ดึงรายการ movement ทั้งหมดสำหรับ tire_id นั้นๆ ที่ timestamp
+    # มากกว่าหรือเท่ากับรายการที่แก้ไข
     is_postgres = "psycopg2" in str(type(conn))
     if is_postgres:
-        cursor.execute("SELECT id, type, quantity_change, timestamp FROM tire_movements WHERE tire_id = %s AND timestamp >= (SELECT timestamp FROM tire_movements WHERE id = %s) ORDER BY timestamp ASC, id ASC", (old_tire_id, movement_id))
+        cursor.execute(
+            "SELECT id, type, quantity_change, timestamp FROM tire_movements WHERE tire_id = %s AND timestamp >= (SELECT timestamp FROM tire_movements WHERE id = %s) ORDER BY timestamp ASC, id ASC",
+            (old_tire_id,
+             movement_id))
     else:
-        cursor.execute("SELECT id, type, quantity_change, timestamp FROM tire_movements WHERE tire_id = ? AND timestamp >= (SELECT timestamp FROM tire_movements WHERE id = ?) ORDER BY timestamp ASC, id ASC", (old_tire_id, movement_id))
-    
+        cursor.execute(
+            "SELECT id, type, quantity_change, timestamp FROM tire_movements WHERE tire_id = ? AND timestamp >= (SELECT timestamp FROM tire_movements WHERE id = ?) ORDER BY timestamp ASC, id ASC",
+            (old_tire_id,
+             movement_id))
+
     subsequent_movements = cursor.fetchall()
 
     # คำนวณยอดคงเหลือเริ่มต้นก่อนรายการที่แก้ไข
     if is_postgres:
-        cursor.execute("SELECT COALESCE(SUM(CASE WHEN type = 'IN' THEN quantity_change ELSE -quantity_change END), 0) FROM tire_movements WHERE tire_id = %s AND timestamp < (SELECT timestamp FROM tire_movements WHERE id = %s)", (old_tire_id, movement_id))
+        cursor.execute(
+            "SELECT COALESCE(SUM(CASE WHEN type = 'IN' THEN quantity_change ELSE -quantity_change END), 0) FROM tire_movements WHERE tire_id = %s AND timestamp < (SELECT timestamp FROM tire_movements WHERE id = %s)",
+            (old_tire_id,
+             movement_id))
     else:
-        cursor.execute("SELECT COALESCE(SUM(CASE WHEN type = 'IN' THEN quantity_change ELSE -quantity_change END), 0) FROM tire_movements WHERE tire_id = ? AND timestamp < (SELECT timestamp FROM tire_movements WHERE id = ?)", (old_tire_id, movement_id))
-    
+        cursor.execute(
+            "SELECT COALESCE(SUM(CASE WHEN type = 'IN' THEN quantity_change ELSE -quantity_change END), 0) FROM tire_movements WHERE tire_id = ? AND timestamp < (SELECT timestamp FROM tire_movements WHERE id = ?)",
+            (old_tire_id,
+             movement_id))
+
     initial_qty_before_edited_movement = cursor.fetchone()[0] or 0
 
     new_remaining_qty = initial_qty_before_edited_movement
@@ -1524,20 +1838,26 @@ def update_tire_movement(conn, movement_id, new_notes, new_image_filename, new_t
             # ใช้ค่าใหม่ที่แก้ไข
             if new_type == 'IN' or new_type == 'RETURN':
                 new_remaining_qty += new_quantity_change
-            else: # new_type == 'OUT'
+            else:  # new_type == 'OUT'
                 new_remaining_qty -= new_quantity_change
         else:
             # ใช้ค่าเดิมของ movement ที่ตามมา
             if sub_move['type'] == 'IN' or sub_move['type'] == 'RETURN':
                 new_remaining_qty += sub_move['quantity_change']
-            else: # sub_move['type'] == 'OUT'
+            else:  # sub_move['type'] == 'OUT'
                 new_remaining_qty -= sub_move['quantity_change']
-        
+
         # อัปเดต remaining_quantity ในฐานข้อมูล
         if is_postgres:
-            cursor.execute("UPDATE tire_movements SET remaining_quantity = %s WHERE id = %s", (new_remaining_qty, sub_move['id']))
+            cursor.execute(
+                "UPDATE tire_movements SET remaining_quantity = %s WHERE id = %s",
+                (new_remaining_qty,
+                 sub_move['id']))
         else:
-            cursor.execute("UPDATE tire_movements SET remaining_quantity = ? WHERE id = ?", (new_remaining_qty, sub_move['id']))
+            cursor.execute(
+                "UPDATE tire_movements SET remaining_quantity = ? WHERE id = ?",
+                (new_remaining_qty,
+                 sub_move['id']))
 
     conn.commit()
 
@@ -1546,19 +1866,25 @@ def delete_tire_movement(conn, movement_id):
     """
     ลบข้อมูลการเคลื่อนไหวสต็อกยางและปรับยอดคงเหลือของยางหลักให้ถูกต้อง
     """
-    cursor = conn.cursor()
-    is_postgres = "psycopg2" in str(type(conn))
+    with conn.cursor() as cursor:
+        is_postgres = "psycopg2" in str(type(conn))
 
-    # 1. ดึงข้อมูลการเคลื่อนไหวที่จะลบ
-    if is_postgres:
-        cursor.execute("SELECT tire_id, type, quantity_change, timestamp FROM tire_movements WHERE id = %s", (movement_id,))
-    else:
-        cursor.execute("SELECT tire_id, type, quantity_change, timestamp FROM tire_movements WHERE id = ?", (movement_id,))
-    
-    movement_to_delete = cursor.fetchone()
-    if not movement_to_delete:
-        raise ValueError("ไม่พบข้อมูลการเคลื่อนไหวสต็อกยางที่ระบุ")
-    
+        # 1. ดึงข้อมูลการเคลื่อนไหวที่จะลบ
+        if is_postgres:
+            cursor.execute(
+                "SELECT tire_id, type, quantity_change, timestamp FROM tire_movements WHERE id = %s",
+                (movement_id,
+                 ))
+        else:
+            cursor.execute(
+                "SELECT tire_id, type, quantity_change, timestamp FROM tire_movements WHERE id = ?",
+                (movement_id,
+                 ))
+
+        movement_to_delete = cursor.fetchone()
+        if not movement_to_delete:
+            raise ValueError("ไม่พบข้อมูลการเคลื่อนไหวสต็อกยางที่ระบุ")
+
     tire_id = movement_to_delete['tire_id']
     move_type = movement_to_delete['type']
     quantity_change = movement_to_delete['quantity_change']
@@ -1568,52 +1894,74 @@ def delete_tire_movement(conn, movement_id):
     current_tire = get_tire(conn, tire_id)
     if not current_tire:
         raise ValueError("ไม่พบยางหลักที่เกี่ยวข้องกับการเคลื่อนไหวนี้")
-    
+
     new_quantity_for_main_item = current_tire['quantity']
-    if move_type == 'IN' or move_type == 'RETURN': # รับเข้าหรือรับคืน (เพิ่มสต็อก)
+    # รับเข้าหรือรับคืน (เพิ่มสต็อก)
+    if move_type == 'IN' or move_type == 'RETURN':
         # ถ้าเป็นการรับเข้า/รับคืน ให้ลบออกจากยอดปัจจุบัน
         new_quantity_for_main_item -= quantity_change
-    elif move_type == 'OUT': # จ่ายออก (ลดสต็อก)
+    elif move_type == 'OUT':  # จ่ายออก (ลดสต็อก)
         # ถ้าเป็นการจ่ายออก ให้บวกกลับเข้ายอดปัจจุบัน
         new_quantity_for_main_item += quantity_change
-    
+
     update_tire_quantity(conn, tire_id, new_quantity_for_main_item)
 
     # 3. ลบรายการเคลื่อนไหว
     if is_postgres:
-        cursor.execute("DELETE FROM tire_movements WHERE id = %s", (movement_id,))
+        cursor.execute(
+            "DELETE FROM tire_movements WHERE id = %s", (movement_id,))
     else:
-        cursor.execute("DELETE FROM tire_movements WHERE id = ?", (movement_id,))
+        cursor.execute(
+            "DELETE FROM tire_movements WHERE id = ?", (movement_id,))
 
     # 4. อัปเดต remaining_quantity สำหรับรายการ movement ที่เกิดขึ้นหลังจากรายการที่ถูกลบ
-    # ดึงรายการ movement ทั้งหมดสำหรับ tire_id นั้นๆ ที่ timestamp มากกว่าหรือเท่ากับรายการที่ถูกลบ
+    # ดึงรายการ movement ทั้งหมดสำหรับ tire_id นั้นๆ ที่ timestamp
+    # มากกว่าหรือเท่ากับรายการที่ถูกลบ
     if is_postgres:
-        cursor.execute("SELECT id, type, quantity_change, timestamp FROM tire_movements WHERE tire_id = %s AND timestamp >= %s ORDER BY timestamp ASC, id ASC", (tire_id, movement_timestamp))
+        cursor.execute(
+            "SELECT id, type, quantity_change, timestamp FROM tire_movements WHERE tire_id = %s AND timestamp >= %s ORDER BY timestamp ASC, id ASC",
+            (tire_id,
+             movement_timestamp))
     else:
         # สำหรับ SQLite, timestamp เป็น TEXT ต้องแปลงให้ถูกต้องในการเปรียบเทียบ
-        cursor.execute("SELECT id, type, quantity_change, timestamp FROM tire_movements WHERE tire_id = ? AND timestamp >= ? ORDER BY timestamp ASC, id ASC", (tire_id, movement_timestamp))
-    
+        cursor.execute(
+            "SELECT id, type, quantity_change, timestamp FROM tire_movements WHERE tire_id = ? AND timestamp >= ? ORDER BY timestamp ASC, id ASC",
+            (tire_id,
+             movement_timestamp))
+
     subsequent_movements = cursor.fetchall()
 
     # คำนวณยอดคงเหลือเริ่มต้นก่อนรายการแรกใน subsequent_movements
     if is_postgres:
-        cursor.execute("SELECT COALESCE(SUM(CASE WHEN type IN ('IN', 'RETURN') THEN quantity_change ELSE -quantity_change END), 0) FROM tire_movements WHERE tire_id = %s AND timestamp < %s", (tire_id, movement_timestamp))
+        cursor.execute(
+            "SELECT COALESCE(SUM(CASE WHEN type IN ('IN', 'RETURN') THEN quantity_change ELSE -quantity_change END), 0) FROM tire_movements WHERE tire_id = %s AND timestamp < %s",
+            (tire_id,
+             movement_timestamp))
     else:
-        cursor.execute("SELECT COALESCE(SUM(CASE WHEN type IN ('IN', 'RETURN') THEN quantity_change ELSE -quantity_change END), 0) FROM tire_movements WHERE tire_id = ? AND timestamp < ?", (tire_id, movement_timestamp))
-    
+        cursor.execute(
+            "SELECT COALESCE(SUM(CASE WHEN type IN ('IN', 'RETURN') THEN quantity_change ELSE -quantity_change END), 0) FROM tire_movements WHERE tire_id = ? AND timestamp < ?",
+            (tire_id,
+             movement_timestamp))
+
     current_remaining_qty = cursor.fetchone()[0] or 0
 
     for sub_move in subsequent_movements:
         if sub_move['type'] == 'IN' or sub_move['type'] == 'RETURN':
             current_remaining_qty += sub_move['quantity_change']
-        else: # sub_move['type'] == 'OUT'
+        else:  # sub_move['type'] == 'OUT'
             current_remaining_qty -= sub_move['quantity_change']
-        
+
         # อัปเดต remaining_quantity ในฐานข้อมูล
         if is_postgres:
-            cursor.execute("UPDATE tire_movements SET remaining_quantity = %s WHERE id = %s", (current_remaining_qty, sub_move['id']))
+            cursor.execute(
+                "UPDATE tire_movements SET remaining_quantity = %s WHERE id = %s",
+                (current_remaining_qty,
+                 sub_move['id']))
         else:
-            cursor.execute("UPDATE tire_movements SET remaining_quantity = ? WHERE id = ?", (current_remaining_qty, sub_move['id']))
+            cursor.execute(
+                "UPDATE tire_movements SET remaining_quantity = ? WHERE id = ?",
+                (current_remaining_qty,
+                 sub_move['id']))
 
     conn.commit()
 
@@ -1622,19 +1970,25 @@ def delete_wheel_movement(conn, movement_id):
     """
     ลบข้อมูลการเคลื่อนไหวสต็อกแม็กและปรับยอดคงเหลือของแม็กหลักให้ถูกต้อง
     """
-    cursor = conn.cursor()
-    is_postgres = "psycopg2" in str(type(conn))
+    with conn.cursor() as cursor:
+        is_postgres = "psycopg2" in str(type(conn))
 
-    # 1. ดึงข้อมูลการเคลื่อนไหวที่จะลบ
-    if is_postgres:
-        cursor.execute("SELECT wheel_id, type, quantity_change, timestamp FROM wheel_movements WHERE id = %s", (movement_id,))
-    else:
-        cursor.execute("SELECT wheel_id, type, quantity_change, timestamp FROM wheel_movements WHERE id = ?", (movement_id,))
-    
-    movement_to_delete = cursor.fetchone()
-    if not movement_to_delete:
-        raise ValueError("ไม่พบข้อมูลการเคลื่อนไหวแม็กที่ระบุ")
-    
+        # 1. ดึงข้อมูลการเคลื่อนไหวที่จะลบ
+        if is_postgres:
+            cursor.execute(
+                "SELECT wheel_id, type, quantity_change, timestamp FROM wheel_movements WHERE id = %s",
+                (movement_id,
+                 ))
+        else:
+            cursor.execute(
+                "SELECT wheel_id, type, quantity_change, timestamp FROM wheel_movements WHERE id = ?",
+                (movement_id,
+                 ))
+
+        movement_to_delete = cursor.fetchone()
+        if not movement_to_delete:
+            raise ValueError("ไม่พบข้อมูลการเคลื่อนไหวแม็กที่ระบุ")
+
     wheel_id = movement_to_delete['wheel_id']
     move_type = movement_to_delete['type']
     quantity_change = movement_to_delete['quantity_change']
@@ -1644,428 +1998,660 @@ def delete_wheel_movement(conn, movement_id):
     current_wheel = get_wheel(conn, wheel_id)
     if not current_wheel:
         raise ValueError("ไม่พบแม็กหลักที่เกี่ยวข้องกับการเคลื่อนไหวนี้")
-    
+
     new_quantity_for_main_item = current_wheel['quantity']
-    if move_type == 'IN' or move_type == 'RETURN': # รับเข้าหรือรับคืน (เพิ่มสต็อก)
+    # รับเข้าหรือรับคืน (เพิ่มสต็อก)
+    if move_type == 'IN' or move_type == 'RETURN':
         # ถ้าเป็นการรับเข้า/รับคืน ให้ลบออกจากยอดปัจจุบัน
         new_quantity_for_main_item -= quantity_change
-    elif move_type == 'OUT': # จ่ายออก (ลดสต็อก)
+    elif move_type == 'OUT':  # จ่ายออก (ลดสต็อก)
         # ถ้าเป็นการจ่ายออก ให้บวกกลับเข้ายอดปัจจุบัน
         new_quantity_for_main_item += quantity_change
-    
+
     update_wheel_quantity(conn, wheel_id, new_quantity_for_main_item)
 
     # 3. ลบรายการเคลื่อนไหว
     if is_postgres:
-        cursor.execute("DELETE FROM wheel_movements WHERE id = %s", (movement_id,))
+        cursor.execute(
+            "DELETE FROM wheel_movements WHERE id = %s", (movement_id,))
     else:
-        cursor.execute("DELETE FROM wheel_movements WHERE id = ?", (movement_id,))
+        cursor.execute(
+            "DELETE FROM wheel_movements WHERE id = ?", (movement_id,))
 
     # 4. อัปเดต remaining_quantity สำหรับรายการ movement ที่เกิดขึ้นหลังจากรายการที่ถูกลบ
-    # ดึงรายการ movement ทั้งหมดสำหรับ wheel_id นั้นๆ ที่ timestamp มากกว่าหรือเท่ากับรายการที่ถูกลบ
+    # ดึงรายการ movement ทั้งหมดสำหรับ wheel_id นั้นๆ ที่ timestamp
+    # มากกว่าหรือเท่ากับรายการที่ถูกลบ
     if is_postgres:
-        cursor.execute("SELECT id, type, quantity_change, timestamp FROM wheel_movements WHERE wheel_id = %s AND timestamp >= %s ORDER BY timestamp ASC, id ASC", (wheel_id, movement_timestamp))
+        cursor.execute(
+            "SELECT id, type, quantity_change, timestamp FROM wheel_movements WHERE wheel_id = %s AND timestamp >= %s ORDER BY timestamp ASC, id ASC",
+            (wheel_id,
+             movement_timestamp))
     else:
-        cursor.execute("SELECT id, type, quantity_change, timestamp FROM wheel_movements WHERE wheel_id = ? AND timestamp >= ? ORDER BY timestamp ASC, id ASC", (wheel_id, movement_timestamp))
-    
+        cursor.execute(
+            "SELECT id, type, quantity_change, timestamp FROM wheel_movements WHERE wheel_id = ? AND timestamp >= ? ORDER BY timestamp ASC, id ASC",
+            (wheel_id,
+             movement_timestamp))
+
     subsequent_movements = cursor.fetchall()
 
     # คำนวณยอดคงเหลือเริ่มต้นก่อนรายการแรกใน subsequent_movements
     if is_postgres:
-        cursor.execute("SELECT COALESCE(SUM(CASE WHEN type = 'IN' THEN quantity_change ELSE -quantity_change END), 0) FROM wheel_movements WHERE wheel_id = %s AND timestamp < %s", (wheel_id, movement_timestamp))
+        cursor.execute(
+            "SELECT COALESCE(SUM(CASE WHEN type = 'IN' THEN quantity_change ELSE -quantity_change END), 0) FROM wheel_movements WHERE wheel_id = %s AND timestamp < %s",
+            (wheel_id,
+             movement_timestamp))
     else:
-        cursor.execute("SELECT COALESCE(SUM(CASE WHEN type = 'IN' THEN quantity_change ELSE -quantity_change END), 0) FROM wheel_movements WHERE wheel_id = ? AND timestamp < ?", (wheel_id, movement_timestamp))
-    
+        cursor.execute(
+            "SELECT COALESCE(SUM(CASE WHEN type = 'IN' THEN quantity_change ELSE -quantity_change END), 0) FROM wheel_movements WHERE wheel_id = ? AND timestamp < ?",
+            (wheel_id,
+             movement_timestamp))
+
     current_remaining_qty = cursor.fetchone()[0] or 0
 
     for sub_move in subsequent_movements:
         if sub_move['type'] == 'IN' or sub_move['type'] == 'RETURN':
             current_remaining_qty += sub_move['quantity_change']
-        else: # sub_move['type'] == 'OUT'
+        else:  # sub_move['type'] == 'OUT'
             current_remaining_qty -= sub_move['quantity_change']
-        
+
         # อัปเดต remaining_quantity ในฐานข้อมูล
         if is_postgres:
-            cursor.execute("UPDATE wheel_movements SET remaining_quantity = %s WHERE id = %s", (current_remaining_qty, sub_move['id']))
+            cursor.execute(
+                "UPDATE wheel_movements SET remaining_quantity = %s WHERE id = %s",
+                (current_remaining_qty,
+                 sub_move['id']))
         else:
-            cursor.execute("UPDATE wheel_movements SET remaining_quantity = ? WHERE id = ?", (current_remaining_qty, sub_move['id']))
+            cursor.execute(
+                "UPDATE wheel_movements SET remaining_quantity = ? WHERE id = ?",
+                (current_remaining_qty,
+                 sub_move['id']))
 
     conn.commit()
 
 
 def update_tire_quantity(conn, tire_id, new_quantity):
-    cursor = conn.cursor()
-    if "psycopg2" in str(type(conn)):
-        cursor.execute("UPDATE tires SET quantity = %s WHERE id = %s", (new_quantity, tire_id))
-    else:
-        cursor.execute("UPDATE tires SET quantity = ? WHERE id = ?", (new_quantity, tire_id))
-    conn.commit()
-    
-def update_wheel_quantity(conn, wheel_id, new_quantity):
-    cursor = conn.cursor()
-    if "psycopg2" in str(type(conn)):
-        cursor.execute("UPDATE wheels SET quantity = %s WHERE id = %s", (new_quantity, wheel_id))
-    else:
-        cursor.execute("UPDATE wheels SET quantity = ? WHERE id = ?", (new_quantity, wheel_id))
-    conn.commit()
+    with conn.cursor() as cursor:
+        if "psycopg2" in str(type(conn)):
+            cursor.execute(
+                "UPDATE tires SET quantity = %s WHERE id = %s", (new_quantity, tire_id))
+        else:
+            cursor.execute("UPDATE tires SET quantity = ? WHERE id = ?",
+                           (new_quantity, tire_id))
+        conn.commit()
 
-def add_tire_movement(conn, tire_id, move_type, quantity_change, remaining_quantity, notes, image_filename=None, user_id=None,
-                      channel_id=None, online_platform_id=None, wholesale_customer_id=None, return_customer_type=None):
+
+def update_wheel_quantity(conn, wheel_id, new_quantity):
+    with conn.cursor() as cursor:
+        if "psycopg2" in str(type(conn)):
+            cursor.execute(
+                "UPDATE wheels SET quantity = %s WHERE id = %s",
+                (new_quantity,
+                 wheel_id))
+        else:
+            cursor.execute(
+                "UPDATE wheels SET quantity = ? WHERE id = ?",
+                (new_quantity,
+                 wheel_id))
+        conn.commit()
+
+
+def add_tire_movement(
+        conn,
+        tire_id,
+        move_type,
+        quantity_change,
+        remaining_quantity,
+        notes,
+        image_filename=None,
+        user_id=None,
+        channel_id=None,
+        online_platform_id=None,
+        wholesale_customer_id=None,
+        return_customer_type=None):
     timestamp = get_bkk_time().isoformat()
-    cursor = conn.cursor()
-    if "psycopg2" in str(type(conn)):
-        cursor.execute("""
-            INSERT INTO tire_movements (tire_id, timestamp, type, quantity_change, remaining_quantity, notes, image_filename, user_id,
-                                        channel_id, online_platform_id, wholesale_customer_id, return_customer_type)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-        """, (tire_id, timestamp, move_type, quantity_change, remaining_quantity, notes, image_filename, user_id,
-              channel_id, online_platform_id, wholesale_customer_id, return_customer_type))
-    else:
-        cursor.execute("""
-            INSERT INTO tire_movements (tire_id, timestamp, type, quantity_change, remaining_quantity, notes, image_filename, user_id,
-                                        channel_id, online_platform_id, wholesale_customer_id, return_customer_type)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """, (tire_id, timestamp, move_type, quantity_change, remaining_quantity, notes, image_filename, user_id,
-              channel_id, online_platform_id, wholesale_customer_id, return_customer_type))
-    conn.commit()
+    with conn.cursor() as cursor:
+        if "psycopg2" in str(type(conn)):
+            cursor.execute(
+                """
+                INSERT INTO tire_movements (tire_id, timestamp, type, quantity_change, remaining_quantity, notes, image_filename, user_id,
+                                            channel_id, online_platform_id, wholesale_customer_id, return_customer_type)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            """,
+                (tire_id,
+                 timestamp,
+                 move_type,
+                 quantity_change,
+                 remaining_quantity,
+                 notes,
+                 image_filename,
+                 user_id,
+                 channel_id,
+                 online_platform_id,
+                 wholesale_customer_id,
+                 return_customer_type))
+        else:
+            cursor.execute(
+                """
+                INSERT INTO tire_movements (tire_id, timestamp, type, quantity_change, remaining_quantity, notes, image_filename, user_id,
+                                            channel_id, online_platform_id, wholesale_customer_id, return_customer_type)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+                (tire_id,
+                 timestamp,
+                 move_type,
+                 quantity_change,
+                 remaining_quantity,
+                 notes,
+                 image_filename,
+                 user_id,
+                 channel_id,
+                 online_platform_id,
+                 wholesale_customer_id,
+                 return_customer_type))
+        conn.commit()
+
 
 def delete_tire(conn, tire_id):
-    cursor = conn.cursor()
-    if "psycopg2" in str(type(conn)):
-        cursor.execute("UPDATE tires SET is_deleted = TRUE WHERE id = %s", (tire_id,)) # SOFT DELETE
-    else:
-        cursor.execute("UPDATE tires SET is_deleted = 1 WHERE id = ?", (tire_id,)) # SOFT DELETE
-    conn.commit()
+    with conn.cursor() as cursor:
+        if "psycopg2" in str(type(conn)):
+            # SOFT DELETE
+            cursor.execute(
+                "UPDATE tires SET is_deleted = TRUE WHERE id = %s", (tire_id,))
+        else:
+            # SOFT DELETE
+            cursor.execute(
+                "UPDATE tires SET is_deleted = 1 WHERE id = ?", (tire_id,))
+        conn.commit()
+
 
 def get_all_tire_brands(conn):
-    cursor = conn.cursor()
-    if "psycopg2" in str(type(conn)):
-        cursor.execute("SELECT DISTINCT brand FROM tires WHERE is_deleted = FALSE ORDER BY brand") # Filter soft deleted
-    else:
-        cursor.execute("SELECT DISTINCT brand FROM tires WHERE is_deleted = 0 ORDER BY brand") # Filter soft deleted
-    brands_data = cursor.fetchall()
-    return [row['brand'] for row in brands_data]
+    with conn.cursor() as cursor:
+        if "psycopg2" in str(type(conn)):
+            # Filter soft deleted
+            cursor.execute(
+                "SELECT DISTINCT brand FROM tires WHERE is_deleted = FALSE ORDER BY brand")
+        else:
+            # Filter soft deleted
+            cursor.execute(
+                "SELECT DISTINCT brand FROM tires WHERE is_deleted = 0 ORDER BY brand")
+        brands_data = cursor.fetchall()
+        return [row['brand'] for row in brands_data]
 
 # เพิ่มฟังก์ชันสำหรับดึงยางที่ถูกลบ
+
+
 def get_deleted_tires(conn):
-    cursor = conn.cursor()
-    sql_query = """
-        SELECT t.*,
-               p.name AS promo_name,
-               p.type AS promo_type,
-               p.value1 AS promo_value1,
-               p.value2 AS promo_value2,
-               p.is_active AS promo_is_active
-        FROM tires t
-        LEFT JOIN promotions p ON t.promotion_id = p.id
-        WHERE t.is_deleted = TRUE
-        ORDER BY t.brand, t.model
-    """
-    if "psycopg2" in str(type(conn)):
-        cursor.execute(sql_query)
-    else:
-        cursor.execute(sql_query.replace('TRUE', '1')) # SQLite boolean
-    tires = cursor.fetchall()
-    # Process for display if needed (like index page)
-    processed_tires = []
-    for tire in tires:
-        tire_dict = dict(tire) 
-        # Add promo price calculation if needed, similar to get_all_tires
-        # For deleted items, usually just basic info is enough, so skip complex calculations here
-        processed_tires.append(tire_dict)
-    return processed_tires
+    with conn.cursor() as cursor:
+        sql_query = """
+            SELECT t.*,
+                p.name AS promo_name,
+                p.type AS promo_type,
+                p.value1 AS promo_value1,
+                p.value2 AS promo_value2,
+                p.is_active AS promo_is_active
+            FROM tires t
+            LEFT JOIN promotions p ON t.promotion_id = p.id
+            WHERE t.is_deleted = TRUE
+            ORDER BY t.brand, t.model
+        """
+        if "psycopg2" in str(type(conn)):
+            cursor.execute(sql_query)
+        else:
+            cursor.execute(sql_query.replace('TRUE', '1'))  # SQLite boolean
+        tires = cursor.fetchall()
+        # Process for display if needed (like index page)
+        processed_tires = []
+        for tire in tires:
+            tire_dict = dict(tire)
+            # Add promo price calculation if needed, similar to get_all_tires
+            # For deleted items, usually just basic info is enough, so skip complex
+            # calculations here
+            processed_tires.append(tire_dict)
+        return processed_tires
 
 
 # เพิ่มฟังก์ชันสำหรับกู้คืนยาง (restore_tire)
 def restore_tire(conn, tire_id):
-    cursor = conn.cursor()
-    if "psycopg2" in str(type(conn)):
-        cursor.execute("UPDATE tires SET is_deleted = FALSE WHERE id = %s", (tire_id,))
-    else:
-        cursor.execute("UPDATE tires SET is_deleted = 0 WHERE id = ?", (tire_id,))
-    conn.commit()
+    with conn.cursor() as cursor:
+        if "psycopg2" in str(type(conn)):
+            cursor.execute(
+                "UPDATE tires SET is_deleted = FALSE WHERE id = %s", (tire_id,))
+        else:
+            cursor.execute(
+                "UPDATE tires SET is_deleted = 0 WHERE id = ?", (tire_id,))
+        conn.commit()
 
 # --- Wheel Functions ---
-def get_all_wheels(conn, query=None, brand_filter='all', include_deleted=False): # ADDED include_deleted
-    cursor = conn.cursor()
-    sql_query = """
-        SELECT * FROM wheels
-    """
-    params = []
-    conditions = []
 
-    if not include_deleted: # Conditionally add is_deleted filter
-        conditions.append("is_deleted = FALSE" if "psycopg2" in str(type(conn)) else "is_deleted = 0")
+
+# ADDED include_deleted
+def get_all_wheels(
+        conn,
+        query=None,
+        brand_filter='all',
+        include_deleted=False):
+    with conn.cursor() as cursor:
+        sql_query = """
+            SELECT * FROM wheels
+        """
+        params = []
+        conditions = []
+
+    if not include_deleted:  # Conditionally add is_deleted filter
+        conditions.append("is_deleted = FALSE" if "psycopg2" in str(
+            type(conn)) else "is_deleted = 0")
 
     if "psycopg2" in str(type(conn)):
         if query:
             search_term = f"%{query}%"
-            conditions.append("(brand ILIKE %s OR model ILIKE %s OR pcd ILIKE %s OR color ILIKE %s)")
+            conditions.append(
+                "(brand ILIKE %s OR model ILIKE %s OR pcd ILIKE %s OR color ILIKE %s)")
             params.extend([search_term, search_term, search_term, search_term])
-        
+
         if brand_filter != 'all':
             conditions.append("brand = %s")
             params.append(brand_filter)
-    else: # SQLite
+    else:  # SQLite
         if query:
             search_term = f"%{query}%"
-            conditions.append("(brand LIKE ? OR model LIKE ? OR pcd LIKE ? OR color LIKE ?)")
+            conditions.append(
+                "(brand LIKE ? OR model LIKE ? OR pcd LIKE ? OR color LIKE ?)")
             params.extend([search_term, search_term, search_term, search_term])
-        
+
         if brand_filter != 'all':
             conditions.append("brand = ?")
             params.append(brand_filter)
-    
+
     if conditions:
         sql_query += " WHERE " + " AND ".join(conditions)
-    
+
     sql_query += " ORDER BY brand, model, diameter"
-    
+
     if "psycopg2" in str(type(conn)):
         cursor.execute(sql_query, params)
     else:
         cursor.execute(sql_query, params)
     wheels_data = cursor.fetchall()
-    
+
     if all(isinstance(row, sqlite3.Row) for row in wheels_data):
         processed_wheels = [dict(row) for row in wheels_data]
     else:
         processed_wheels = wheels_data
     return processed_wheels
 
+
 def get_wheel(conn, wheel_id):
-    cursor = conn.cursor()
-    if "psycopg2" in str(type(conn)):
-        cursor.execute("SELECT * FROM wheels WHERE id = %s", (wheel_id,))
-    else:
-        cursor.execute("SELECT * FROM wheels WHERE id = ?", (wheel_id,))
-    wheel_data = cursor.fetchone()
-    if isinstance(wheel_data, sqlite3.Row):
-        wheel_data = dict(wheel_data)
-    return wheel_data
+    with conn.cursor() as cursor:
+        if "psycopg2" in str(type(conn)):
+            cursor.execute("SELECT * FROM wheels WHERE id = %s", (wheel_id,))
+        else:
+            cursor.execute("SELECT * FROM wheels WHERE id = ?", (wheel_id,))
+        wheel_data = cursor.fetchone()
+        if isinstance(wheel_data, sqlite3.Row):
+            wheel_data = dict(wheel_data)
+        return wheel_data
 
-def add_wheel(conn, brand, model, diameter, pcd, width, et, color, quantity, cost, cost_online, wholesale_price1, wholesale_price2, retail_price, image_url, user_id=None):
-    cursor = conn.cursor()
-    is_postgres = "psycopg2" in str(type(conn))
 
-    if is_postgres:
-        cursor.execute("""
-            INSERT INTO wheels (brand, model, diameter, pcd, width, et, color, quantity, cost, cost_online, wholesale_price1, wholesale_price2, retail_price, image_filename, is_deleted)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, FALSE) RETURNING id
-        """, (brand, model, diameter, pcd, width, et, color, quantity, cost, cost_online, wholesale_price1, wholesale_price2, retail_price, image_url))
-        wheel_id = cursor.fetchone()['id']
-    else:
-        cursor.execute("""
-            INSERT INTO wheels (brand, model, diameter, pcd, width, et, color, quantity, cost, cost_online, wholesale_price1, wholesale_price2, retail_price, image_filename, is_deleted)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
-        """, (brand, model, diameter, pcd, width, et, color, quantity, cost, cost_online, wholesale_price1, wholesale_price2, retail_price, image_url))
-        wheel_id = cursor.lastrowid
-    
+def add_wheel(
+        conn,
+        brand,
+        model,
+        diameter,
+        pcd,
+        width,
+        et,
+        color,
+        quantity,
+        cost,
+        cost_online,
+        wholesale_price1,
+        wholesale_price2,
+        retail_price,
+        image_url,
+        user_id=None):
+    with conn.cursor() as cursor:
+        is_postgres = "psycopg2" in str(type(conn))
+
+        if is_postgres:
+            cursor.execute("""
+                INSERT INTO wheels (brand, model, diameter, pcd, width, et, color, quantity, cost, cost_online, wholesale_price1, wholesale_price2, retail_price, image_filename, is_deleted)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, FALSE) RETURNING id
+            """, (brand, model, diameter, pcd, width, et, color, quantity, cost, cost_online, wholesale_price1, wholesale_price2, retail_price, image_url))
+            wheel_id = cursor.fetchone()['id']
+        else:
+            cursor.execute("""
+                INSERT INTO wheels (brand, model, diameter, pcd, width, et, color, quantity, cost, cost_online, wholesale_price1, wholesale_price2, retail_price, image_filename, is_deleted)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
+            """, (brand, model, diameter, pcd, width, et, color, quantity, cost, cost_online, wholesale_price1, wholesale_price2, retail_price, image_url))
+            wheel_id = cursor.lastrowid
+
     # เมื่อเพิ่มแม็กใหม่ ให้บันทึกการเคลื่อนไหวเป็น "ซื้อเข้า"
     buy_in_channel_id = get_sales_channel_id(conn, 'ซื้อเข้า')
-    add_wheel_movement(conn, wheel_id, 'IN', quantity, quantity, 'เพิ่มแม็กใหม่เข้าสต็อก (ซื้อเข้า)', None, user_id=user_id, channel_id=buy_in_channel_id)
-    
+    add_wheel_movement(
+        conn,
+        wheel_id,
+        'IN',
+        quantity,
+        quantity,
+        'เพิ่มแม็กใหม่เข้าสต็อก (ซื้อเข้า)',
+        None,
+        user_id=user_id,
+        channel_id=buy_in_channel_id)
+
     conn.commit()
     return wheel_id
-    
-def update_wheel(conn, wheel_id, brand, model, diameter, pcd, width, et, color, cost, cost_online, wholesale_price1, wholesale_price2, retail_price, image_url):
-    cursor = conn.cursor()
-    if "psycopg2" in str(type(conn)):
-        cursor.execute("""
-            UPDATE wheels SET
-                brand = %s,
-                model = %s,
-                diameter = %s,
-                pcd = %s,
-                width = %s,
-                et = %s,
-                color = %s,
-                cost = %s,
-                cost_online = %s,
-                wholesale_price1 = %s,
-                wholesale_price2 = %s,
-                retail_price = %s,
-                image_filename = %s
-            WHERE id = %s
-        """, (brand, model, diameter, pcd, width, et, color, cost, cost_online, wholesale_price1, wholesale_price2, retail_price, image_url, wheel_id))
-    else:
-        cursor.execute("""
-            UPDATE wheels SET
-                brand = ?,
-                model = ?,
-                diameter = ?,
-                pcd = ?,
-                width = ?,
-                et = ?,
-                color = ?,
-                cost = ?,
-                cost_online = ?,
-                wholesale_price1 = ?,
-                wholesale_price2 = ?,
-                retail_price = ?,
-                image_filename = ?
-            WHERE id = ?
-        """, (brand, model, diameter, pcd, width, et, color, quantity, cost, cost_online, wholesale_price1, wholesale_price2, retail_price, image_url, wheel_id))
-    conn.commit()
 
-def add_wheel_movement(conn, wheel_id, move_type, quantity_change, remaining_quantity, notes, image_filename=None, user_id=None,
-                       channel_id=None, online_platform_id=None, wholesale_customer_id=None, return_customer_type=None):
+
+def update_wheel(
+        conn,
+        wheel_id,
+        brand,
+        model,
+        diameter,
+        pcd,
+        width,
+        et,
+        color,
+        cost,
+        cost_online,
+        wholesale_price1,
+        wholesale_price2,
+        retail_price,
+        image_url):
+    with conn.cursor() as cursor:
+        if "psycopg2" in str(type(conn)):
+            cursor.execute("""
+                UPDATE wheels SET
+                    brand = %s,
+                    model = %s,
+                    diameter = %s,
+                    pcd = %s,
+                    width = %s,
+                    et = %s,
+                    color = %s,
+                    cost = %s,
+                    cost_online = %s,
+                    wholesale_price1 = %s,
+                    wholesale_price2 = %s,
+                    retail_price = %s,
+                    image_filename = %s
+                WHERE id = %s
+            """, (brand, model, diameter, pcd, width, et, color, cost, cost_online, wholesale_price1, wholesale_price2, retail_price, image_url, wheel_id))
+        else:
+            cursor.execute("""
+                UPDATE wheels SET
+                    brand = ?,
+                    model = ?,
+                    diameter = ?,
+                    pcd = ?,
+                    width = ?,
+                    et = ?,
+                    color = ?,
+                    cost = ?,
+                    cost_online = ?,
+                    wholesale_price1 = ?,
+                    wholesale_price2 = ?,
+                    retail_price = ?,
+                    image_filename = ?
+                WHERE id = ?
+            """, (brand, model, diameter, pcd, width, et, color, cost, cost_online, wholesale_price1, wholesale_price2, retail_price, image_url, wheel_id))
+        conn.commit()
+
+
+def add_wheel_movement(
+        conn,
+        wheel_id,
+        move_type,
+        quantity_change,
+        remaining_quantity,
+        notes,
+        image_filename=None,
+        user_id=None,
+        channel_id=None,
+        online_platform_id=None,
+        wholesale_customer_id=None,
+        return_customer_type=None):
     timestamp = get_bkk_time().isoformat()
-    cursor = conn.cursor()
-    if "psycopg2" in str(type(conn)):
-        cursor.execute("""
-            INSERT INTO wheel_movements (wheel_id, timestamp, type, quantity_change, remaining_quantity, notes, image_filename, user_id,
-                                         channel_id, online_platform_id, wholesale_customer_id, return_customer_type)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-        """, (wheel_id, timestamp, move_type, quantity_change, remaining_quantity, notes, image_filename, user_id,
-              channel_id, online_platform_id, wholesale_customer_id, return_customer_type))
-    else:
-        cursor.execute("""
-            INSERT INTO wheel_movements (wheel_id, timestamp, type, quantity_change, remaining_quantity, notes, image_filename, user_id,
-                                         channel_id, online_platform_id, wholesale_customer_id, return_customer_type)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """, (wheel_id, timestamp, move_type, quantity_change, remaining_quantity, notes, image_filename, user_id,
-              channel_id, online_platform_id, wholesale_customer_id, return_customer_type))
-    conn.commit()
+    with conn.cursor() as cursor:
+        if "psycopg2" in str(type(conn)):
+            cursor.execute(
+                """
+                INSERT INTO wheel_movements (wheel_id, timestamp, type, quantity_change, remaining_quantity, notes, image_filename, user_id,
+                                            channel_id, online_platform_id, wholesale_customer_id, return_customer_type)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            """,
+                (wheel_id,
+                 timestamp,
+                 move_type,
+                 quantity_change,
+                 remaining_quantity,
+                 notes,
+                 image_filename,
+                 user_id,
+                 channel_id,
+                 online_platform_id,
+                 wholesale_customer_id,
+                 return_customer_type))
+        else:
+            cursor.execute(
+                """
+                INSERT INTO wheel_movements (wheel_id, timestamp, type, quantity_change, remaining_quantity, notes, image_filename, user_id,
+                                            channel_id, online_platform_id, wholesale_customer_id, return_customer_type)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+                (wheel_id,
+                 timestamp,
+                 move_type,
+                 quantity_change,
+                 remaining_quantity,
+                 notes,
+                 image_filename,
+                 user_id,
+                 channel_id,
+                 online_platform_id,
+                 wholesale_customer_id,
+                 return_customer_type))
+        conn.commit()
 
-def add_wheel_import(conn, brand, model, diameter, pcd, width, et, color, quantity, cost, cost_online, wholesale_price1, wholesale_price2, retail_price, image_url):
-    cursor = conn.cursor()
-    if "psycopg2" in str(type(conn)):
-        cursor.execute("""
-            INSERT INTO wheels (brand, model, diameter, pcd, width, et, color, quantity, cost, cost_online, wholesale_price1, wholesale_price2, retail_price, image_filename, is_deleted)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, FALSE) RETURNING id
-        """, (brand, model, diameter, pcd, width, et, color, quantity, cost, cost_online, wholesale_price1, wholesale_price2, retail_price, image_url))
-        wheel_id = cursor.fetchone()['id']
-    else:
-        cursor.execute("""
-            INSERT INTO wheels (brand, model, diameter, pcd, width, et, color, quantity, cost, cost_online, wholesale_price1, wholesale_price2, retail_price, image_filename, is_deleted)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
-        """, (brand, model, diameter, pcd, width, et, color, quantity, cost, cost_online, wholesale_price1, wholesale_price2, retail_price, image_url))
-        wheel_id = cursor.lastrowid
-    conn.commit()
-    return wheel_id
 
-def update_wheel_import(conn, wheel_id, brand, model, diameter, pcd, width, et, color, quantity, cost, cost_online, wholesale_price1, wholesale_price2, retail_price, image_url):
-    cursor = conn.cursor()
-    if "psycopg2" in str(type(conn)):
-        cursor.execute("""
-            UPDATE wheels SET
-                brand = %s,
-                model = %s,
-                diameter = %s,
-                pcd = %s,
-                width = %s,
-                et = %s,
-                color = %s,
-                quantity = %s,
-                cost = %s,
-                cost_online = %s,
-                wholesale_price1 = %s,
-                wholesale_price2 = %s,
-                retail_price = %s,
-                image_filename = %s
-            WHERE id = %s
-        """, (brand, model, diameter, pcd, width, et, color, quantity, cost, cost_online, wholesale_price1, wholesale_price2, retail_price, image_url, wheel_id))
-    else:
-        cursor.execute("""
-            UPDATE wheels SET
-                brand = ?,
-                model = ?,
-                diameter = ?,
-                pcd = ?,
-                width = ?,
-                et = ?,
-                color = ?,
-                quantity = ?,
-                cost = ?,
-                cost_online = ?,
-                wholesale_price1 = ?,
-                wholesale_price2 = ?,
-                retail_price = ?,
-                image_filename = ?
-            WHERE id = ?
-        """, (brand, model, diameter, pcd, width, et, color, quantity, cost, cost_online, wholesale_price1, wholesale_price2, retail_price, image_url, wheel_id))
-    conn.commit()
+def add_wheel_import(
+        conn,
+        brand,
+        model,
+        diameter,
+        pcd,
+        width,
+        et,
+        color,
+        quantity,
+        cost,
+        cost_online,
+        wholesale_price1,
+        wholesale_price2,
+        retail_price,
+        image_url):
+    with conn.cursor() as cursor:
+        if "psycopg2" in str(type(conn)):
+            cursor.execute("""
+                INSERT INTO wheels (brand, model, diameter, pcd, width, et, color, quantity, cost, cost_online, wholesale_price1, wholesale_price2, retail_price, image_filename, is_deleted)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, FALSE) RETURNING id
+            """, (brand, model, diameter, pcd, width, et, color, quantity, cost, cost_online, wholesale_price1, wholesale_price2, retail_price, image_url))
+            wheel_id = cursor.fetchone()['id']
+        else:
+            cursor.execute("""
+                INSERT INTO wheels (brand, model, diameter, pcd, width, et, color, quantity, cost, cost_online, wholesale_price1, wholesale_price2, retail_price, image_filename, is_deleted)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
+            """, (brand, model, diameter, pcd, width, et, color, quantity, cost, cost_online, wholesale_price1, wholesale_price2, retail_price, image_url))
+            wheel_id = cursor.lastrowid
+        conn.commit()
+        return wheel_id
+
+
+def update_wheel_import(
+        conn,
+        wheel_id,
+        brand,
+        model,
+        diameter,
+        pcd,
+        width,
+        et,
+        color,
+        quantity,
+        cost,
+        cost_online,
+        wholesale_price1,
+        wholesale_price2,
+        retail_price,
+        image_url):
+    with conn.cursor() as cursor:
+        if "psycopg2" in str(type(conn)):
+            cursor.execute("""
+                UPDATE wheels SET
+                    brand = %s,
+                    model = %s,
+                    diameter = %s,
+                    pcd = %s,
+                    width = %s,
+                    et = %s,
+                    color = %s,
+                    quantity = %s,
+                    cost = %s,
+                    cost_online = %s,
+                    wholesale_price1 = %s,
+                    wholesale_price2 = %s,
+                    retail_price = %s,
+                    image_filename = %s
+                WHERE id = %s
+            """, (brand, model, diameter, pcd, width, et, color, quantity, cost, cost_online, wholesale_price1, wholesale_price2, retail_price, image_url, wheel_id))
+        else:
+            cursor.execute("""
+                UPDATE wheels SET
+                    brand = ?,
+                    model = ?,
+                    diameter = ?,
+                    pcd = ?,
+                    width = ?,
+                    et = ?,
+                    color = ?,
+                    quantity = ?,
+                    cost = ?,
+                    cost_online = ?,
+                    wholesale_price1 = ?,
+                    wholesale_price2 = ?,
+                    retail_price = ?,
+                    image_filename = ?
+                WHERE id = ?
+            """, (brand, model, diameter, pcd, width, et, color, quantity, cost, cost_online, wholesale_price1, wholesale_price2, retail_price, image_url, wheel_id))
+        conn.commit()
+
 
 def delete_wheel(conn, wheel_id):
-    cursor = conn.cursor()
-    if "psycopg2" in str(type(conn)):
-        cursor.execute("UPDATE wheels SET is_deleted = TRUE WHERE id = %s", (wheel_id,)) # SOFT DELETE
-    else:
-        cursor.execute("UPDATE wheels SET is_deleted = 1 WHERE id = ?", (wheel_id,)) # SOFT DELETE
-    conn.commit()
+    with conn.cursor() as cursor:
+        if "psycopg2" in str(type(conn)):
+            # SOFT DELETE
+            cursor.execute(
+                "UPDATE wheels SET is_deleted = TRUE WHERE id = %s", (wheel_id,))
+        else:
+            # SOFT DELETE
+            cursor.execute(
+                "UPDATE wheels SET is_deleted = 1 WHERE id = ?", (wheel_id,))
+        conn.commit()
+
 
 def get_all_wheel_brands(conn):
-    cursor = conn.cursor()
-    if "psycopg2" in str(type(conn)):
-        cursor.execute("SELECT DISTINCT brand FROM wheels WHERE is_deleted = FALSE ORDER BY brand") # Filter soft deleted
-    else:
-        cursor.execute("SELECT DISTINCT brand FROM wheels WHERE is_deleted = 0 ORDER BY brand") # Filter soft deleted
-    brands_data = cursor.fetchall()
-    return [row['brand'] for row in brands_data]
+    with conn.cursor() as cursor:
+        if "psycopg2" in str(type(conn)):
+            # Filter soft deleted
+            cursor.execute(
+                "SELECT DISTINCT brand FROM wheels WHERE is_deleted = FALSE ORDER BY brand")
+        else:
+            # Filter soft deleted
+            cursor.execute(
+                "SELECT DISTINCT brand FROM wheels WHERE is_deleted = 0 ORDER BY brand")
+        brands_data = cursor.fetchall()
+        return [row['brand'] for row in brands_data]
 
 # เพิ่มฟังก์ชันสำหรับดึงแม็กที่ถูกลบ
+
+
 def get_deleted_wheels(conn):
-    cursor = conn.cursor()
-    sql_query = """
-        SELECT w.*
-        FROM wheels w
-        WHERE w.is_deleted = TRUE
-        ORDER BY w.brand, w.model
-    """
-    if "psycopg2" in str(type(conn)):
-        cursor.execute(sql_query)
-    else:
-        cursor.execute(sql_query.replace('TRUE', '1')) # SQLite boolean
-    wheels = cursor.fetchall()
-    processed_wheels = []
-    for wheel in wheels:
-        processed_wheels.append(dict(wheel)) # Convert to dict
-    return processed_wheels
+    with conn.cursor() as cursor:
+        sql_query = """
+            SELECT w.*
+            FROM wheels w
+            WHERE w.is_deleted = TRUE
+            ORDER BY w.brand, w.model
+        """
+        if "psycopg2" in str(type(conn)):
+            cursor.execute(sql_query)
+        else:
+            cursor.execute(sql_query.replace('TRUE', '1'))  # SQLite boolean
+        wheels = cursor.fetchall()
+        processed_wheels = []
+        for wheel in wheels:
+            processed_wheels.append(dict(wheel))  # Convert to dict
+        return processed_wheels
 
 # เพิ่มฟังก์ชันสำหรับกู้คืนแม็ก (restore_wheel)
+
+
 def restore_wheel(conn, wheel_id):
-    cursor = conn.cursor()
-    if "psycopg2" in str(type(conn)):
-        cursor.execute("UPDATE wheels SET is_deleted = FALSE WHERE id = %s", (wheel_id,))
-    else:
-        cursor.execute("UPDATE wheels SET is_deleted = 0 WHERE id = ?", (wheel_id,))
-    conn.commit()
+    with conn.cursor() as cursor:
+        if "psycopg2" in str(type(conn)):
+            cursor.execute(
+                "UPDATE wheels SET is_deleted = FALSE WHERE id = %s", (wheel_id,))
+        else:
+            cursor.execute(
+                "UPDATE wheels SET is_deleted = 0 WHERE id = ?", (wheel_id,))
+        conn.commit()
+
 
 def add_wheel_fitment(conn, wheel_id, brand, model, year_start, year_end):
-    cursor = conn.cursor()
-    if "psycopg2" in str(type(conn)):
-        cursor.execute("""
-            INSERT INTO wheel_fitments (wheel_id, brand, model, year_start, year_end)
-            VALUES (%s, %s, %s, %s, %s)
-        """, (wheel_id, brand, model, year_start, year_end))
-    else:
-        cursor.execute("""
-            INSERT INTO wheel_fitments (wheel_id, brand, model, year_start, year_end)
-            VALUES (?, ?, ?, ?, ?)
-        """, (wheel_id, brand, model, year_start, year_end))
-    conn.commit()
+    with conn.cursor() as cursor:
+        if "psycopg2" in str(type(conn)):
+            cursor.execute("""
+                INSERT INTO wheel_fitments (wheel_id, brand, model, year_start, year_end)
+                VALUES (%s, %s, %s, %s, %s)
+            """, (wheel_id, brand, model, year_start, year_end))
+        else:
+            cursor.execute("""
+                INSERT INTO wheel_fitments (wheel_id, brand, model, year_start, year_end)
+                VALUES (?, ?, ?, ?, ?)
+            """, (wheel_id, brand, model, year_start, year_end))
+        conn.commit()
+
 
 def get_wheel_fitments(conn, wheel_id):
-    cursor = conn.cursor()
-    if "psycopg2" in str(type(conn)):
-        cursor.execute("SELECT * FROM wheel_fitments WHERE wheel_id = %s ORDER BY brand, model, year_start", (wheel_id,))
-    else:
-        cursor.execute("SELECT * FROM wheel_fitments WHERE wheel_id = ? ORDER BY brand, model, year_start", (wheel_id,))
-    fitments_data = cursor.fetchall()
-    if all(isinstance(row, sqlite3.Row) for row in fitments_data):
-        processed_fitments = [dict(row) for row in fitments_data]
-    else:
-        processed_fitments = fitments_data
-    return processed_fitments
+    with conn.cursor() as cursor:
+        if "psycopg2" in str(type(conn)):
+            cursor.execute(
+                "SELECT * FROM wheel_fitments WHERE wheel_id = %s ORDER BY brand, model, year_start",
+                (wheel_id,
+                 ))
+        else:
+            cursor.execute(
+                "SELECT * FROM wheel_fitments WHERE wheel_id = ? ORDER BY brand, model, year_start",
+                (wheel_id,
+                 ))
+        fitments_data = cursor.fetchall()
+        if all(isinstance(row, sqlite3.Row) for row in fitments_data):
+            processed_fitments = [dict(row) for row in fitments_data]
+        else:
+            processed_fitments = fitments_data
+        return processed_fitments
+
 
 def delete_wheel_fitment(conn, fitment_id):
-    cursor = conn.cursor()
-    if "psycopg2" in str(type(conn)):
-        cursor.execute("DELETE FROM wheel_fitments WHERE id = %s", (fitment_id,))
-    else:
-        cursor.execute("DELETE FROM wheel_fitments WHERE id = ?", (fitment_id,))
-    conn.commit()
+    with conn.cursor() as cursor:
+        if "psycopg2" in str(type(conn)):
+            cursor.execute(
+                "DELETE FROM wheel_fitments WHERE id = %s", (fitment_id,))
+        else:
+            cursor.execute(
+                "DELETE FROM wheel_fitments WHERE id = ?", (fitment_id,))
+        conn.commit()
+
 
 def add_tire_barcode(conn, tire_id, barcode_string, is_primary=False):
     """
@@ -2074,40 +2660,60 @@ def add_tire_barcode(conn, tire_id, barcode_string, is_primary=False):
     barcode_string: Barcode ID ที่ยิงได้
     is_primary: True ถ้าต้องการให้เป็นบาร์โค้ดหลักสำหรับยางนี้
     """
-    cursor = conn.cursor()
-    if "psycopg2" in str(type(conn)):
-        cursor.execute("INSERT INTO tire_barcodes (tire_id, barcode_string, is_primary_barcode) VALUES (%s, %s, %s) ON CONFLICT (barcode_string) DO NOTHING",
-                       (tire_id, barcode_string, is_primary))
-    else:
-        # SQLite
-        cursor.execute("INSERT OR IGNORE INTO tire_barcodes (tire_id, barcode_string, is_primary_barcode) VALUES (?, ?, ?)",
-                       (tire_id, barcode_string, is_primary))
-    # ไม่ต้อง conn.commit() ที่นี่ เพราะจะให้ caller (app.py) จัดการใน transaction
+    with conn.cursor() as cursor:
+        if "psycopg2" in str(type(conn)):
+            cursor.execute(
+                "INSERT INTO tire_barcodes (tire_id, barcode_string, is_primary_barcode) VALUES (%s, %s, %s) ON CONFLICT (barcode_string) DO NOTHING",
+                (tire_id,
+                 barcode_string,
+                 is_primary))
+        else:
+            # SQLite
+            cursor.execute(
+                "INSERT OR IGNORE INTO tire_barcodes (tire_id, barcode_string, is_primary_barcode) VALUES (?, ?, ?)",
+                (tire_id,
+                 barcode_string,
+                 is_primary))
+    # ไม่ต้อง conn.commit() ที่นี่ เพราะจะให้ caller (app.py) จัดการใน
+    # transaction
+
 
 def get_tire_id_by_barcode(conn, barcode_string):
     """
     ค้นหา tire_id จาก barcode_string ที่ระบุ
     """
-    cursor = conn.cursor()
-    if "psycopg2" in str(type(conn)):
-        cursor.execute("SELECT tire_id FROM tire_barcodes WHERE barcode_string = %s", (barcode_string,))
-    else:
-        cursor.execute("SELECT tire_id FROM tire_barcodes WHERE barcode_string = ?", (barcode_string,))
-    result = cursor.fetchone()
-    return result['tire_id'] if result else None
+    with conn.cursor() as cursor:
+        if "psycopg2" in str(type(conn)):
+            cursor.execute(
+                "SELECT tire_id FROM tire_barcodes WHERE barcode_string = %s",
+                (barcode_string,
+                 ))
+        else:
+            cursor.execute(
+                "SELECT tire_id FROM tire_barcodes WHERE barcode_string = ?", (barcode_string,))
+        result = cursor.fetchone()
+        return result['tire_id'] if result else None
+
 
 def get_barcodes_for_tire(conn, tire_id):
     """
     ดึง Barcode ID ทั้งหมดสำหรับยางที่ระบุ
     """
-    cursor = conn.cursor()
-    if "psycopg2" in str(type(conn)):
-        cursor.execute("SELECT barcode_string, is_primary_barcode FROM tire_barcodes WHERE tire_id = %s ORDER BY is_primary_barcode DESC, barcode_string ASC", (tire_id,))
-    else:
-        cursor.execute("SELECT barcode_string, is_primary_barcode FROM tire_barcodes WHERE tire_id = ? ORDER BY is_primary_barcode DESC, barcode_string ASC", (tire_id,))
-    return [dict(row) for row in cursor.fetchall()]
+    with conn.cursor() as cursor:
+        if "psycopg2" in str(type(conn)):
+            cursor.execute(
+                "SELECT barcode_string, is_primary_barcode FROM tire_barcodes WHERE tire_id = %s ORDER BY is_primary_barcode DESC, barcode_string ASC",
+                (tire_id,
+                 ))
+        else:
+            cursor.execute(
+                "SELECT barcode_string, is_primary_barcode FROM tire_barcodes WHERE tire_id = ? ORDER BY is_primary_barcode DESC, barcode_string ASC",
+                (tire_id,
+                 ))
+        return [dict(row) for row in cursor.fetchall()]
 
 # --- ฟังก์ชันสำหรับจัดการ Barcode ID ของแม็ก (Wheel Barcodes) ---
+
 
 def add_wheel_barcode(conn, wheel_id, barcode_string, is_primary=False):
     """
@@ -2116,83 +2722,111 @@ def add_wheel_barcode(conn, wheel_id, barcode_string, is_primary=False):
     barcode_string: Barcode ID ที่ยิงได้
     is_primary: True ถ้าต้องการให้เป็นบาร์โค้ดหลักสำหรับแม็กนี้
     """
-    cursor = conn.cursor()
-    if "psycopg2" in str(type(conn)):
-        cursor.execute("INSERT INTO wheel_barcodes (wheel_id, barcode_string, is_primary_barcode) VALUES (%s, %s, %s) ON CONFLICT (barcode_string) DO NOTHING",
-                       (wheel_id, barcode_string, is_primary))
-    else:
-        # SQLite
-        cursor.execute("INSERT OR IGNORE INTO wheel_barcodes (wheel_id, barcode_string, is_primary_barcode) VALUES (?, ?, ?)",
-                       (wheel_id, barcode_string, is_primary))
+    with conn.cursor() as cursor:
+        if "psycopg2" in str(type(conn)):
+            cursor.execute(
+                "INSERT INTO wheel_barcodes (wheel_id, barcode_string, is_primary_barcode) VALUES (%s, %s, %s) ON CONFLICT (barcode_string) DO NOTHING",
+                (wheel_id,
+                 barcode_string,
+                 is_primary))
+        else:
+            # SQLite
+            cursor.execute(
+                "INSERT OR IGNORE INTO wheel_barcodes (wheel_id, barcode_string, is_primary_barcode) VALUES (?, ?, ?)",
+                (wheel_id,
+                 barcode_string,
+                 is_primary))
     # ไม่ต้อง conn.commit() ที่นี่
-    
+
+
 def delete_tire_barcode(conn, barcode_string):
     """
     ลบ Barcode ID ที่ระบุออกจากตาราง tire_barcodes
     """
-    cursor = conn.cursor()
-    if "psycopg2" in str(type(conn)):
-        cursor.execute("DELETE FROM tire_barcodes WHERE barcode_string = %s", (barcode_string,))
-    else:
-        cursor.execute("DELETE FROM tire_barcodes WHERE barcode_string = ?", (barcode_string,))
-        
+    with conn.cursor() as cursor:
+        if "psycopg2" in str(type(conn)):
+            cursor.execute(
+                "DELETE FROM tire_barcodes WHERE barcode_string = %s", (barcode_string,))
+        else:
+            cursor.execute(
+                "DELETE FROM tire_barcodes WHERE barcode_string = ?", (barcode_string,))
+
+
 def delete_wheel_barcode(conn, barcode_string):
     """
     ลบ Barcode ID ที่ระบุออกจากตาราง wheel_barcodes
     """
-    cursor = conn.cursor()
-    if "psycopg2" in str(type(conn)):
-        cursor.execute("DELETE FROM wheel_barcodes WHERE barcode_string = %s", (barcode_string,))
-    else:
-        cursor.execute("DELETE FROM wheel_barcodes WHERE barcode_string = ?", (barcode_string,))
+    with conn.cursor() as cursor:
+        if "psycopg2" in str(type(conn)):
+            cursor.execute(
+                "DELETE FROM wheel_barcodes WHERE barcode_string = %s", (barcode_string,))
+        else:
+            cursor.execute(
+                "DELETE FROM wheel_barcodes WHERE barcode_string = ?", (barcode_string,))
+
 
 def get_wheel_id_by_barcode(conn, barcode_string):
     """
     ค้นหา wheel_id จาก barcode_string ที่ระบุ
     """
-    cursor = conn.cursor()
-    if "psycopg2" in str(type(conn)):
-        cursor.execute("SELECT wheel_id FROM wheel_barcodes WHERE barcode_string = %s", (barcode_string,))
-    else:
-        cursor.execute("SELECT wheel_id FROM wheel_barcodes WHERE barcode_string = ?", (barcode_string,))
-    result = cursor.fetchone()
-    return result['wheel_id'] if result else None
+    with conn.cursor() as cursor:
+        if "psycopg2" in str(type(conn)):
+            cursor.execute(
+                "SELECT wheel_id FROM wheel_barcodes WHERE barcode_string = %s",
+                (barcode_string,
+                 ))
+        else:
+            cursor.execute(
+                "SELECT wheel_id FROM wheel_barcodes WHERE barcode_string = ?",
+                (barcode_string,
+                 ))
+        result = cursor.fetchone()
+        return result['wheel_id'] if result else None
+
 
 def get_barcodes_for_wheel(conn, wheel_id):
     """
     ดึง Barcode ID ทั้งหมดสำหรับแม็กที่ระบุ
     """
-    cursor = conn.cursor()
-    if "psycopg2" in str(type(conn)):
-        cursor.execute("SELECT barcode_string, is_primary_barcode FROM wheel_barcodes WHERE wheel_id = %s ORDER BY is_primary_barcode DESC, barcode_string ASC", (wheel_id,))
-    else:
-        cursor.execute("SELECT barcode_string, is_primary_barcode FROM wheel_barcodes WHERE wheel_id = ? ORDER BY is_primary_barcode DESC, barcode_string ASC", (wheel_id,))
-    return [dict(row) for row in cursor.fetchall()]
+    with conn.cursor() as cursor:
+        if "psycopg2" in str(type(conn)):
+            cursor.execute(
+                "SELECT barcode_string, is_primary_barcode FROM wheel_barcodes WHERE wheel_id = %s ORDER BY is_primary_barcode DESC, barcode_string ASC",
+                (wheel_id,
+                 ))
+        else:
+            cursor.execute(
+                "SELECT barcode_string, is_primary_barcode FROM wheel_barcodes WHERE wheel_id = ? ORDER BY is_primary_barcode DESC, barcode_string ASC",
+                (wheel_id,
+                 ))
+        return [dict(row) for row in cursor.fetchall()]
+
 
 def recalculate_all_stock_histories(conn):
     """
     Recalculates the entire history of remaining_quantity for ALL tires and wheels.
     This is a one-time fix for corrupted historical data.
     """
-    cursor = conn.cursor()
-    is_postgres = "psycopg2" in str(type(conn))
-    print("Starting recalculation for all items...")
+    with conn.cursor() as cursor:
+        is_postgres = "psycopg2" in str(type(conn))
+        print("Starting recalculation for all items...")
 
-    # --- Recalculate for all TIRES ---
-    print("Processing tires...")
-    cursor.execute("SELECT DISTINCT tire_id FROM tire_movements")
-    all_tire_ids = [row['tire_id'] for row in cursor.fetchall()]
+        # --- Recalculate for all TIRES ---
+        print("Processing tires...")
+        cursor.execute("SELECT DISTINCT tire_id FROM tire_movements")
+        all_tire_ids = [row['tire_id'] for row in cursor.fetchall()]
 
     for tire_id in all_tire_ids:
         print(f"  Recalculating for tire_id: {tire_id}")
         # ดึงประวัติทั้งหมดของยางเส้นนี้ เรียงตามเวลา
         sql_get_movements = f"""
-            SELECT id, type, quantity_change FROM tire_movements 
+            SELECT id, type, quantity_change FROM tire_movements
             WHERE tire_id = ? ORDER BY timestamp ASC, id ASC
         """
-        cursor.execute(sql_get_movements.replace('?','%s') if is_postgres else sql_get_movements, (tire_id,))
+        cursor.execute(sql_get_movements.replace('?', '%s')
+                       if is_postgres else sql_get_movements, (tire_id,))
         movements = cursor.fetchall()
-        
+
         # เริ่มคำนวณใหม่จาก 0
         running_stock = 0
         for move in movements:
@@ -2200,10 +2834,15 @@ def recalculate_all_stock_histories(conn):
                 running_stock += move['quantity_change']
             elif move['type'] == 'OUT':
                 running_stock -= move['quantity_change']
-            
+
             # อัปเดตค่า remaining_quantity ของทุกรายการให้ถูกต้อง
             sql_update_remaining = f"UPDATE tire_movements SET remaining_quantity = ? WHERE id = ?"
-            cursor.execute(sql_update_remaining.replace('?','%s') if is_postgres else sql_update_remaining, (running_stock, move['id']))
+            cursor.execute(
+                sql_update_remaining.replace(
+                    '?',
+                    '%s') if is_postgres else sql_update_remaining,
+                (running_stock,
+                 move['id']))
 
     # --- Recalculate for all WHEELS ---
     print("Processing wheels...")
@@ -2214,10 +2853,11 @@ def recalculate_all_stock_histories(conn):
         print(f"  Recalculating for wheel_id: {wheel_id}")
         # ดึงประวัติทั้งหมดของแม็กวงนี้ เรียงตามเวลา
         sql_get_movements = f"""
-            SELECT id, type, quantity_change FROM wheel_movements 
+            SELECT id, type, quantity_change FROM wheel_movements
             WHERE wheel_id = ? ORDER BY timestamp ASC, id ASC
         """
-        cursor.execute(sql_get_movements.replace('?','%s') if is_postgres else sql_get_movements, (wheel_id,))
+        cursor.execute(sql_get_movements.replace('?', '%s')
+                       if is_postgres else sql_get_movements, (wheel_id,))
         movements = cursor.fetchall()
 
         running_stock = 0
@@ -2228,75 +2868,90 @@ def recalculate_all_stock_histories(conn):
                 running_stock -= move['quantity_change']
 
             sql_update_remaining = f"UPDATE wheel_movements SET remaining_quantity = ? WHERE id = ?"
-            cursor.execute(sql_update_remaining.replace('?','%s') if is_postgres else sql_update_remaining, (running_stock, move['id']))
+            cursor.execute(
+                sql_update_remaining.replace(
+                    '?',
+                    '%s') if is_postgres else sql_update_remaining,
+                (running_stock,
+                 move['id']))
 
     conn.commit()
     print("Recalculation complete!")
     return "Recalculation complete for all items."
 
+
 def add_notification(conn, message, user_id=None):
     """บันทึกข้อความแจ้งเตือนใหม่ลงในฐานข้อมูล"""
     created_at = get_bkk_time().isoformat()
-    cursor = conn.cursor()
-    if "psycopg2" in str(type(conn)):
-        cursor.execute(
-            "INSERT INTO notifications (message, user_id, created_at, is_read) VALUES (%s, %s, %s, FALSE)",
-            (message, user_id, created_at)
-        )
-    else:
-        cursor.execute(
-            "INSERT INTO notifications (message, user_id, created_at, is_read) VALUES (?, ?, ?, 0)",
-            (message, user_id, created_at)
-        )
+    with conn.cursor() as cursor:
+        if "psycopg2" in str(type(conn)):
+            cursor.execute(
+                "INSERT INTO notifications (message, user_id, created_at, is_read) VALUES (%s, %s, %s, FALSE)",
+                (message, user_id, created_at)
+            )
+        else:
+            cursor.execute(
+                "INSERT INTO notifications (message, user_id, created_at, is_read) VALUES (?, ?, ?, 0)",
+                (message, user_id, created_at)
+            )
     # No conn.commit() here, it will be handled by the main route function
+
 
 def get_all_notifications(conn):
     """ดึงการแจ้งเตือนทั้งหมด เรียงจากใหม่ไปเก่า"""
-    cursor = conn.cursor()
-    query = """
-        SELECT n.id, n.message, n.created_at, n.is_read, u.username
-        FROM notifications n
-        LEFT JOIN users u ON n.user_id = u.id
-        ORDER BY n.created_at DESC
-        LIMIT 100
-    """
-    cursor.execute(query)
-    
+    with conn.cursor() as cursor:
+        query = """
+            SELECT n.id, n.message, n.created_at, n.is_read, u.username
+            FROM notifications n
+            LEFT JOIN users u ON n.user_id = u.id
+            ORDER BY n.created_at DESC
+            LIMIT 100
+        """
+        cursor.execute(query)
+
     # แปลงเวลาให้เป็น BKK Time ก่อนส่งกลับ
     notifications = []
     for row in cursor.fetchall():
         notif_dict = dict(row)
-        notif_dict['created_at'] = convert_to_bkk_time(notif_dict['created_at'])
+        notif_dict['created_at'] = convert_to_bkk_time(
+            notif_dict['created_at'])
         notifications.append(notif_dict)
-    return notifications  
+    return notifications
+
 
 def get_unread_notification_count(conn):
     """นับจำนวนการแจ้งเตือนที่ยังไม่ได้อ่าน"""
-    cursor = conn.cursor()
-    if "psycopg2" in str(type(conn)):
-        cursor.execute("SELECT COUNT(id) FROM notifications WHERE is_read = FALSE")
-    else:
-        cursor.execute("SELECT COUNT(id) FROM notifications WHERE is_read = 0")
+    with conn.cursor() as cursor:
+        if "psycopg2" in str(type(conn)):
+            cursor.execute(
+                "SELECT COUNT(id) FROM notifications WHERE is_read = FALSE")
+        else:
+            cursor.execute(
+                "SELECT COUNT(id) FROM notifications WHERE is_read = 0")
 
-    # ดึงข้อมูลจาก cursor และปิดการใช้งาน
-    count = cursor.fetchone()[0]
-    cursor.close()
-    return count
+        # ดึงข้อมูลจาก cursor และปิดการใช้งาน
+        count = cursor.fetchone()[0]
+        cursor.close()
+        return count
+
 
 def mark_all_notifications_as_read(conn):
     """อัปเดตการแจ้งเตือนทั้งหมดให้เป็น 'อ่านแล้ว'"""
     try:
-        cursor = conn.cursor()
-        if "psycopg2" in str(type(conn)):
-            cursor.execute("UPDATE notifications SET is_read = TRUE WHERE is_read = FALSE")
-        else: # SQLite
-            cursor.execute("UPDATE notifications SET is_read = 1 WHERE is_read = 0")
+        with conn.cursor() as cursor:
+            if "psycopg2" in str(type(conn)):
+                cursor.execute(
+                    "UPDATE notifications SET is_read = TRUE WHERE is_read = FALSE")
+            else:  # SQLite
+                cursor.execute(
+                    "UPDATE notifications SET is_read = 1 WHERE is_read = 0")
 
-        # --- DEBUGGING CODE ---
-        # ดึงจำนวนแถวที่ได้รับผลกระทบจากการ UPDATE
-        updated_rows = cursor.rowcount
-        # พิมพ์ผลลัพธ์ออกทาง Terminal เพื่อตรวจสอบ
-        print(f"DEBUG: Attempted to mark notifications as read. Rows affected: {updated_rows}")
+            # --- DEBUGGING CODE ---
+            # ดึงจำนวนแถวที่ได้รับผลกระทบจากการ UPDATE
+            updated_rows = cursor.rowcount
+            # พิมพ์ผลลัพธ์ออกทาง Terminal เพื่อตรวจสอบ
+            print(
+                f"DEBUG: Attempted to mark notifications as read. Rows affected: {updated_rows}")
         # --- END DEBUGGING ---
 
         conn.commit()
@@ -2305,7 +2960,8 @@ def mark_all_notifications_as_read(conn):
 
     except Exception as e:
         print(f"ERROR in mark_all_notifications_as_read: {e}")
-        conn.rollback() # หากเกิด Error ให้ยกเลิกการเปลี่ยนแปลง
+        conn.rollback()  # หากเกิด Error ให้ยกเลิกการเปลี่ยนแปลง
+
 
 def add_feedback(conn, user_id, feedback_type, message):
     """Adds a new feedback record to the database."""
@@ -2314,16 +2970,17 @@ def add_feedback(conn, user_id, feedback_type, message):
     is_postgres = "psycopg2" in str(type(conn))
 
     if is_postgres:
-        cursor = conn.cursor()
-        cursor.execute("""
-            INSERT INTO feedback (user_id, feedback_type, message, status, created_at)
-            VALUES (%s, %s, %s, %s, %s)
-        """, (user_id, feedback_type, message, status, created_at))
-    else: # SQLite
-        conn.execute("""
-            INSERT INTO feedback (user_id, feedback_type, message, status, created_at)
-            VALUES (?, ?, ?, ?, ?)
-        """, (user_id, feedback_type, message, status, created_at))
+        with conn.cursor() as cursor:
+            cursor.execute("""
+                INSERT INTO feedback (user_id, feedback_type, message, status, created_at)
+                VALUES (%s, %s, %s, %s, %s)
+            """, (user_id, feedback_type, message, status, created_at))
+    else:  # SQLite
+                conn.execute("""
+                INSERT INTO feedback (user_id, feedback_type, message, status, created_at)
+                VALUES (?, ?, ?, ?, ?)
+                """, (user_id, feedback_type, message, status, created_at))
+
 
 def get_all_feedback(conn):
     """Retrieves all feedback, joining with usernames."""
@@ -2335,8 +2992,8 @@ def get_all_feedback(conn):
         ORDER BY f.created_at DESC
     """
     if is_postgres:
-        cursor = conn.cursor()
-        cursor.execute(query)
+        with conn.cursor() as cursor:
+            cursor.execute(query)
         feedback_list = cursor.fetchall()
     else:
         feedback_list = conn.execute(query).fetchall()
@@ -2348,37 +3005,44 @@ def get_all_feedback(conn):
         processed_feedback.append(item_dict)
     return processed_feedback
 
+
 def update_feedback_status(conn, feedback_id, new_status):
     """Updates the status of a specific feedback item."""
     is_postgres = "psycopg2" in str(type(conn))
     if is_postgres:
-        cursor = conn.cursor()
-        cursor.execute("UPDATE feedback SET status = %s WHERE id = %s", (new_status, feedback_id))
+        with conn.cursor() as cursor:
+            cursor.execute(
+                "UPDATE feedback SET status = %s WHERE id = %s",
+                (new_status,
+                feedback_id))
     else:
-        conn.execute("UPDATE feedback SET status = ? WHERE id = ?", (new_status, feedback_id))
+            conn.execute("UPDATE feedback SET status = ? WHERE id = ?",
+                        (new_status, feedback_id))
+
 
 def get_latest_active_announcement(conn):
     """Fetches the most recent active announcement."""
     query = "SELECT id, title, content FROM announcements WHERE is_active = ? ORDER BY created_at DESC LIMIT 1"
     if "psycopg2" in str(type(conn)):
         query = query.replace('?', '%s')
-        cursor = conn.cursor()
-        cursor.execute(query, (True,))
+        with conn.cursor() as cursor:
+            cursor.execute(query, (True,))
         return cursor.fetchone()
     else:
         return conn.execute(query, (1,)).fetchone()
+
 
 def get_all_announcements(conn):
     """Fetches all announcements for the admin page."""
     # --- START: ส่วนที่แก้ไข ---
     is_postgres = "psycopg2" in str(type(conn))
     query = "SELECT id, title, content, is_active, created_at FROM announcements ORDER BY created_at DESC"
-    
+
     if is_postgres:
-        cursor = conn.cursor()
-        cursor.execute(query)
+        with conn.cursor() as cursor:
+            cursor.execute(query)
         items = cursor.fetchall()
-    else: # SQLite
+    else:  # SQLite
         items = conn.execute(query).fetchall()
     # --- END: ส่วนที่แก้ไข ---
 
@@ -2389,42 +3053,46 @@ def get_all_announcements(conn):
         processed.append(item_dict)
     return processed
 
+
 def add_announcement(conn, title, content, is_active):
     """Adds a new announcement."""
     created_at = get_bkk_time().isoformat()
     is_postgres = "psycopg2" in str(type(conn))
     query = "INSERT INTO announcements (title, content, is_active, created_at) VALUES (?, ?, ?, ?)"
-    
+
     if is_postgres:
         query = query.replace('?', '%s')
-        cursor = conn.cursor()
-        cursor.execute(query, (title, content, is_active, created_at))
-    else: # SQLite
+        with conn.cursor() as cursor:
+            cursor.execute(query, (title, content, is_active, created_at))
+    else:  # SQLite
         conn.execute(query, (title, content, is_active, created_at))
+
 
 def update_announcement_status(conn, announcement_id, is_active):
     """Activates or deactivates an announcement."""
     is_postgres = "psycopg2" in str(type(conn))
     query = "UPDATE announcements SET is_active = ? WHERE id = ?"
-    
+
     if is_postgres:
         query = query.replace('?', '%s')
-        cursor = conn.cursor()
-        cursor.execute(query, (is_active, announcement_id))
-    else: # SQLite
+        with conn.cursor() as cursor:
+            cursor.execute(query, (is_active, announcement_id))
+    else:  # SQLite
         conn.execute(query, (is_active, announcement_id))
+
 
 def deactivate_all_announcements(conn):
     """Deactivates all other announcements."""
     is_postgres = "psycopg2" in str(type(conn))
     query = "UPDATE announcements SET is_active = ?"
-    
+
     if is_postgres:
         query = query.replace('?', '%s')
-        cursor = conn.cursor()
-        cursor.execute(query, (False,))
-    else: # SQLite
+        with conn.cursor() as cursor:
+            cursor.execute(query, (False,))
+    else:  # SQLite
         conn.execute(query, (False,))
+
 
 def get_wholesale_customers_with_summary(conn, query=None):
     """
@@ -2435,8 +3103,8 @@ def get_wholesale_customers_with_summary(conn, query=None):
 
     # ใช้ Subquery เพื่อรวมยอดซื้อจากทั้งยางและแม็ก
     sql = f"""
-        SELECT 
-            wc.id, 
+        SELECT
+            wc.id,
             wc.name,
             COALESCE(SUM(total_out.quantity), 0) as total_items_purchased
         FROM wholesale_customers wc
@@ -2464,10 +3132,11 @@ def get_wholesale_customers_with_summary(conn, query=None):
         ORDER BY wc.name;
     """
 
-    cursor = conn.cursor()
-    cursor.execute(sql, tuple(params))
+    with conn.cursor() as cursor:
+        cursor.execute(sql, tuple(params))
 
-    return [dict(row) for row in cursor.fetchall()]
+        return [dict(row) for row in cursor.fetchall()]
+
 
 def get_wholesale_customer_details(conn, customer_id):
     """
@@ -2491,18 +3160,21 @@ def get_wholesale_customer_details(conn, customer_id):
         WHERE wc.id = {placeholder}
         GROUP BY wc.id, wc.name;
     """
-    cursor = conn.cursor()
-    cursor.execute(sql, (customer_id,))
-    customer_data = cursor.fetchone()
+    with conn.cursor() as cursor:
+        cursor.execute(sql, (customer_id,))
+        customer_data = cursor.fetchone()
 
-    if customer_data:
-        customer_dict = dict(customer_data)
-        if customer_dict.get('last_purchase_date'):
-            customer_dict['last_purchase_date'] = convert_to_bkk_time(customer_dict['last_purchase_date'])
-        return customer_dict
-    return None
+        if customer_data:
+            customer_dict = dict(customer_data)
+            if customer_dict.get('last_purchase_date'):
+                customer_dict['last_purchase_date'] = convert_to_bkk_time(
+                    customer_dict['last_purchase_date'])
+            return customer_dict
+        return None
 
-def get_wholesale_customer_purchase_history(conn, customer_id, start_date=None, end_date=None):
+
+def get_wholesale_customer_purchase_history(
+        conn, customer_id, start_date=None, end_date=None):
     """
     ดึงประวัติการซื้อ (OUT) ทั้งหมดของลูกค้า สามารถกรองตามช่วงวันที่ได้
     """
@@ -2523,8 +3195,8 @@ def get_wholesale_customer_purchase_history(conn, customer_id, start_date=None, 
 
     sql += f"""
         UNION ALL
-        SELECT 'wheel' as item_type, wm.timestamp, w.brand, w.model, 
-               w.diameter || 'x' || w.width || ' ' || w.pcd as size, 
+        SELECT 'wheel' as item_type, wm.timestamp, w.brand, w.model,
+               w.diameter || 'x' || w.width || ' ' || w.pcd as size,
                wm.quantity_change
         FROM wheel_movements wm
         JOIN wheels w ON wm.wheel_id = w.id
@@ -2538,15 +3210,16 @@ def get_wholesale_customer_purchase_history(conn, customer_id, start_date=None, 
 
     sql += " ORDER BY timestamp DESC"
 
-    cursor = conn.cursor()
-    cursor.execute(sql, tuple(params))
+    with conn.cursor() as cursor:
+        cursor.execute(sql, tuple(params))
 
-    history = []
-    for row in cursor.fetchall():
-        row_dict = dict(row)
-        row_dict['timestamp'] = convert_to_bkk_time(row_dict['timestamp'])
-        history.append(row_dict)
-    return history
+        history = []
+        for row in cursor.fetchall():
+            row_dict = dict(row)
+            row_dict['timestamp'] = convert_to_bkk_time(row_dict['timestamp'])
+            history.append(row_dict)
+        return history
+
 
 def add_activity_log(conn, user_id, endpoint, method, url):
     """บันทึกกิจกรรมของผู้ใช้ลงฐานข้อมูล"""
@@ -2558,9 +3231,10 @@ def add_activity_log(conn, user_id, endpoint, method, url):
     if is_postgres:
         query = query.replace('?', '%s')
 
-    cursor = conn.cursor()
-    cursor.execute(query, params)
-    # conn.commit() is handled by the request teardown
+    with conn.cursor() as cursor:
+        cursor.execute(query, params)
+        # conn.commit() is handled by the request teardown
+
 
 def get_activity_logs(conn, limit=200):
     """ดึงประวัติการใช้งานล่าสุด"""
@@ -2574,15 +3248,16 @@ def get_activity_logs(conn, limit=200):
     if "psycopg2" in str(type(conn)):
         query = query.replace('?', '%s')
 
-    cursor = conn.cursor()
-    cursor.execute(query, (limit,))
+    with conn.cursor() as cursor:
+        cursor.execute(query, (limit,))
 
-    logs = []
-    for row in cursor.fetchall():
-        log_dict = dict(row)
-        log_dict['timestamp'] = convert_to_bkk_time(log_dict['timestamp'])
-        logs.append(log_dict)
-    return logs
+        logs = []
+        for row in cursor.fetchall():
+            log_dict = dict(row)
+            log_dict['timestamp'] = convert_to_bkk_time(log_dict['timestamp'])
+            logs.append(log_dict)
+        return logs
+
 
 def delete_old_activity_logs(conn, days=7):
     """ลบ Log ที่เก่ากว่าวันที่กำหนด"""
@@ -2591,39 +3266,40 @@ def delete_old_activity_logs(conn, days=7):
     placeholder = "%s" if is_postgres else "?"
     query = f"DELETE FROM activity_logs WHERE timestamp < {placeholder}"
 
-    cursor = conn.cursor()
-    cursor.execute(query, (cutoff_date.isoformat(),))
-    deleted_count = cursor.rowcount
-    conn.commit()
-    return deleted_count
+    with conn.cursor() as cursor:
+        cursor.execute(query, (cutoff_date.isoformat(),))
+        deleted_count = cursor.rowcount
+        conn.commit()
+        return deleted_count
+
 
 def get_setting(conn, key):
     """ดึงค่าการตั้งค่าจากตาราง app_settings"""
-    cursor = conn.cursor()
-    query = "SELECT value FROM app_settings WHERE key = ?"
-    params = (key,)
-    if "psycopg2" in str(type(conn)):
-        query = query.replace('?', '%s')
+    with conn.cursor() as cursor:
+        query = "SELECT value FROM app_settings WHERE key = ?"
+        params = (key,)
+        if "psycopg2" in str(type(conn)):
+            query = query.replace('?', '%s')
 
-    cursor.execute(query, params)
-    result = cursor.fetchone()
-    cursor.close()
-    return result['value'] if result else None
+        cursor.execute(query, params)
+        result = cursor.fetchone()
+        cursor.close()
+        return result['value'] if result else None
+
 
 def set_setting(conn, key, value):
     """เพิ่มหรืออัปเดตค่าการตั้งค่าในตาราง app_settings"""
-    cursor = conn.cursor()
-    is_postgres = "psycopg2" in str(type(conn))
+    with conn.cursor() as cursor:
+        is_postgres = "psycopg2" in str(type(conn))
 
-    if is_postgres:
-        # ใช้ ON CONFLICT เพื่อทำ UPSERT (UPDATE or INSERT)
-        query = """
-            INSERT INTO app_settings (key, value) VALUES (%s, %s)
-            ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value;
-        """
-    else: # SQLite
-        query = "INSERT OR REPLACE INTO app_settings (key, value) VALUES (?, ?)"
+        if is_postgres:
+            # ใช้ ON CONFLICT เพื่อทำ UPSERT (UPDATE or INSERT)
+            query = """
+                INSERT INTO app_settings (key, value) VALUES (%s, %s)
+                ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value;
+            """
+        else:  # SQLite
+            query = "INSERT OR REPLACE INTO app_settings (key, value) VALUES (?, ?)"
 
-    cursor.execute(query, (key, value))
+        cursor.execute(query, (key, value))
     # การ commit จะถูกจัดการโดย Route ใน app.py
-  
