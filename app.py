@@ -145,6 +145,30 @@ def inject_global_data():
         latest_announcement=latest_announcement
     )
 
+@cache.memoize(timeout=300)
+def get_cached_wheels(query, brand_filter):
+    print(f"--- CACHE MISS (WHEELS) --- Fetching wheels from DB for query='{query}', brand='{brand_filter}'")
+    conn = get_db()
+    return database.get_all_wheels(conn, query=query, brand_filter=brand_filter, include_deleted=False)
+
+@cache.memoize(timeout=900) # ข้อมูลยี่ห้อเปลี่ยนแปลงไม่บ่อย Cache ไว้นานขึ้นได้
+def get_cached_tire_brands():
+    print("--- CACHE MISS (TIRE BRANDS) --- Fetching tire brands from DB")
+    conn = get_db()
+    return database.get_all_tire_brands(conn)
+
+@cache.memoize(timeout=900) # ข้อมูลยี่ห้อเปลี่ยนแปลงไม่บ่อย Cache ไว้นานขึ้นได้
+def get_cached_wheel_brands():
+    print("--- CACHE MISS (WHEEL BRANDS) --- Fetching wheel brands from DB")
+    conn = get_db()
+    return database.get_all_wheel_brands(conn)
+
+@cache.memoize(timeout=300)
+def get_cached_tires(query, brand_filter):
+    print(f"--- CACHE MISS (TIRES) --- Fetching tires from DB...")
+    conn = get_db()
+    return database.get_all_tires(conn, query=query, brand_filter=brand_filter, include_deleted=False)
+
 @cache.memoize(timeout=300) # Cache 5 นาที
 def get_cached_unread_notification_count():
     conn = get_db()
@@ -402,17 +426,15 @@ def process_wheel_report_data(all_wheels, include_summary_in_output=True):
 
 @app.route('/')
 @login_required
-@cache.cached(timeout=120, key_prefix='view_%s')
 def index():
-    print("--- CACHE MISS --- Running index() function to generate new page.")
     conn = get_db()
     
 
     tire_query = request.args.get('tire_query', '').strip()
     tire_selected_brand = request.args.get('tire_brand_filter', 'all').strip()
     is_tire_search_active = bool(tire_query or (tire_selected_brand and tire_selected_brand != 'all'))
-    all_tires_raw = database.get_all_tires(conn, query=tire_query, brand_filter=tire_selected_brand, include_deleted=False)
-    available_tire_brands = database.get_all_tire_brands(conn)
+    all_tires_raw = get_cached_tires(tire_query, tire_selected_brand)
+    available_tire_brands = get_cached_tire_brands()
     
     # NEW: Filter tire data based on viewing permissions before sending to template
     tires_for_display_filtered_by_permissions = []
@@ -454,8 +476,8 @@ def index():
     wheel_query = request.args.get('wheel_query', '').strip()
     wheel_selected_brand = request.args.get('wheel_brand_filter', 'all').strip()
     is_wheel_search_active = bool(wheel_query or (wheel_selected_brand and wheel_selected_brand != 'all'))
-    all_wheels = database.get_all_wheels(conn, query=wheel_query, brand_filter=wheel_selected_brand, include_deleted=False)
-    available_wheel_brands = database.get_all_wheel_brands(conn)
+    all_wheels = get_cached_wheels(wheel_query, wheel_selected_brand)
+    available_wheel_brands = get_cached_wheel_brands()
     
     # NEW: Filter wheel data based on viewing permissions before sending to template
     wheels_for_display = []
