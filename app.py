@@ -31,6 +31,7 @@ if os.environ.get('REDIS_URL'):
         "CACHE_DEFAULT_TIMEOUT": 300,
         "CACHE_REDIS_URL": os.environ.get('REDIS_URL')
     }
+    print("✅ Redis is configured for caching.")
 else:
     # Local development configuration
     config = {
@@ -38,6 +39,7 @@ else:
         "CACHE_TYPE": "SimpleCache", # <--- ใช้ SimpleCache แทน
         "CACHE_DEFAULT_TIMEOUT": 300
     }
+    print("🔧 SimpleCache is configured for local development.")
 
 app.config.from_mapping(config)
 cache = Cache(app)
