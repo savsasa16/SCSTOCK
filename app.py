@@ -4066,6 +4066,7 @@ def add_wholesale_customer_action():
         if customer_id:
             flash(f'เพิ่มลูกค้าค้าส่ง "{customer_name}" สำเร็จ!', 'success')
             cache.delete_memoized(get_all_wholesale_customers_cached)
+            cache.delete_memoized(get_cached_wholesale_summary)
         else:
             flash(f'ไม่สามารถเพิ่มลูกค้าค้าส่ง "{customer_name}" ได้ อาจมีชื่อนี้อยู่ในระบบแล้ว', 'warning')
     return redirect(url_for('manage_wholesale_customers'))
@@ -4148,6 +4149,7 @@ def delete_wholesale_customer(customer_id):
         conn.commit()
         flash('ลบลูกค้าค้าส่งสำเร็จ!', 'success')
         cache.delete_memoized(get_all_wholesale_customers_cached)
+        cache.delete_memoized(get_cached_wholesale_summary)
     except Exception as e:
         conn.rollback()
         flash(f'เกิดข้อผิดพลาดในการลบลูกค้าค้าส่ง: {e}', 'danger')
