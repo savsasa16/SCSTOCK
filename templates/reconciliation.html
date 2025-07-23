@@ -333,6 +333,18 @@
             populateSelect(channelSelect, validChannels, '-- เลือกช่องทาง --', channelSelect.val(), true);
             handleModalChannelChange();
         }
+		
+		// --- Date Picker Handler ---
+        $('#reportDatePicker').on('change', function() {
+            const newDate = $(this).val();
+            if (newDate) {
+                // สร้าง URL ใหม่โดยใช้วันที่ที่เลือก
+                const url = new URL(window.location);
+                url.searchParams.set('date', newDate);
+                // สั่งให้เบราว์เซอร์โหลดหน้าใหม่
+                window.location.href = url.toString();
+            }
+        });
         
         // =================================================================
         // SECTION 4: EVENT HANDLERS
