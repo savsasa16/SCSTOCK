@@ -4817,43 +4817,69 @@ def complete_reconciliation_action(rec_id):
 @login_required
 def api_search_all_items():
     query = request.args.get('q', '').strip()
-    if len(query) < 2:
-        return jsonify([])
+    # อนุญาตให้ค้นหาได้แม้จะพิมพ์แค่ตัวเดียว
+    if not query:
+        return jsonify({'results': []})
 
     conn = get_db()
-    search_term = f"%{query}%"
+    # ทำให้ search term เป็นตัวพิมพ์เล็กและใส่ wildcards
+    search_term = f"%{query.lower()}%"
     
-    is_psycopg2_conn = "psycopg2" in str(type(conn))
-    placeholder = "%s" if is_psycopg2_conn else "?"
+    is_postgres = "psycopg2" in str(type(conn))
+    placeholder = "%s" if is_postgres else "?"
     
-    wheel_size_concat = "(w.diameter || 'x' || w.width || ' ' || w.pcd)"
-    if is_psycopg2_conn:
-        wheel_size_concat = "CONCAT(w.diameter, 'x', w.width, ' ', w.pcd)"
+    # --- START: ส่วนที่แก้ไขให้ถูกต้อง 100% ---
+    
+    # สร้างส่วน Query สำหรับขนาดล้อที่ถูกต้องสำหรับทั้งสอง DB
+    # ใช้ COALESCE เพื่อจัดการกับค่า NULL ใน SQLite
+    wheel_size_search_col = f"LOWER(COALESCE(w.diameter, '') || 'x' || COALESCE(w.width, '') || ' ' || COALESCE(w.pcd, ''))"
+    if is_postgres:
+        wheel_size_search_col = f"LOWER(CONCAT(w.diameter, 'x', w.width, ' ', w.pcd))"
 
-    # --- CORRECTED QUERIES ---
+    # ใช้ LIKE เสมอสำหรับ SQLite และ ILIKE สำหรับ Postgres
+    like_op = "ILIKE" if is_postgres else "LIKE"
+
     tire_query = f"""
         SELECT t.id, t.brand, t.model, t.size, 'tire' as type 
         FROM tires t 
-        WHERE t.is_deleted = { 'FALSE' if is_psycopg2_conn else '0' } 
-        AND (t.brand LIKE {placeholder} OR t.model LIKE {placeholder} OR t.size LIKE {placeholder}) 
+        WHERE t.is_deleted = { 'FALSE' if is_postgres else '0' } 
+        AND (LOWER(t.brand) {like_op} {placeholder} OR LOWER(t.model) {like_op} {placeholder} OR LOWER(t.size) {like_op} {placeholder}) 
         LIMIT 10
     """
+    
     wheel_query = f"""
-        SELECT w.id, w.brand, w.model, {wheel_size_concat} as size, 'wheel' as type 
+        SELECT w.id, w.brand, w.model, {wheel_size_search_col} as size, 'wheel' as type 
         FROM wheels w 
-        WHERE w.is_deleted = { 'FALSE' if is_psycopg2_conn else '0' } 
-        AND (w.brand LIKE {placeholder} OR w.model LIKE {placeholder}) 
+        WHERE w.is_deleted = { 'FALSE' if is_postgres else '0' } 
+        AND (LOWER(w.brand) {like_op} {placeholder} OR LOWER(w.model) {like_op} {placeholder} OR {wheel_size_search_col} {like_op} {placeholder})
         LIMIT 10
     """
     
-    tire_results = conn.execute(tire_query, (search_term, search_term, search_term)).fetchall()
-    wheel_results = conn.execute(wheel_query, (search_term, search_term)).fetchall()
+    results = []
+    try:
+        cursor = conn.cursor()
+        
+        # ยาง: มี 3 placeholders
+        cursor.execute(tire_query, (search_term, search_term, search_term))
+        tire_results = cursor.fetchall()
+        
+        # แม็ก: มี 3 placeholders
+        cursor.execute(wheel_query, (search_term, search_term, search_term))
+        wheel_results = cursor.fetchall()
+        
+        cursor.close()
+        
+        results = [dict(row) for row in tire_results] + [dict(row) for row in wheel_results]
     
-    results = [dict(row) for row in tire_results] + [dict(row) for row in wheel_results]
+    except Exception as e:
+        print(f"Error in api_search_all_items: {e}")
+        return jsonify({'results': []})
+    
+    # --- END: ส่วนที่แก้ไข ---
     
     formatted_results = [{"id": f"{item['type']}-{item['id']}", "text": f"[{item['type'].upper()}] {item['brand'].title()} {item['model'].title()} - {item['size']}"} for item in results]
     
-    return jsonify(formatted_results)
+    return jsonify(formatted_results) # Select2 v4.1+ สามารถรับ array ได้โดยตรง
 
 @app.route('/api/process_data', methods=['POST'])
 def process_data():
