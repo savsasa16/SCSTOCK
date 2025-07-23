@@ -183,13 +183,26 @@
             const getKeyPart = (value) => (value !== null && value !== undefined && value !== '') ? value : '';
             const itemId = `${item.item_type}-${item.tire_id || item.wheel_id}`;
             let platformIdPart = '', customerIdPart = '';
+            
+            // Fix: Ensure these parts are only added if they are truly relevant to the item's type and channel/return type
+            const channel = allSalesChannels.find(c => c.id == item.channel_id);
+            const channelName = channel ? channel.name : '';
+
             if (item.type === 'RETURN') {
-                if (item.return_customer_type === 'ออนไลน์') platformIdPart = getKeyPart(item.online_platform_id);
-                else if (item.return_customer_type === 'หน้าร้านร้านยาง') customerIdPart = getKeyPart(item.wholesale_customer_id);
+                if (item.return_customer_type === 'ออนไลน์' && channelName === 'รับคืน') {
+                    platformIdPart = getKeyPart(item.online_platform_id);
+                } else if (item.return_customer_type === 'หน้าร้านร้านยาง' && channelName === 'รับคืน') {
+                    customerIdPart = getKeyPart(item.wholesale_customer_id);
+                }
             } else if (item.type === 'OUT') {
-                platformIdPart = getKeyPart(item.online_platform_id);
-                customerIdPart = getKeyPart(item.wholesale_customer_id);
+                if (channelName === 'ออนไลน์') {
+                    platformIdPart = getKeyPart(item.online_platform_id);
+                } else if (channelName === 'ค้าส่ง') {
+                    customerIdPart = getKeyPart(item.wholesale_customer_id);
+                }
             }
+            // For IN type, no platform/customer part is needed.
+
             return `${itemId}_${getKeyPart(item.type)}_${getKeyPart(item.channel_id)}_${platformIdPart}_${customerIdPart}_${getKeyPart(item.return_customer_type)}`;
         }
 
@@ -223,28 +236,28 @@
                 const channel = allSalesChannels.find(c => c.id == itemData.channel_id);
                 let detailsHtml = `<strong>${channel ? channel.name : 'N/A'}</strong>`;
 
+                // Fix: Reset and conditionally build detailsHtml based on itemData.type and channel.name
                 if (itemData.type === 'OUT') {
-                    if (itemData.online_platform_id) {
+                    if (channel && channel.name === 'ออนไลน์' && itemData.online_platform_id) {
                         const platform = allOnlinePlatforms.find(p => p.id == itemData.online_platform_id);
                         if(platform) detailsHtml += `<br><small class="ps-2">&ndash; ${platform.name}</small>`;
-                    }
-                    if (itemData.wholesale_customer_id) {
+                    } else if (channel && channel.name === 'ค้าส่ง' && itemData.wholesale_customer_id) {
                         const customer = allWholesaleCustomers.find(c => c.id == itemData.wholesale_customer_id);
                         if(customer) detailsHtml += `<br><small class="ps-2">&ndash; ${customer.name}</small>`;
                     }
                 } else if (itemData.type === 'RETURN') {
-                    if (itemData.return_customer_type) {
+                    if (channel && channel.name === 'รับคืน' && itemData.return_customer_type) {
                         detailsHtml += `<br><small class="ps-2">&ndash; คืนจาก: ${itemData.return_customer_type}</small>`;
                         if (itemData.return_customer_type === 'ออนไลน์' && itemData.online_platform_id) {
                             const platform = allOnlinePlatforms.find(p => p.id == itemData.online_platform_id);
                             if(platform) detailsHtml += `<br><small class="ps-4">&ndash; ${platform.name}</small>`;
-                        }
-                        if (itemData.return_customer_type === 'หน้าร้านร้านยาง' && itemData.wholesale_customer_id) {
+                        } else if (itemData.return_customer_type === 'หน้าร้านร้านยาง' && itemData.wholesale_customer_id) {
                             const customer = allWholesaleCustomers.find(c => c.id == itemData.wholesale_customer_id);
                             if(customer) detailsHtml += `<br><small class="ps-4">&ndash; ${customer.name}</small>`;
                         }
                     }
                 }
+                // For 'IN' type, no additional details beyond channel are expected.
 
                 tbody.append(`
                     <tr data-composite-key="${itemData.compositeKey}">
@@ -263,19 +276,30 @@
         // =================================================================
         function handleManagerReturnChange() {
             const returnType = $('#common_return_customer_type').val();
+            // Always hide both first, then show relevant one
             $('#common_wholesale_customer_section, #common_online_platform_section').addClass('d-none');
+            // Reset values to prevent stale data
+            $('#common_wholesale_customer_id').val(null).trigger('change');
+            $('#common_online_platform_id').val(null).trigger('change');
+
             if (returnType === 'หน้าร้านร้านยาง') $('#common_wholesale_customer_section').removeClass('d-none');
             else if (returnType === 'ออนไลน์') $('#common_online_platform_section').removeClass('d-none');
         }
 
         function handleManagerChannelChange() {
             const channelName = $('#common_channel_id option:selected').text();
+            // Always hide all specific sections first
             $('#common_online_platform_section, #common_wholesale_customer_section, #common_return_customer_type_section').addClass('d-none');
+            // Reset values to prevent stale data
+            $('#common_online_platform_id').val(null).trigger('change');
+            $('#common_wholesale_customer_id').val(null).trigger('change');
+            $('#common_return_customer_type').val(null).trigger('change'); // Also reset return type as it depends on channel
+
             if (channelName === 'ออนไลน์') $('#common_online_platform_section').removeClass('d-none');
             else if (channelName === 'ค้าส่ง') $('#common_wholesale_customer_section').removeClass('d-none');
             else if (channelName === 'รับคืน') {
                 $('#common_return_customer_type_section').removeClass('d-none');
-                handleManagerReturnChange();
+                handleManagerReturnChange(); // Call this to set initial state for return sub-types
             }
         }
 
@@ -285,7 +309,7 @@
             const channelSection = $('#channel_section');
             if (!typeValue) {
                 channelSection.addClass('d-none');
-                handleManagerChannelChange();
+                handleManagerChannelChange(); // Clear all dependent fields if type is not selected
                 return;
             }
             channelSection.removeClass('d-none');
@@ -299,12 +323,16 @@
             populateSelect(channelSelect, validChannels, '-- เลือกช่องทาง --');
             if (validChannels.length === 1) {
                 channelSelect.val(validChannels[0].id).trigger('change');
+            } else {
+                handleManagerChannelChange(); // Clear sub-fields if multiple channels are possible or none selected
             }
         }
 
         function handleModalReturnChange() {
             const returnType = $('#modal-return-customer-type').val();
             $('#modal-customer-group, #modal-platform-group').addClass('d-none');
+            $('#modal-customer').val(null).trigger('change');
+            $('#modal-platform').val(null).trigger('change');
             if (returnType === 'หน้าร้านร้านยาง') $('#modal-customer-group').removeClass('d-none');
             else if (returnType === 'ออนไลน์') $('#modal-platform-group').removeClass('d-none');
         }
@@ -312,6 +340,10 @@
         function handleModalChannelChange() {
             const channelName = $('#modal-channel option:selected').text();
             $('#modal-platform-group, #modal-customer-group, #modal-return-type-group').addClass('d-none');
+            $('#modal-platform').val(null).trigger('change');
+            $('#modal-customer').val(null).trigger('change');
+            $('#modal-return-customer-type').val(null).trigger('change');
+
             if (channelName === 'ออนไลน์') $('#modal-platform-group').removeClass('d-none');
             else if (channelName === 'ค้าส่ง') $('#modal-customer-group').removeClass('d-none');
             else if (channelName === 'รับคืน') {
@@ -330,8 +362,14 @@
             if (typeValue === 'IN') validChannels = allSalesChannels.filter(c => c.id === buyInId);
             else if (typeValue === 'OUT') validChannels = allSalesChannels.filter(c => outIds.includes(c.id));
             else if (typeValue === 'RETURN') validChannels = allSalesChannels.filter(c => c.id === returnId);
-            populateSelect(channelSelect, validChannels, '-- เลือกช่องทาง --', channelSelect.val(), true);
-            handleModalChannelChange();
+            
+            // Capture current selected channel before repopulating
+            const currentChannelId = channelSelect.val();
+            // Find if the current selected channel is still valid after type change
+            const isCurrentChannelStillValid = validChannels.some(c => c.id == currentChannelId);
+
+            populateSelect(channelSelect, validChannels, '-- เลือกช่องทาง --', isCurrentChannelStillValid ? currentChannelId : null, true);
+            handleModalChannelChange(); // Re-evaluate sub-sections based on new channel selection
         }
 		
 		// --- Date Picker Handler ---
@@ -386,9 +424,9 @@
                 const [item_type_from_id, db_id] = stagedItem.id.split('-');
                 const itemDataFromForm = {
                     id: stagedItem.id, type: moveType, channel_id: channelId,
-                    online_platform_id: $('#common_online_platform_id').val(),
-                    wholesale_customer_id: $('#common_wholesale_customer_id').val(),
-                    return_customer_type: $('#common_return_customer_type').val(),
+                    online_platform_id: $('#common_online_platform_id').val() || null, // Ensure null if not selected
+                    wholesale_customer_id: $('#common_wholesale_customer_id').val() || null, // Ensure null if not selected
+                    return_customer_type: $('#common_return_customer_type').val() || null, // Ensure null if not selected
                     item_type: item_type_from_id,
                     tire_id: item_type_from_id === 'tire' ? db_id : null,
                     wheel_id: item_type_from_id === 'wheel' ? db_id : null
@@ -464,11 +502,16 @@
                 if (d.type === 'IN') channelOptions = allSalesChannels.filter(c => c.name === 'ซื้อเข้า');
                 else if (d.type === 'OUT') channelOptions = allSalesChannels.filter(c => ['หน้าร้าน', 'ออนไลน์', 'ค้าส่ง'].includes(c.name));
                 else if (d.type === 'RETURN') channelOptions = allSalesChannels.filter(c => c.name === 'รับคืน');
+                
                 populateSelect($('#modal-channel'), channelOptions, 'เลือกช่องทาง', d.channel_id, true);
                 populateSelect($('#modal-return-customer-type'), returnCustomerTypes, 'เลือกประเภทการคืน', d.return_customer_type, true);
                 populateSelect($('#modal-platform'), allOnlinePlatforms, 'เลือกแพลตฟอร์ม', d.online_platform_id, true);
                 populateSelect($('#modal-customer'), allWholesaleCustomers, 'เลือกลูกค้า', d.wholesale_customer_id, true);
-                $('#modal-move-type').trigger('change');
+                
+                // Trigger change to set visibility of dependent fields correctly based on loaded data
+                $('#modal-move-type').trigger('change'); 
+                // Then trigger channel change to handle sub-dependencies
+                // No need to trigger channel change again as handleModalMovementTypeChange already calls handleModalChannelChange
                 editSystemMovementModal.show();
             } catch (error) { Swal.fire('ผิดพลาด', 'ไม่สามารถเชื่อมต่อกับเซิร์ฟเวอร์ได้', 'error'); }
         });
@@ -478,8 +521,11 @@
                 movement_id: $('#modal-movement-id').val(), item_type: $('#modal-item-type').val(),
                 quantity_change: $('#modal-quantity').val(), notes: $('#modal-notes').val(),
                 type: $('#modal-move-type').val(), channel_id: $('#modal-channel').val(),
-                online_platform_id: $('#modal-platform').val(), wholesale_customer_id: $('#modal-customer').val(),
-                return_customer_type: $('#modal-return-customer-type').val(), image_filename: $('#modal-image-filename').val()
+                // Ensure null if not visible/selected, not empty string
+                online_platform_id: $('#modal-platform').val() || null, 
+                wholesale_customer_id: $('#modal-customer').val() || null,
+                return_customer_type: $('#modal-return-customer-type').val() || null, 
+                image_filename: $('#modal-image-filename').val()
             };
             try {
                 const response = await fetch('/api/correct_movement', {
@@ -508,13 +554,19 @@
             });
             $('#system-movements-table tbody tr').each(function() {
                 const row = $(this);
-                const move = systemMovementsData.find(m => m.id == row.data('movement-id') && m.item_type === row.data('item-type'));
+                // Fix: Ensure we find the correct movement by ID and type, not just ID
+                const movementId = row.data('movement-id');
+                const itemType = row.data('item-type');
+                const move = systemMovementsData.find(m => m.id == movementId && m.item_type === itemType);
                 if (!move) return;
                 const key = buildComparisonKey(move);
                 let color = '';
-                if (!(key in managerTotals)) color = '#cff4fc';
-                else if (systemTotals[key] !== managerTotals[key]) color = '#fff3cd';
-                else color = '#d1e7dd';
+                if (!(key in managerTotals) || systemTotals[key] !== managerTotals[key]) {
+                    // Check for missing in manager or quantity mismatch
+                    color = '#f8d7da'; // Light red for discrepancies or missing
+                } else {
+                    color = '#d1e7dd'; // Light green for matching
+                }
                 row.find('td').css('background-color', color);
             });
             $('#manager-ledger-table tbody tr').each(function() {
@@ -522,13 +574,17 @@
                 const key = row.data('composite-key');
                 if (!key) return;
                 let color = '';
-                if (!(key in systemTotals)) color = '#f8d7da';
-                else if (systemTotals[key] !== managerTotals[key]) color = '#fff3cd';
-                else color = '#d1e7dd';
+                if (!(key in systemTotals) || systemTotals[key] !== managerTotals[key]) {
+                     // Check for missing in system or quantity mismatch
+                    color = '#f8d7da'; // Light red for discrepancies or missing
+                } else {
+                    color = '#d1e7dd'; // Light green for matching
+                }
                 row.find('td').css('background-color', color);
             });
             Swal.fire('เปรียบเทียบสำเร็จ!', 'แสดงผลการเปรียบเทียบด้วยสีในตารางเรียบร้อยแล้ว', 'info');
         });
+
 
         $('#save-ledger-btn').on('click', function() {
             Swal.fire({
@@ -579,7 +635,7 @@
         renderManagerLedgerTablePreview();
         renderStagingArea('tire');
         renderStagingArea('wheel');
-        handleManagerMovementTypeChange();
+        handleManagerMovementTypeChange(); // Initialize common fields' visibility
     });
 </script>
 {% endblock %}
