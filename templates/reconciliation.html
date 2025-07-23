@@ -23,6 +23,33 @@
     .select2-container { width: 100% !important; }
     .select2-container--default .select2-selection--single { height: calc(1.5em + .75rem + 2px); padding: .375rem .75rem; border-radius: .25rem; }
     .select2-container--default .select2-selection--single .select2-selection__arrow { height: calc(1.5em + .75rem); }
+
+    /* Style for the color legend */
+    .color-legend {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        font-size: 0.9em;
+        margin-top: 10px;
+        margin-bottom: 10px;
+    }
+    .color-legend-item {
+        display: flex;
+        align-items: center;
+    }
+    .color-box {
+        width: 18px;
+        height: 18px;
+        border: 1px solid #ccc;
+        margin-right: 5px;
+        border-radius: 3px;
+    }
+    .color-box.matched {
+        background-color: #d1e7dd; /* Light green */
+    }
+    .color-box.discrepancy {
+        background-color: #f8d7da; /* Light red */
+    }
 </style>
 {% endblock %}
 
@@ -30,7 +57,7 @@
 {% block content %}
 <div class="container-fluid">
     <div class="d-flex justify-content-between align-items-center mb-3">
-        <h3>กระทบยอดประจำวัน</h3>
+        <h3>ปิดยอดสต๊อกประจำวัน</h3>
         <div class="d-flex align-items-center">
              <input type="date" id="reportDatePicker" class="form-control" style="width: 200px;" value="{{ report_date.strftime('%Y-%m-%d') }}">
              <span class="ms-3">สถานะ: <strong id="reconciliation-status" class="text-capitalize">{{ reconciliation_record.status }}</strong></span>
@@ -59,8 +86,16 @@
                         <tbody>
                             {% for move in system_movements %}
                             <tr data-movement-id="{{move.id}}" data-item-type="{{move.item_type}}">
-                                <td>{{ move.brand | title }} {{ move.model | title }}<br><small class="text-muted">{{ move.size }}</small></td>
-                                <td>{% if move.type == 'IN' or move.type == 'RETURN' %}<span class="badge bg-success">{{ move.type }}</span>{% else %}<span class="badge bg-danger">{{ move.type }}</span>{% endif %}</td>
+                                <td>{{ move.brand | title }} {{ move.model | title }}{% if move.size %}<br><small class="text-muted">{{ move.size }}</small>{% endif %}</td>
+                                <td>
+                                    {% if move.type == 'IN' %}
+                                        <span class="badge bg-success">{{ move.type }}</span>
+                                    {% elif move.type == 'RETURN' %}
+                                        <span class="badge bg-info">{{ move.type }}</span> {# Changed to bg-info #}
+                                    {% else %}
+                                        <span class="badge bg-danger">{{ move.type }}</span>
+                                    {% endif %}
+                                </td>
                                 <td><small><strong>{{ move.channel_name or 'N/A' }}</strong>{% if move.online_platform_name and move.online_platform_name != 'ไม่ระบุแพลตฟอร์ม' %}<br><span class="ps-2">&ndash; {{ move.online_platform_name }}</span>{% endif %}{% if move.wholesale_customer_name and move.wholesale_customer_name != 'ไม่ระบุลูกค้า' %}<br><span class="ps-2">&ndash; {{ move.wholesale_customer_name }}</span>{% endif %}{% if move.return_customer_type and move.type == 'RETURN' %}<br><span class="ps-2">&ndash; คืนจาก: {{ move.return_customer_type }}</span>{% endif %}</small></td>
                                 <td class="text-end">{{ move.quantity_change }}</td>
                                 <td class="text-center">{% if reconciliation_record.status == 'pending' %}<button class="btn btn-sm btn-outline-secondary edit-movement-btn"><i class="fas fa-pencil-alt"></i></button>{% endif %}</td>
@@ -69,12 +104,19 @@
                         </tbody>
                     </table>
                 </div>
+                <div class="mt-2 text-end fw-bold">ยอดรวม: <span id="system-total-sum">0</span></div>
             </div>
         </div>
 
         <div class="col-lg-6">
             <div class="reconciliation-panel">
-                <h5><i class="fas fa-clipboard-check me-2"></i>การเช็ครายการ(ADMIN!)</h5>
+                <div class="d-flex justify-content-between align-items-center">
+                    <h5><i class="fas fa-clipboard-check me-2"></i>การเช็ครายการ(ADMIN!)</h5>
+                    <div class="color-legend">
+                        <div class="color-legend-item"><span class="color-box matched"></span> ตรงกัน</div>
+                        <div class="color-legend-item"><span class="color-box discrepancy"></span> ไม่ตรง/ขาด</div>
+                    </div>
+                </div>
                 <hr>
                 {% if reconciliation_record.status == 'pending' %}
                 <div class="border p-3 mb-3 rounded bg-light">
@@ -116,6 +158,7 @@
                         <tbody></tbody>
                     </table>
                 </div>
+                <div class="mt-2 text-end fw-bold">ยอดรวม: <span id="manager-total-sum">0</span></div>
             </div>
         </div>
     </div>
@@ -147,12 +190,10 @@
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.all.min.js"></script>
 <script>
     // ----- GLOBAL DATA FROM SERVER -----
-    // reconciliationId should be passed directly if reconciliation_record is always available
     const reconciliationId = {{ reconciliation_record.id | tojson }};
     const reconciliationStatus = {{ reconciliation_record.status | tojson }};
     const managerLedgerFromDB = {{ reconciliation_record.manager_ledger | tojson | safe }};
 
-    // The other global data that comes from Flask context
     const allSalesChannels = {{ all_sales_channels | tojson | safe }};
     const allOnlinePlatforms = {{ all_online_platforms | tojson | safe }};
     const allWholesaleCustomers = {{ all_wholesale_customers | tojson | safe }};
@@ -182,8 +223,6 @@
             // Set the action URL for the completion form and its hidden input
             const completeForm = document.getElementById('complete-reconciliation-form-base');
             if (completeForm) {
-                // Pass the URL template as a string, then replace 0 with actual ID in JS
-                // This prevents Jinja from trying to cast 'DUMMY_ID' to int during template rendering
                 completeForm.action = "{{ url_for('complete_reconciliation_action', rec_id=0) }}".replace('0', reconciliationId);
                 const recIdInput = document.getElementById('reconciliation_id_hidden');
                 if (recIdInput) {
@@ -280,12 +319,28 @@
 
         function renderManagerLedgerTablePreview() {
             const tbody = $('#manager-ledger-table tbody').empty();
+            let managerTotalSum = 0; // Initialize sum for manager table
+
             if (managerLedgerItems.length === 0) {
                 tbody.append('<tr><td colspan="6" class="text-center text-muted py-3">ไม่มีรายการในบันทึก</td></tr>');
+                $('#manager-total-sum').text(managerTotalSum); // Update sum even if empty
                 return;
             }
             managerLedgerItems.sort((a, b) => a.text.localeCompare(b.text));
             managerLedgerItems.forEach(itemData => {
+                // Clean item text: remove [TIRE] or [WHEEL]
+                let cleanedText = itemData.text.replace(/\[(TIRE|WHEEL)\]\s*/g, ''); 
+
+                // Determine badge color based on type
+                let badgeClass;
+                if (itemData.type === 'IN') {
+                    badgeClass = 'bg-success';
+                } else if (itemData.type === 'RETURN') {
+                    badgeClass = 'bg-info'; // Changed to bg-info for RETURN type
+                } else {
+                    badgeClass = 'bg-danger';
+                }
+
                 const channel = allSalesChannels.find(c => c.id == itemData.channel_id);
                 let detailsHtml = `<strong>${channel ? channel.name : 'N/A'}</strong>`;
 
@@ -312,15 +367,26 @@
 
                 tbody.append(`
                     <tr data-composite-key="${itemData.compositeKey}">
-                        <td>${itemData.text}</td>
-                        <td><span class="badge ${['IN', 'RETURN'].includes(itemData.type) ? 'bg-success' : 'bg-danger'}">${itemData.type || 'N/A'}</span></td>
+                        <td>${cleanedText}</td>
+                        <td><span class="badge ${badgeClass}">${itemData.type || 'N/A'}</span></td> {# ใช้ badgeClass ที่คำนวณไว้ #}
                         <td><small>${detailsHtml}</small></td>
                         <td class="text-end fw-bold">${itemData.quantity}</td>
                         <td class="text-center"><button class="btn btn-sm btn-outline-secondary edit-manager-ledger-item-btn"><i class="fas fa-pencil-alt"></i></button></td>
                         <td class="text-center"><button class="btn btn-sm btn-danger remove-manager-ledger-item-btn"><i class="fas fa-trash-alt"></i></button></td>
                     </tr>`);
+                managerTotalSum += itemData.quantity; // Add quantity to sum
             });
+            $('#manager-total-sum').text(managerTotalSum); // Update total sum display
             filterTable('#manager-ledger-table', $('#managerLedgerSearch').val());
+        }
+
+        // Function to calculate and update system total sum
+        function updateSystemTotalSum() {
+            let systemTotalSum = 0;
+            systemMovementsData.forEach(move => {
+                systemTotalSum += move.quantity_change;
+            });
+            $('#system-total-sum').text(systemTotalSum);
         }
         
         // =================================================================
@@ -504,7 +570,7 @@
 
             stagingItems[itemType] = [];
             renderStagingArea(itemType);
-            renderManagerLedgerTablePreview();
+            renderManagerLedgerTablePreview(); // Re-render and update sum
             Swal.fire('สำเร็จ', `เพิ่ม ${addedItemCount} รายการลงในบันทึกแล้ว`, 'success');
         });
 
@@ -526,7 +592,7 @@
             const item = managerLedgerItems.find(i => i.compositeKey === key);
             if (item && newQuantity > 0) {
                 item.quantity = newQuantity;
-                renderManagerLedgerTablePreview();
+                renderManagerLedgerTablePreview(); // Re-render and update sum
                 editManagerLedgerItemModal.hide();
             } else {
                 Swal.fire('ผิดพลาด', 'จำนวนต้องมากกว่า 0', 'error');
@@ -536,7 +602,7 @@
         $(document).on('click', '.remove-manager-ledger-item-btn', function() {
             const key = $(this).closest('tr').data('composite-key');
             managerLedgerItems = managerLedgerItems.filter(i => i.compositeKey !== key);
-            renderManagerLedgerTablePreview();
+            renderManagerLedgerTablePreview(); // Re-render and update sum
         });
 
         // --- System Ledger Modal Handlers ---
@@ -675,7 +741,8 @@
         if (managerLedgerFromDB && Array.isArray(managerLedgerFromDB)) {
             managerLedgerItems = JSON.parse(JSON.stringify(managerLedgerFromDB));
         }
-        renderManagerLedgerTablePreview();
+        renderManagerLedgerTablePreview(); // Call to render manager table and calculate its sum
+        updateSystemTotalSum(); // Call to calculate and display system sum
         renderStagingArea('tire');
         renderStagingArea('wheel');
         handleManagerMovementTypeChange();

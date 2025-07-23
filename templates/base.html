@@ -42,14 +42,12 @@
             border: 1px solid white;
         }
 
-        /* NEW: Fixed Feedback Button */
-        /* Adjusted from m-3 (48px) to be exactly 20px from bottom-right, with explicit z-index */
+        /* Fixed Feedback Button */
         #feedback-fixed-btn {
             position: fixed;
             bottom: 20px; 
             right: 20px;
             z-index: 1050; /* Ensure it's on top */
-            /* Added padding/style for consistency with reconciliation buttons */
             background-color: var(--bs-primary);
             color: white;
             border-radius: var(--bs-border-radius);
@@ -61,13 +59,11 @@
             opacity: 0.9;
         }
 
-        /* NEW: Fixed Action Buttons for Reconciliation */
+        /* Fixed Action Buttons for Reconciliation */
         #reconciliation-fixed-actions {
             position: fixed;
-            /* Calculate position relative to the feedback button */
-            /* Approx width of feedback button + its right margin + gap */
             bottom: 20px; /* Same bottom alignment as feedback button */
-            right: calc(20px + 140px + 15px); /* 20px (feedback's right) + approx 140px (feedback button width) + 15px (desired gap) */
+            right: calc(20px + 150px + 15px); /* 20px (feedback's right) + approx 150px (feedback button width for safe margin) + 15px (desired gap) */
             z-index: 1049; /* Below feedback button */
             background-color: rgba(255, 255, 255, 0.95);
             padding: 15px;
@@ -108,13 +104,15 @@
             <li><a href="{{ url_for('barcode_scanner_page') }}" class="nav-link text-white {% if request.endpoint == 'barcode_scanner_page' %}active{% endif %}"><i class="fas fa-barcode me-2"></i><span class="sidebar-text">ตัดสต๊อกด้วยบาร์โค้ด</span></a></li>
             {% endif %}
             <li>
-                <a href="#reports-submenu" data-bs-toggle="collapse" class="nav-link text-white d-flex justify-content-between align-items-center {% if 'report' in request.endpoint %}active{% endif %}">
+                <a href="#reports-submenu" data-bs-toggle="collapse" class="nav-link text-white d-flex justify-content-between align-items-center {% if 'report' in request.endpoint or request.endpoint == 'reconciliation' %}active{% endif %}"> {# Added reconciliation endpoint here #}
                     <div><i class="fas fa-chart-line me-2"></i><span class="sidebar-text">รายงาน</span></div>
                     <i class="fas fa-chevron-down ms-auto sidebar-text"></i>
                 </a>
-                <ul class="collapse list-unstyled ps-3 {% if 'report' in request.endpoint %}show{% endif %}" id="reports-submenu">
+                <ul class="collapse list-unstyled ps-3 {% if 'report' in request.endpoint or request.endpoint == 'reconciliation' %}show{% endif %}" id="reports-submenu"> {# Added reconciliation endpoint here #}
                     <li><a href="{{ url_for('daily_stock_report') }}" class="nav-link text-white {% if request.endpoint == 'daily_stock_report' %}active{% endif %}"><i class="fas fa-calendar-day me-2"></i><span class="sidebar-text">รายงานสต็อกประจำวัน</span></a></li>
                     <li><a href="{{ url_for('summary_stock_report') }}" class="nav-link text-white {% if request.endpoint == 'summary_stock_report' %}active{% endif %}"><i class="fas fa-chart-pie me-2"></i><span class="sidebar-text">สรุปยอดแบบละเอียด</span></a></li>
+                    {# NEW: Reconciliation Link #}
+                    <li><a href="{{ url_for('reconciliation') }}" class="nav-link text-white {% if request.endpoint == 'reconciliation' %}active{% endif %}"><i class="fas fa-file-invoice me-2"></i><span class="sidebar-text">ปิดยอดสต๊อกประจำวัน</span></a></li>
                 </ul>
             </li>
             {% if current_user.is_authenticated and current_user.can_edit() %}
@@ -231,13 +229,15 @@
                     {% endif %}
                     
                     <li>
-                        <a href="#reports-submenu-mobile" data-bs-toggle="collapse" class="nav-link text-white d-flex justify-content-between align-items-center {% if 'report' in request.endpoint %}active{% endif %}">
+                        <a href="#reports-submenu-mobile" data-bs-toggle="collapse" class="nav-link text-white d-flex justify-content-between align-items-center {% if 'report' in request.endpoint or request.endpoint == 'reconciliation' %}active{% endif %}"> {# Added reconciliation endpoint here #}
                             <div><i class="fas fa-chart-line me-2"></i> รายงาน</div>
                             <i class="fas fa-chevron-down ms-auto"></i>
                         </a>
-                        <ul class="collapse list-unstyled ps-3 {% if 'report' in request.endpoint %}show{% endif %}" id="reports-submenu-mobile">
+                        <ul class="collapse list-unstyled ps-3 {% if 'report' in request.endpoint or request.endpoint == 'reconciliation' %}show{% endif %}" id="reports-submenu-mobile"> {# Added reconciliation endpoint here #}
                             <li><a href="{{ url_for('daily_stock_report') }}" class="nav-link text-white {% if request.endpoint == 'daily_stock_report' %}active{% endif %}"><i class="fas fa-calendar-day me-2"></i> รายงานสต็อกประจำวัน</a></li>
                             <li><a href="{{ url_for('summary_stock_report') }}" class="nav-link text-white {% if request.endpoint == 'summary_stock_report' %}active{% endif %}"><i class="fas fa-chart-pie me-2"></i> สรุปยอดแบบละเอียด</a></li>
+                            {# NEW: Reconciliation Link #}
+                            <li><a href="{{ url_for('reconciliation') }}" class="nav-link text-white {% if request.endpoint == 'reconciliation' %}active{% endif %}"><i class="fas fa-file-invoice me-2"></i> ปิดยอดสต๊อกประจำวัน</a></li>
                         </ul>
                     </li>
 
