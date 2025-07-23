@@ -4844,7 +4844,7 @@ def api_search_all_items():
         FROM tires t 
         WHERE t.is_deleted = { 'FALSE' if is_postgres else '0' } 
         AND (LOWER(t.brand) {like_op} {placeholder} OR LOWER(t.model) {like_op} {placeholder} OR LOWER(t.size) {like_op} {placeholder}) 
-        LIMIT 10
+        LIMIT 30
     """
     
     wheel_query = f"""
@@ -4852,7 +4852,7 @@ def api_search_all_items():
         FROM wheels w 
         WHERE w.is_deleted = { 'FALSE' if is_postgres else '0' } 
         AND (LOWER(w.brand) {like_op} {placeholder} OR LOWER(w.model) {like_op} {placeholder} OR {wheel_size_search_col} {like_op} {placeholder})
-        LIMIT 10
+        LIMIT 30
     """
     
     results = []
