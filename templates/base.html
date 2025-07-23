@@ -41,9 +41,51 @@
             line-height: 1;
             border: 1px solid white;
         }
+
+        /* NEW: Fixed Feedback Button */
+        /* Adjusted from m-3 (48px) to be exactly 20px from bottom-right, with explicit z-index */
+        #feedback-fixed-btn {
+            position: fixed;
+            bottom: 20px; 
+            right: 20px;
+            z-index: 1050; /* Ensure it's on top */
+            /* Added padding/style for consistency with reconciliation buttons */
+            background-color: var(--bs-primary);
+            color: white;
+            border-radius: var(--bs-border-radius);
+            box-shadow: 0 4px 12px rgba(0,0,0,.15);
+            padding: 10px 15px; /* Adjust padding if needed */
+            white-space: nowrap; /* Prevent text wrapping */
+        }
+        #feedback-fixed-btn:hover {
+            opacity: 0.9;
+        }
+
+        /* NEW: Fixed Action Buttons for Reconciliation */
+        #reconciliation-fixed-actions {
+            position: fixed;
+            /* Calculate position relative to the feedback button */
+            /* Approx width of feedback button + its right margin + gap */
+            bottom: 20px; /* Same bottom alignment as feedback button */
+            right: calc(20px + 140px + 15px); /* 20px (feedback's right) + approx 140px (feedback button width) + 15px (desired gap) */
+            z-index: 1049; /* Below feedback button */
+            background-color: rgba(255, 255, 255, 0.95);
+            padding: 15px;
+            border-radius: .5rem;
+            box-shadow: 0 4px 12px rgba(0,0,0,.15);
+            display: flex;
+            gap: 10px;
+            display: none; /* Hidden by default, shown by specific page JS */
+        }
+
+        /* Adjust body padding for all fixed button sets */
+        body {
+            padding-bottom: 100px; /* Sufficient space for fixed buttons at the bottom */
+        }
     </style>
     
     {% block head_scripts %}{% endblock %}
+    {% block styles %}{% endblock %}
 </head>
 <body>
     <div class="d-none d-lg-flex flex-column flex-shrink-0 p-3 bg-dark text-white sidebar-fixed">
@@ -129,7 +171,7 @@
                 <li><a class="dropdown-item" href="{{ url_for('logout') }}">ออกจากระบบ</a></li>
             </ul>
             {% else %}
-            <a href="{{ url_for('login') }}" class="d-flex align-items-center text-white text-decoration-none"><i class="fas fa-sign-in-alt me-2"></i><strong class="sidebar-text">เข้าสู่ระบบ</strong></a>
+            <a href="{{ url_for('login') }}" class="d-flex align-items-center text-white text-decoration-none"><i class="fas fa-sign-in-alt me-2"></i><strong>เข้าสู่ระบบ</strong></a>
             {% endif %}
         </div>
     </div>
@@ -272,9 +314,19 @@
     
     {% block scripts %}{% endblock %}
 
-    <button type="button" class="btn btn-primary position-fixed bottom-0 end-0 m-3" data-bs-toggle="modal" data-bs-target="#feedbackModal" style="z-index: 1050;">
+    <button type="button" class="btn btn-primary" id="feedback-fixed-btn" data-bs-toggle="modal" data-bs-target="#feedbackModal">
         <i class="fas fa-comment-dots me-2"></i>ส่งข้อเสนอแนะ
     </button>
+    
+    <div id="reconciliation-fixed-actions">
+        <button class="btn btn-info" id="compare-btn-base"><i class="fas fa-exchange-alt me-2"></i>เปรียบเทียบข้อมูล</button>
+        <button class="btn btn-success" id="save-ledger-btn-base"><i class="fas fa-save me-2"></i>บันทึกข้อมูล</button>
+        <form id="complete-reconciliation-form-base" method="POST" action=""> <input type="hidden" name="reconciliation_id" id="reconciliation_id_hidden">
+            <button type="button" class="btn btn-warning" id="complete-rec-btn-base"><i class="fas fa-check-circle me-2"></i>จบการทำงาน</button>
+        </form>
+    </div>
+
+
     <div class="modal fade" id="feedbackModal" tabindex="-1" aria-labelledby="feedbackModalLabel" aria-hidden="true">
         <div class="modal-dialog">
             <div class="modal-content">

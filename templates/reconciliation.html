@@ -3,21 +3,22 @@
 {% block title %}ปิดยอดประจำวัน{% endblock %}
 
 {% block styles %}
-{{ super() }}
-<link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css">
+<link href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css" rel="stylesheet">
 <style>
+    /* CSS ที่เฉพาะเจาะจงกับ reconciliation.html */
     .reconciliation-panel {
         border: 1px solid #dee2e6;
         border-radius: .25rem;
         padding: 1rem;
-        height: 85vh;
+        /* ลบ height และ overflow-y ออก เพื่อให้ตารางขยายตามเนื้อหาและหน้าเว็บเลื่อนแทน */
+        /* height: 85vh; */
         display: flex;
         flex-direction: column;
     }
     .table-container {
-        flex-grow: 1;
-        overflow-y: auto;
+        flex-grow: 1; 
+        /* ลบ overflow-y ออก */
+        /* overflow-y: auto; */ 
     }
     .select2-container { width: 100% !important; }
     .select2-container--default .select2-selection--single { height: calc(1.5em + .75rem + 2px); padding: .375rem .75rem; border-radius: .25rem; }
@@ -41,6 +42,9 @@
             <div class="reconciliation-panel">
                 <h5><i class="fas fa-desktop me-2"></i>รายการในระบบ วันที่ {{ report_date.strftime('%d/%m/%Y') }} ({{ system_movements | length }} รายการ)</h5>
                 <hr>
+                <div class="mb-3">
+                    <input type="text" id="systemMovementSearch" class="form-control" placeholder="ค้นหารายการในระบบ...">
+                </div>
                 <div class="table-container">
                     <table class="table table-sm table-hover" id="system-movements-table">
                         <thead class="table-light">
@@ -103,6 +107,9 @@
                     </div>
                 </div>
                 {% endif %}
+                <div class="mb-3">
+                    <input type="text" id="managerLedgerSearch" class="form-control" placeholder="ค้นหารายการในบันทึก...">
+                </div>
                 <div class="table-container">
                     <table class="table table-sm table-hover" id="manager-ledger-table">
                         <thead class="table-light"><tr><th>สินค้า</th><th>ประเภท</th><th>ช่องทาง</th><th>จำนวน</th><th class="text-center">แก้ไข</th><th class="text-center">ลบ</th></tr></thead>
@@ -113,23 +120,17 @@
         </div>
     </div>
 
-    <div class="mt-3 text-end">
-        {% if reconciliation_record.status == 'pending' %}
-            <button class="btn btn-info" id="compare-btn"><i class="fas fa-exchange-alt me-2"></i>เปรียบเทียบข้อมูล</button>
-            <button class="btn btn-success" id="save-ledger-btn"><i class="fas fa-save me-2"></i>บันทึกข้อมูล</button>
-            <form action="{{ url_for('complete_reconciliation_action', rec_id=reconciliation_record.id) }}" method="POST" class="d-inline" id="complete-rec-form">
-                <button type="button" class="btn btn-warning" id="complete-rec-btn-delayed"><i class="fas fa-check-circle me-2"></i>จบการทำงาน</button>
-            </form>
-        {% else %}
-            <div class="alert alert-success text-center"><i class="fas fa-check-circle me-2"></i>การเช็คความถูกต้องของรายการวันนี้เสร็จสมบูรณ์แล้ว</div>
-        {% endif %}
-    </div>
+    {% if reconciliation_record.status != 'pending' %}
+        <div class="mt-3 text-end">
+             <div class="alert alert-success text-center"><i class="fas fa-check-circle me-2"></i>การเช็คความถูกต้องของรายการวันนี้เสร็จสมบูรณ์แล้ว</div>
+        </div>
+    {% endif %}
 
     <form id="save-ledger-form" method="POST" action="{{ url_for('reconciliation', date=report_date.strftime('%Y-%m-%d')) }}" style="display: none;">
         <input type="hidden" name="reconciliation_id" value="{{ reconciliation_record.id }}">
         <input type="hidden" id="manager_ledger_data" name="manager_ledger_data">
     </form>
-</div>
+</div> 
 
 <div class="modal fade" id="editManagerLedgerItemModal" tabindex="-1" aria-labelledby="editManagerLedgerItemModalLabel" aria-hidden="true">
     <div class="modal-dialog"><div class="modal-content"><div class="modal-header"><h5 class="modal-title" id="editManagerLedgerItemModalLabel">แก้ไขรายการ: <span id="modal-manager-item-name"></span></h5><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button></div><div class="modal-body"><input type="hidden" id="modal-manager-composite-key"><div class="mb-3"><label for="modal-manager-quantity" class="form-label">จำนวน</label><input type="number" class="form-control" id="modal-manager-quantity" min="1" required></div></div><div class="modal-footer"><button type="button" class="btn btn-secondary" data-bs-dismiss="modal">ยกเลิก</button><button type="button" class="btn btn-primary" id="save-manager-ledger-item-btn">บันทึกการแก้ไข</button></div></div></div>
@@ -142,17 +143,20 @@
 
 
 {% block scripts %}
-{{ super() }}
 <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.all.min.js"></script>
 <script>
     // ----- GLOBAL DATA FROM SERVER -----
+    // reconciliationId should be passed directly if reconciliation_record is always available
+    const reconciliationId = {{ reconciliation_record.id | tojson }};
+    const reconciliationStatus = {{ reconciliation_record.status | tojson }};
     const managerLedgerFromDB = {{ reconciliation_record.manager_ledger | tojson | safe }};
+
+    // The other global data that comes from Flask context
     const allSalesChannels = {{ all_sales_channels | tojson | safe }};
     const allOnlinePlatforms = {{ all_online_platforms | tojson | safe }};
     const allWholesaleCustomers = {{ all_wholesale_customers | tojson | safe }};
     const systemMovementsData = {{ system_movements | tojson | safe }};
-    const reconciliationId = {{ reconciliation_record.id | tojson }};
     const movementTypes = [ { id: 'IN', text: 'รับเข้า' }, { id: 'OUT', text: 'จ่ายออก' }, { id: 'RETURN', text: 'รับคืน/ตีคืน' }];
     const returnCustomerTypes = [ { id: 'หน้าร้านลูกค้า', text: 'ลูกค้าทั่วไป' }, { id: 'หน้าร้านร้านยาง', text: 'ร้านยาง' }, { id: 'ออนไลน์', text: 'ออนไลน์' }];
 
@@ -164,6 +168,57 @@
         const editSystemMovementModal = new bootstrap.Modal(document.getElementById('editMovementModal'));
         const editManagerLedgerItemModal = new bootstrap.Modal(document.getElementById('editManagerLedgerItemModal'));
 
+        // =================================================================
+        // SECTION 0: Initialize Fixed Action Buttons in Base.html
+        // =================================================================
+        function initializeFixedReconciliationButtons() {
+            const fixedActionsContainer = document.getElementById('reconciliation-fixed-actions');
+            if (fixedActionsContainer && reconciliationStatus === 'pending') {
+                fixedActionsContainer.style.display = 'flex'; // Show buttons if status is pending
+            } else if (fixedActionsContainer) {
+                fixedActionsContainer.style.display = 'none'; // Hide if not pending
+            }
+
+            // Set the action URL for the completion form and its hidden input
+            const completeForm = document.getElementById('complete-reconciliation-form-base');
+            if (completeForm) {
+                // Pass the URL template as a string, then replace 0 with actual ID in JS
+                // This prevents Jinja from trying to cast 'DUMMY_ID' to int during template rendering
+                completeForm.action = "{{ url_for('complete_reconciliation_action', rec_id=0) }}".replace('0', reconciliationId);
+                const recIdInput = document.getElementById('reconciliation_id_hidden');
+                if (recIdInput) {
+                    recIdInput.value = reconciliationId;
+                }
+            }
+
+
+            // Attach event listeners to the buttons now that they are in base.html
+            $('#compare-btn-base').on('click', function() {
+                performComparisonLogic();
+            });
+
+            $('#save-ledger-btn-base').on('click', function() {
+                Swal.fire({
+                    title: 'ยืนยันการบันทึก', text: "คุณต้องการบันทึกข้อมูลใช่หรือไม่?",
+                    icon: 'question', showCancelButton: true, confirmButtonColor: '#28a745',
+                    confirmButtonText: 'ใช่, บันทึกเลย', cancelButtonText: 'ยกเลิก'
+                }).then((result) => {
+                    if (result.isConfirmed) {
+                        $('#manager_ledger_data').val(JSON.stringify(managerLedgerItems));
+                        $('#save-ledger-form').submit(); 
+                    }
+                });
+            });
+
+            $('#complete-rec-btn-base').on('click', function() {
+                if (confirm('คุณแน่ใจหรือไม่ว่าต้องการบันทึกข้อมูล? การดำเนินการนี้ไม่สามารถย้อนกลับได้')) {
+                    const button = $(this);
+                    button.prop('disabled', true).html('<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> กำลังบันทึก...');
+                    $('#complete-reconciliation-form-base').submit();
+                }
+            });
+        }
+        
         // =================================================================
         // SECTION 1: HELPER FUNCTIONS
         // =================================================================
@@ -184,7 +239,6 @@
             const itemId = `${item.item_type}-${item.tire_id || item.wheel_id}`;
             let platformIdPart = '', customerIdPart = '';
             
-            // Fix: Ensure these parts are only added if they are truly relevant to the item's type and channel/return type
             const channel = allSalesChannels.find(c => c.id == item.channel_id);
             const channelName = channel ? channel.name : '';
 
@@ -201,7 +255,6 @@
                     customerIdPart = getKeyPart(item.wholesale_customer_id);
                 }
             }
-            // For IN type, no platform/customer part is needed.
 
             return `${itemId}_${getKeyPart(item.type)}_${getKeyPart(item.channel_id)}_${platformIdPart}_${customerIdPart}_${getKeyPart(item.return_customer_type)}`;
         }
@@ -236,7 +289,6 @@
                 const channel = allSalesChannels.find(c => c.id == itemData.channel_id);
                 let detailsHtml = `<strong>${channel ? channel.name : 'N/A'}</strong>`;
 
-                // Fix: Reset and conditionally build detailsHtml based on itemData.type and channel.name
                 if (itemData.type === 'OUT') {
                     if (channel && channel.name === 'ออนไลน์' && itemData.online_platform_id) {
                         const platform = allOnlinePlatforms.find(p => p.id == itemData.online_platform_id);
@@ -257,7 +309,6 @@
                         }
                     }
                 }
-                // For 'IN' type, no additional details beyond channel are expected.
 
                 tbody.append(`
                     <tr data-composite-key="${itemData.compositeKey}">
@@ -269,6 +320,7 @@
                         <td class="text-center"><button class="btn btn-sm btn-danger remove-manager-ledger-item-btn"><i class="fas fa-trash-alt"></i></button></td>
                     </tr>`);
             });
+            filterTable('#manager-ledger-table', $('#managerLedgerSearch').val());
         }
         
         // =================================================================
@@ -276,9 +328,7 @@
         // =================================================================
         function handleManagerReturnChange() {
             const returnType = $('#common_return_customer_type').val();
-            // Always hide both first, then show relevant one
             $('#common_wholesale_customer_section, #common_online_platform_section').addClass('d-none');
-            // Reset values to prevent stale data
             $('#common_wholesale_customer_id').val(null).trigger('change');
             $('#common_online_platform_id').val(null).trigger('change');
 
@@ -288,18 +338,16 @@
 
         function handleManagerChannelChange() {
             const channelName = $('#common_channel_id option:selected').text();
-            // Always hide all specific sections first
             $('#common_online_platform_section, #common_wholesale_customer_section, #common_return_customer_type_section').addClass('d-none');
-            // Reset values to prevent stale data
             $('#common_online_platform_id').val(null).trigger('change');
             $('#common_wholesale_customer_id').val(null).trigger('change');
-            $('#common_return_customer_type').val(null).trigger('change'); // Also reset return type as it depends on channel
+            $('#common_return_customer_type').val(null).trigger('change');
 
             if (channelName === 'ออนไลน์') $('#common_online_platform_section').removeClass('d-none');
             else if (channelName === 'ค้าส่ง') $('#common_wholesale_customer_section').removeClass('d-none');
             else if (channelName === 'รับคืน') {
                 $('#common_return_customer_type_section').removeClass('d-none');
-                handleManagerReturnChange(); // Call this to set initial state for return sub-types
+                handleManagerReturnChange();
             }
         }
 
@@ -309,7 +357,7 @@
             const channelSection = $('#channel_section');
             if (!typeValue) {
                 channelSection.addClass('d-none');
-                handleManagerChannelChange(); // Clear all dependent fields if type is not selected
+                handleManagerChannelChange();
                 return;
             }
             channelSection.removeClass('d-none');
@@ -324,7 +372,7 @@
             if (validChannels.length === 1) {
                 channelSelect.val(validChannels[0].id).trigger('change');
             } else {
-                handleManagerChannelChange(); // Clear sub-fields if multiple channels are possible or none selected
+                handleManagerChannelChange();
             }
         }
 
@@ -363,29 +411,40 @@
             else if (typeValue === 'OUT') validChannels = allSalesChannels.filter(c => outIds.includes(c.id));
             else if (typeValue === 'RETURN') validChannels = allSalesChannels.filter(c => c.id === returnId);
             
-            // Capture current selected channel before repopulating
             const currentChannelId = channelSelect.val();
-            // Find if the current selected channel is still valid after type change
             const isCurrentChannelStillValid = validChannels.some(c => c.id == currentChannelId);
 
             populateSelect(channelSelect, validChannels, '-- เลือกช่องทาง --', isCurrentChannelStillValid ? currentChannelId : null, true);
-            handleModalChannelChange(); // Re-evaluate sub-sections based on new channel selection
+            handleModalChannelChange();
         }
 		
 		// --- Date Picker Handler ---
         $('#reportDatePicker').on('change', function() {
             const newDate = $(this).val();
             if (newDate) {
-                // สร้าง URL ใหม่โดยใช้วันที่ที่เลือก
                 const url = new URL(window.location);
                 url.searchParams.set('date', newDate);
-                // สั่งให้เบราว์เซอร์โหลดหน้าใหม่
                 window.location.href = url.toString();
             }
         });
-        
+
         // =================================================================
-        // SECTION 4: EVENT HANDLERS
+        // SECTION 4: SEARCH FILTERING FUNCTIONS
+        // =================================================================
+        function filterTable(tableSelector, searchTerm) {
+            const filter = searchTerm.toLowerCase();
+            $(tableSelector).find('tbody tr').each(function() {
+                let rowText = $(this).text().toLowerCase();
+                if (rowText.includes(filter)) {
+                    $(this).show();
+                } else {
+                    $(this).hide();
+                }
+            });
+        }
+
+        // =================================================================
+        // SECTION 5: EVENT HANDLERS
         // =================================================================
 
         // --- Staging Area Handlers ---
@@ -424,9 +483,9 @@
                 const [item_type_from_id, db_id] = stagedItem.id.split('-');
                 const itemDataFromForm = {
                     id: stagedItem.id, type: moveType, channel_id: channelId,
-                    online_platform_id: $('#common_online_platform_id').val() || null, // Ensure null if not selected
-                    wholesale_customer_id: $('#common_wholesale_customer_id').val() || null, // Ensure null if not selected
-                    return_customer_type: $('#common_return_customer_type').val() || null, // Ensure null if not selected
+                    online_platform_id: $('#common_online_platform_id').val() || null,
+                    wholesale_customer_id: $('#common_wholesale_customer_id').val() || null,
+                    return_customer_type: $('#common_return_customer_type').val() || null,
                     item_type: item_type_from_id,
                     tire_id: item_type_from_id === 'tire' ? db_id : null,
                     wheel_id: item_type_from_id === 'wheel' ? db_id : null
@@ -508,10 +567,7 @@
                 populateSelect($('#modal-platform'), allOnlinePlatforms, 'เลือกแพลตฟอร์ม', d.online_platform_id, true);
                 populateSelect($('#modal-customer'), allWholesaleCustomers, 'เลือกลูกค้า', d.wholesale_customer_id, true);
                 
-                // Trigger change to set visibility of dependent fields correctly based on loaded data
                 $('#modal-move-type').trigger('change'); 
-                // Then trigger channel change to handle sub-dependencies
-                // No need to trigger channel change again as handleModalMovementTypeChange already calls handleModalChannelChange
                 editSystemMovementModal.show();
             } catch (error) { Swal.fire('ผิดพลาด', 'ไม่สามารถเชื่อมต่อกับเซิร์ฟเวอร์ได้', 'error'); }
         });
@@ -521,7 +577,6 @@
                 movement_id: $('#modal-movement-id').val(), item_type: $('#modal-item-type').val(),
                 quantity_change: $('#modal-quantity').val(), notes: $('#modal-notes').val(),
                 type: $('#modal-move-type').val(), channel_id: $('#modal-channel').val(),
-                // Ensure null if not visible/selected, not empty string
                 online_platform_id: $('#modal-platform').val() || null, 
                 wholesale_customer_id: $('#modal-customer').val() || null,
                 return_customer_type: $('#modal-return-customer-type').val() || null, 
@@ -541,8 +596,9 @@
         });
 
         // --- Main Page Action Handlers ---
-        $('#compare-btn').on('click', function() {
+        function performComparisonLogic() {
             $('#system-movements-table tbody td, #manager-ledger-table tbody td').css('background-color', '');
+            
             const systemTotals = {}, managerTotals = {};
             systemMovementsData.forEach(move => {
                 const key = buildComparisonKey(move);
@@ -552,63 +608,41 @@
                 const key = item.compositeKey;
                 managerTotals[key] = (managerTotals[key] || 0) + item.quantity;
             });
+
             $('#system-movements-table tbody tr').each(function() {
                 const row = $(this);
-                // Fix: Ensure we find the correct movement by ID and type, not just ID
                 const movementId = row.data('movement-id');
                 const itemType = row.data('item-type');
                 const move = systemMovementsData.find(m => m.id == movementId && m.item_type === itemType);
                 if (!move) return;
+                
                 const key = buildComparisonKey(move);
                 let color = '';
                 if (!(key in managerTotals) || systemTotals[key] !== managerTotals[key]) {
-                    // Check for missing in manager or quantity mismatch
-                    color = '#f8d7da'; // Light red for discrepancies or missing
+                    color = '#f8d7da';
                 } else {
-                    color = '#d1e7dd'; // Light green for matching
+                    color = '#d1e7dd';
                 }
                 row.find('td').css('background-color', color);
             });
+
             $('#manager-ledger-table tbody tr').each(function() {
                 const row = $(this);
                 const key = row.data('composite-key');
                 if (!key) return;
+
                 let color = '';
                 if (!(key in systemTotals) || systemTotals[key] !== managerTotals[key]) {
-                     // Check for missing in system or quantity mismatch
-                    color = '#f8d7da'; // Light red for discrepancies or missing
+                    color = '#f8d7da';
                 } else {
-                    color = '#d1e7dd'; // Light green for matching
+                    color = '#d1e7dd';
                 }
                 row.find('td').css('background-color', color);
             });
             Swal.fire('เปรียบเทียบสำเร็จ!', 'แสดงผลการเปรียบเทียบด้วยสีในตารางเรียบร้อยแล้ว', 'info');
-        });
+        }
 
 
-        $('#save-ledger-btn').on('click', function() {
-            Swal.fire({
-                title: 'ยืนยันการบันทึก', text: "คุณต้องการบันทึกข้อมูลใช่หรือไม่?",
-                icon: 'question', showCancelButton: true, confirmButtonColor: '#28a745',
-                confirmButtonText: 'ใช่, บันทึกเลย', cancelButtonText: 'ยกเลิก'
-            }).then((result) => {
-                if (result.isConfirmed) {
-                    $('#manager_ledger_data').val(JSON.stringify(managerLedgerItems));
-                    $('#save-ledger-form').submit();
-                }
-            });
-        });
-
-        $('#complete-rec-btn-delayed').on('click', function() {
-            if (confirm('คุณแน่ใจหรือไม่ว่าต้องการบันทึกข้อมูล? การดำเนินการนี้ไม่สามารถย้อนกลับได้')) {
-                const button = $(this);
-                button.prop('disabled', true).html('<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> กำลังบันทึก...');
-                setTimeout(function() {
-                    $('#complete-rec-form').submit();
-                }, 500);
-            }
-        });
-        
         // --- Cascading Dropdown Bindings ---
         $('#common_movement_type').on('change', handleManagerMovementTypeChange);
         $('#common_channel_id').on('change', handleManagerChannelChange);
@@ -617,8 +651,17 @@
         $('#modal-channel').on('change', handleModalChannelChange);
         $('#modal-return-customer-type').on('change', handleModalReturnChange);
 
+        // --- Search Input Bindings ---
+        $('#systemMovementSearch').on('keyup', function() {
+            filterTable('#system-movements-table', $(this).val());
+        });
+
+        $('#managerLedgerSearch').on('keyup', function() {
+            filterTable('#manager-ledger-table', $(this).val());
+        });
+
         // =================================================================
-        // SECTION 5: INITIALIZATION
+        // SECTION 6: INITIALIZATION
         // =================================================================
         $('.item-selector').select2({
             placeholder: "ค้นหาและเลือกสินค้า",
@@ -635,7 +678,10 @@
         renderManagerLedgerTablePreview();
         renderStagingArea('tire');
         renderStagingArea('wheel');
-        handleManagerMovementTypeChange(); // Initialize common fields' visibility
+        handleManagerMovementTypeChange();
+
+        // Initialize fixed buttons AFTER all other DOM content is ready
+        initializeFixedReconciliationButtons();
     });
 </script>
 {% endblock %}
