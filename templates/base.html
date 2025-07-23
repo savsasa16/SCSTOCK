@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{% block title %}SC STOCK 1.2.1{% endblock %}</title>
+    <title>{% block title %}SC STOCK 1.2.3{% endblock %}</title>
 
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -72,7 +72,7 @@
                 </a>
                 <ul class="collapse list-unstyled ps-3 {% if 'report' in request.endpoint %}show{% endif %}" id="reports-submenu">
                     <li><a href="{{ url_for('daily_stock_report') }}" class="nav-link text-white {% if request.endpoint == 'daily_stock_report' %}active{% endif %}"><i class="fas fa-calendar-day me-2"></i><span class="sidebar-text">รายงานสต็อกประจำวัน</span></a></li>
-                    <li><a href="{{ url_for('summary_stock_report') }}" class="nav-link text-white {% if request.endpoint == 'summary_stock_report' %}active{% endif %}"><i class="fas fa-chart-pie me-2"></i><span class="sidebar-text">สรุปรายงานสต็อกรายช่วง</span></a></li>
+                    <li><a href="{{ url_for('summary_stock_report') }}" class="nav-link text-white {% if request.endpoint == 'summary_stock_report' %}active{% endif %}"><i class="fas fa-chart-pie me-2"></i><span class="sidebar-text">สรุปยอดแบบละเอียด</span></a></li>
                 </ul>
             </li>
             {% if current_user.is_authenticated and current_user.can_edit() %}
@@ -195,7 +195,7 @@
                         </a>
                         <ul class="collapse list-unstyled ps-3 {% if 'report' in request.endpoint %}show{% endif %}" id="reports-submenu-mobile">
                             <li><a href="{{ url_for('daily_stock_report') }}" class="nav-link text-white {% if request.endpoint == 'daily_stock_report' %}active{% endif %}"><i class="fas fa-calendar-day me-2"></i> รายงานสต็อกประจำวัน</a></li>
-                            <li><a href="{{ url_for('summary_stock_report') }}" class="nav-link text-white {% if request.endpoint == 'summary_stock_report' %}active{% endif %}"><i class="fas fa-chart-pie me-2"></i> สรุปรายงานสต็อกรายช่วง</a></li>
+                            <li><a href="{{ url_for('summary_stock_report') }}" class="nav-link text-white {% if request.endpoint == 'summary_stock_report' %}active{% endif %}"><i class="fas fa-chart-pie me-2"></i> สรุปยอดแบบละเอียด</a></li>
                         </ul>
                     </li>
 
@@ -262,7 +262,7 @@
         </div>
         
         <footer class="main-footer">
-             <p>&copy; {{ get_bkk_time().year }} ระบบจัดการสต็อกสินค้า V.1.2.1 All rights reserved.</p>
+             <p>&copy; {{ get_bkk_time().year }} ระบบจัดการสต็อกสินค้า V.1.3 All rights reserved.</p>
         </footer>
     </div>
     

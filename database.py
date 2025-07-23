@@ -5,6 +5,7 @@ import re
 from werkzeug.security import generate_password_hash, check_password_hash
 import os
 from urllib.parse import urlparse
+import json
 
 BKK_TZ = pytz.timezone('Asia/Bangkok')
 
@@ -542,6 +543,36 @@ def init_db(conn):
             value TEXT NOT NULL
         );
     """)
+
+     # Daily Reconciliations Table (NEW)
+    if is_postgres:
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS daily_reconciliations (
+                id SERIAL PRIMARY KEY,
+                reconciliation_date DATE NOT NULL UNIQUE,
+                manager_id INTEGER NOT NULL,
+                status VARCHAR(50) NOT NULL DEFAULT 'pending', -- e.g., 'pending', 'completed'
+                manager_ledger_json TEXT NULL,
+                system_snapshot_json TEXT NULL,
+                created_at TIMESTAMP WITH TIME ZONE NOT NULL,
+                completed_at TIMESTAMP WITH TIME ZONE NULL,
+                FOREIGN KEY (manager_id) REFERENCES users(id)
+            );
+        """)
+    else: # SQLite
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS daily_reconciliations (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                reconciliation_date TEXT NOT NULL UNIQUE,
+                manager_id INTEGER NOT NULL,
+                status TEXT NOT NULL DEFAULT 'pending',
+                manager_ledger_json TEXT NULL,
+                system_snapshot_json TEXT NULL,
+                created_at TEXT NOT NULL,
+                completed_at TEXT NULL,
+                FOREIGN KEY (manager_id) REFERENCES users(id)
+            );
+        """)
     
     # --- INSERT DEFAULT DATA (MOVED HERE TO ENSURE COMMIT) ---
     # เพิ่มข้อมูลเริ่มต้นสำหรับ sales_channels (ถ้ายังไม่มี)
@@ -2624,6 +2655,114 @@ def set_setting(conn, key, value):
     else: # SQLite
         query = "INSERT OR REPLACE INTO app_settings (key, value) VALUES (?, ?)"
 
-    cursor.execute(query, (key, value))
-    # การ commit จะถูกจัดการโดย Route ใน app.py
+# --- Reconciliation Functions (NEW) ---
+
+def get_reconciliation_for_date(conn, report_date):
+    """
+    ดึงข้อมูลการกระทบยอดสำหรับวันที่ระบุ
+    report_date: ต้องเป็นอ็อบเจกต์ date ของ Python
+    """
+    is_postgres = "psycopg2" in str(type(conn))
+    
+    # แปลง date object เป็น string 'YYYY-MM-DD' สำหรับ query
+    date_str = report_date.strftime('%Y-%m-%d')
+    
+    query = "SELECT * FROM daily_reconciliations WHERE reconciliation_date = ?"
+    params = (date_str,)
+    
+    if is_postgres:
+        query = query.replace('?', '%s')
+    
+    cursor = conn.cursor()
+    cursor.execute(query, params)
+    reconciliation_data = cursor.fetchone()
+    
+    if reconciliation_data:
+        rec_dict = dict(reconciliation_data)
+        # แปลง JSON string กลับเป็น Python object
+        if rec_dict.get('manager_ledger_json'):
+            rec_dict['manager_ledger'] = json.loads(rec_dict['manager_ledger_json'])
+        else:
+            rec_dict['manager_ledger'] = []
+            
+        if rec_dict.get('system_snapshot_json'):
+            rec_dict['system_snapshot'] = json.loads(rec_dict['system_snapshot_json'])
+        else:
+            rec_dict['system_snapshot'] = []
+            
+        return rec_dict
+        
+    return None
+
+def get_or_create_reconciliation_for_date(conn, report_date, manager_id):
+    """
+    ดึงข้อมูลกระทบยอดของวันนั้นๆ หรือสร้างใหม่ถ้ายังไม่มี
+    """
+    existing_rec = get_reconciliation_for_date(conn, report_date)
+    if existing_rec:
+        return existing_rec
+
+    # ถ้าไม่มี ให้สร้างใหม่
+    is_postgres = "psycopg2" in str(type(conn))
+    date_str = report_date.strftime('%Y-%m-%d')
+    created_at_iso = get_bkk_time().isoformat()
+    
+    query = "INSERT INTO daily_reconciliations (reconciliation_date, manager_id, created_at) VALUES (?, ?, ?)"
+    params = (date_str, manager_id, created_at_iso)
+
+    if is_postgres:
+        query = query.replace('?', '%s') + " RETURNING id"
+    
+    cursor = conn.cursor()
+    cursor.execute(query, params)
+    
+    # ไม่ต้อง commit ที่นี่ จะให้ app.py จัดการ
+    
+    return get_reconciliation_for_date(conn, report_date) # ดึงข้อมูลที่เพิ่งสร้างขึ้นมาใหม่
+
+def update_manager_ledger(conn, reconciliation_id, ledger_data):
+    """
+    อัปเดตข้อมูลในฝั่ง 'สมุดบันทึกของผู้จัดการ'
+    ledger_data: ต้องเป็น list/dict ของ Python
+    """
+    is_postgres = "psycopg2" in str(type(conn))
+    
+    # แปลง Python object เป็น JSON string
+    ledger_json = json.dumps(ledger_data, ensure_ascii=False)
+    
+    query = "UPDATE daily_reconciliations SET manager_ledger_json = ? WHERE id = ?"
+    # สร้างตัวแปร params ให้ถูกต้อง
+    params = (ledger_json, reconciliation_id)
+    
+    if is_postgres:
+        query = query.replace('?', '%s')
+        
+    cursor = conn.cursor()
+    # ใช้ตัวแปร params ที่ถูกต้อง
+    cursor.execute(query, params)
+
+def complete_reconciliation(conn, reconciliation_id):
+    """Updates the status of a reconciliation to 'completed' and sets the completed_at timestamp."""
+    completed_at_iso = get_bkk_time().isoformat()
+    is_postgres = "psycopg2" in str(type(conn))
+    
+    query = "UPDATE daily_reconciliations SET status = ?, completed_at = ? WHERE id = ?"
+    params = ('completed', completed_at_iso, reconciliation_id)
+
+    if is_postgres:
+        query = query.replace('?', '%s')
+
+    cursor = conn.cursor()
+    cursor.execute(query, params)
+
+def get_reconciliation_by_id(conn, reconciliation_id):
+    """Fetches a single reconciliation record by its ID."""
+    is_postgres = "psycopg2" in str(type(conn))
+    query = "SELECT * FROM daily_reconciliations WHERE id = ?"
+    if is_postgres:
+        query = query.replace('?', '%s')
+    
+    cursor = conn.cursor()
+    cursor.execute(query, (reconciliation_id,))
+    return cursor.fetchone()
   

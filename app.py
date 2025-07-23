@@ -4585,6 +4585,291 @@ def view_activity_logs():
 
     return render_template('view_activity_logs.html', logs=logs)
 
+# แทนที่ฟังก์ชัน reconciliation ของเดิมทั้งหมดด้วยอันนี้
+@app.route('/reconciliation', methods=['GET', 'POST'])
+@login_required
+def reconciliation():
+    if not current_user.can_edit():
+        flash('คุณไม่มีสิทธิ์เข้าถึงหน้านี้', 'danger')
+        return redirect(url_for('index'))
+
+    conn = get_db()
+
+    report_date_str = request.args.get('date')
+    try:
+        report_date = datetime.strptime(report_date_str, '%Y-%m-%d').date() if report_date_str else get_bkk_time().date()
+    except (ValueError, TypeError):
+        flash("รูปแบบวันที่ไม่ถูกต้อง, ใช้ YYYY-MM-DD", "danger")
+        report_date = get_bkk_time().date()
+
+    if request.method == 'POST':
+        rec_id = request.form.get('reconciliation_id')
+        ledger_data_json = request.form.get('manager_ledger_data')
+        if rec_id and ledger_data_json:
+            try:
+                ledger_data = json.loads(ledger_data_json)
+                database.update_manager_ledger(conn, rec_id, ledger_data)
+                conn.commit()
+                flash('บันทึกข้อมูลในสมุดกระทบยอดสำเร็จ!', 'success')
+            except Exception as e:
+                import traceback
+                print("\n--- !!! AN ERROR OCCURRED DURING SAVE !!! ---")
+                traceback.print_exc()
+                print("---------------------------------------------\n")
+                conn.rollback()
+                flash(f'เกิดข้อผิดพลาดในการบันทึก: {e}', 'danger')
+        else:
+            flash('ข้อมูลไม่ครบถ้วน ไม่สามารถบันทึกได้', 'warning')
+        return redirect(url_for('reconciliation', date=report_date.strftime('%Y-%m-%d')))
+
+    try:
+        reconciliation_record = database.get_or_create_reconciliation_for_date(conn, report_date, current_user.id)
+        conn.commit()
+    except Exception as e:
+        conn.rollback()
+        flash(f"เกิดข้อผิดพลาดในการสร้างหรือดึงข้อมูลกระทบยอด: {e}", "danger")
+        return redirect(url_for('index'))
+    
+    # --- UPGRADED QUERIES ---
+    is_psycopg2_conn = "psycopg2" in str(type(conn))
+    sql_date_filter = report_date.strftime('%Y-%m-%d')
+    placeholder = "%s" if is_psycopg2_conn else "?"
+    
+    wheel_size_concat = "(w.diameter || 'x' || w.width || ' ' || w.pcd)"
+    if is_psycopg2_conn:
+        wheel_size_concat = "CONCAT(w.diameter, 'x', w.width, ' ', w.pcd)"
+
+    # --- UPGRADED TIRE QUERY ---
+    tire_movements_query = f"""
+        SELECT 'tire' as item_type, tm.id, tm.tire_id, tm.type, tm.quantity_change, 
+               t.brand, t.model, t.size, u.username,
+               sc.name as channel_name, op.name as online_platform_name, wc.name as wholesale_customer_name,
+               tm.channel_id, tm.online_platform_id, tm.wholesale_customer_id, tm.return_customer_type
+        FROM tire_movements tm 
+        JOIN tires t ON tm.tire_id = t.id
+        LEFT JOIN users u ON tm.user_id = u.id
+        LEFT JOIN sales_channels sc ON tm.channel_id = sc.id
+        LEFT JOIN online_platforms op ON tm.online_platform_id = op.id
+        LEFT JOIN wholesale_customers wc ON tm.wholesale_customer_id = wc.id
+        WHERE {database.get_sql_date_format_for_query('tm.timestamp')} = {placeholder}
+        ORDER BY tm.timestamp DESC
+    """
+    
+    # --- UPGRADED WHEEL QUERY ---
+    wheel_movements_query = f"""
+        SELECT 'wheel' as item_type, wm.id, wm.wheel_id, wm.type, wm.quantity_change, 
+               w.brand, w.model, {wheel_size_concat} as size, u.username,
+               sc.name as channel_name, op.name as online_platform_name, wc.name as wholesale_customer_name,
+               wm.channel_id, wm.online_platform_id, wm.wholesale_customer_id, wm.return_customer_type
+        FROM wheel_movements wm 
+        JOIN wheels w ON wm.wheel_id = w.id
+        LEFT JOIN users u ON wm.user_id = u.id
+        LEFT JOIN sales_channels sc ON wm.channel_id = sc.id
+        LEFT JOIN online_platforms op ON wm.online_platform_id = op.id
+        LEFT JOIN wholesale_customers wc ON wm.wholesale_customer_id = wc.id
+        WHERE {database.get_sql_date_format_for_query('wm.timestamp')} = {placeholder}
+        ORDER BY wm.timestamp DESC
+    """
+    
+    try:
+        cursor = conn.cursor()
+        cursor.execute(tire_movements_query, (sql_date_filter,))
+        tire_movements = cursor.fetchall()
+        cursor.execute(wheel_movements_query, (sql_date_filter,))
+        wheel_movements = cursor.fetchall()
+        cursor.close()
+    except Exception as e:
+        flash(f"เกิดข้อผิดพลาดในการดึงข้อมูลเคลื่อนไหว: {e}", "danger")
+        tire_movements, wheel_movements = [], []
+
+    system_movements = [dict(m) for m in tire_movements] + [dict(m) for m in wheel_movements]
+
+    # ดึงข้อมูล Master ทั้งหมดสำหรับใช้ใน Dropdown ของ Pop-up
+    all_sales_channels = get_all_sales_channels_cached()
+    all_online_platforms = get_all_online_platforms_cached()
+    all_wholesale_customers = get_all_wholesale_customers_cached()
+
+    return render_template('reconciliation.html', 
+                            report_date=report_date,
+                            reconciliation_record=reconciliation_record,
+                            system_movements=system_movements,
+                            all_sales_channels=all_sales_channels,
+                            all_online_platforms=all_online_platforms,
+                            all_wholesale_customers=all_wholesale_customers,
+                            current_user=current_user)
+
+# --- เพิ่ม 2 API ใหม่นี้เข้าไป ---
+@app.route('/api/get_movement_details')
+@login_required
+def api_get_movement_details():
+    if not current_user.can_edit():
+        return jsonify({"success": False, "message": "Unauthorized"}), 403
+    
+    item_type = request.args.get('item_type')
+    movement_id = request.args.get('movement_id', type=int)
+
+    if not item_type or not movement_id:
+        return jsonify({"success": False, "message": "Missing parameters"}), 400
+
+    conn = get_db()
+    movement_details = None
+    if item_type == 'tire':
+        movement_details = database.get_tire_movement(conn, movement_id)
+    elif item_type == 'wheel':
+        movement_details = database.get_wheel_movement(conn, movement_id)
+    
+    if movement_details:
+        return jsonify({"success": True, "details": dict(movement_details)})
+    else:
+        return jsonify({"success": False, "message": "Movement not found"}), 404
+
+@app.route('/api/correct_movement', methods=['POST'])
+@login_required
+def api_correct_movement():
+    if not current_user.can_edit():
+        return jsonify({"success": False, "message": "Unauthorized"}), 403
+
+    data = request.json
+    item_type = data.get('item_type')
+    movement_id = data.get('movement_id')
+
+    try:
+        conn = get_db()
+        if item_type == 'tire':
+            database.update_tire_movement(
+                conn, movement_id,
+                new_notes=data.get('notes'),
+                new_image_filename=data.get('image_filename'), # This will be the old one as we don't upload new image here
+                new_type=data.get('type'),
+                new_quantity_change=int(data.get('quantity_change')),
+                new_channel_id=int(data.get('channel_id')) if data.get('channel_id') else None,
+                new_online_platform_id=int(data.get('online_platform_id')) if data.get('online_platform_id') else None,
+                new_wholesale_customer_id=int(data.get('wholesale_customer_id')) if data.get('wholesale_customer_id') else None,
+                new_return_customer_type=data.get('return_customer_type')
+            )
+        elif item_type == 'wheel':
+             database.update_wheel_movement(
+                conn, movement_id,
+                new_notes=data.get('notes'),
+                new_image_filename=data.get('image_filename'),
+                new_type=data.get('type'),
+                new_quantity_change=int(data.get('quantity_change')),
+                new_channel_id=int(data.get('channel_id')) if data.get('channel_id') else None,
+                new_online_platform_id=int(data.get('online_platform_id')) if data.get('online_platform_id') else None,
+                new_wholesale_customer_id=int(data.get('wholesale_customer_id')) if data.get('wholesale_customer_id') else None,
+                new_return_customer_type=data.get('return_customer_type')
+            )
+        conn.commit()
+        return jsonify({"success": True, "message": "แก้ไขรายการสำเร็จ!"})
+    except Exception as e:
+        conn.rollback()
+        return jsonify({"success": False, "message": str(e)}), 500
+
+@app.route('/reconciliation/complete/<int:rec_id>', methods=['POST'])
+@login_required
+def complete_reconciliation_action(rec_id):
+    if not current_user.can_edit():
+        flash('คุณไม่มีสิทธิ์ในการดำเนินการนี้', 'danger')
+        return redirect(url_for('index'))
+
+    conn = get_db()
+    try:
+        # 1. สั่งให้ database ทำการ UPDATE
+        database.complete_reconciliation(conn, rec_id)
+        
+        # 2. ยืนยันการเปลี่ยนแปลงลงฐานข้อมูล
+        conn.commit()
+        print(f"DEBUG: Transaction for rec_id {rec_id} has been committed.")
+
+        # ----- 3. ขั้นตอนการตรวจสอบ (VERIFICATION STEP) -----
+        # ดึงข้อมูลจากฐานข้อมูลอีกครั้ง *หลัง* จาก commit เพื่อตรวจสอบว่าค่าเปลี่ยนจริงหรือไม่
+        verified_rec = database.get_reconciliation_by_id(conn, rec_id)
+        
+        if verified_rec and verified_rec['status'] == 'completed':
+            # ถ้าสถานะเปลี่ยนเป็น completed จริงๆ แสดงว่าทุกอย่างสำเร็จ
+            flash('ปิดการกระทบยอดสำหรับวันนี้เรียบร้อยแล้ว!', 'success')
+        else:
+            # ถ้าสถานะไม่เปลี่ยน แสดงว่าการ commit ไม่ได้ผล
+            status = verified_rec['status'] if verified_rec else 'Not Found'
+            flash('เกิดข้อผิดพลาด: การอัปเดตสถานะไม่สำเร็จหลังจากการ commit', 'danger')
+            print(f"CRITICAL: Commit for rec_id {rec_id} did not persist! Status is still: {status}")
+        
+    except Exception as e:
+        conn.rollback()
+        flash(f'เกิดข้อผิดพลาดในการปิดการกระทบยอด: {e}', 'danger')
+        print(f"ERROR: Exception during complete_reconciliation_action: {e}")
+
+    # --- ส่วนของการ Redirect ยังคงเหมือนเดิม ---
+    rec = database.get_reconciliation_by_id(conn, rec_id)
+    date_str = ''
+    if rec:
+        date_value = rec['reconciliation_date']
+        if isinstance(date_value, str):
+            date_obj = datetime.strptime(date_value, '%Y-%m-%d').date()
+        else:
+            date_obj = date_value
+        date_str = date_obj.strftime('%Y-%m-%d')
+
+    return redirect(url_for('reconciliation', date=date_str))
+
+# แทนที่ api_search_all_items ของเดิมด้วยอันนี้
+@app.route('/api/search_all_items')
+@login_required
+def api_search_all_items():
+    query = request.args.get('q', '').strip()
+    if len(query) < 2:
+        return jsonify([])
+
+    conn = get_db()
+    search_term = f"%{query}%"
+    
+    is_psycopg2_conn = "psycopg2" in str(type(conn))
+    placeholder = "%s" if is_psycopg2_conn else "?"
+    
+    wheel_size_concat = "(w.diameter || 'x' || w.width || ' ' || w.pcd)"
+    if is_psycopg2_conn:
+        wheel_size_concat = "CONCAT(w.diameter, 'x', w.width, ' ', w.pcd)"
+
+    # --- CORRECTED QUERIES ---
+    tire_query = f"""
+        SELECT t.id, t.brand, t.model, t.size, 'tire' as type 
+        FROM tires t 
+        WHERE t.is_deleted = { 'FALSE' if is_psycopg2_conn else '0' } 
+        AND (t.brand LIKE {placeholder} OR t.model LIKE {placeholder} OR t.size LIKE {placeholder}) 
+        LIMIT 10
+    """
+    wheel_query = f"""
+        SELECT w.id, w.brand, w.model, {wheel_size_concat} as size, 'wheel' as type 
+        FROM wheels w 
+        WHERE w.is_deleted = { 'FALSE' if is_psycopg2_conn else '0' } 
+        AND (w.brand LIKE {placeholder} OR w.model LIKE {placeholder}) 
+        LIMIT 10
+    """
+    
+    tire_results = conn.execute(tire_query, (search_term, search_term, search_term)).fetchall()
+    wheel_results = conn.execute(wheel_query, (search_term, search_term)).fetchall()
+    
+    results = [dict(row) for row in tire_results] + [dict(row) for row in wheel_results]
+    
+    formatted_results = [{"id": f"{item['type']}-{item['id']}", "text": f"[{item['type'].upper()}] {item['brand'].title()} {item['model'].title()} - {item['size']}"} for item in results]
+    
+    return jsonify(formatted_results)
+
+@app.route('/api/process_data', methods=['POST'])
+def process_data():
+    data = request.get_json()
+
+    # ใช้ .get() เพื่อดึงค่า ถ้าไม่มี key นั้นอยู่ จะได้ค่า default เป็น None (ซึ่ง JSON serialize ได้)
+    notes_from_request = data.get('notes', None)
+
+    processed_data = {
+        'id': data.get('id'), # ควรใช้ .get() กับทุก key ที่ไม่แน่ใจ
+        'status': 'processed',
+        'notes': notes_from_request 
+    }
+    
+    return jsonify(processed_data)
+
 
 # --- Main entry point ---
 if __name__ == '__main__':

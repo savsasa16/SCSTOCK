@@ -1,0 +1,573 @@
+{% extends 'base.html' %}
+
+{% block title %}ปิดยอดประจำวัน{% endblock %}
+
+{% block styles %}
+{{ super() }}
+<link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css">
+<style>
+    .reconciliation-panel {
+        border: 1px solid #dee2e6;
+        border-radius: .25rem;
+        padding: 1rem;
+        height: 85vh;
+        display: flex;
+        flex-direction: column;
+    }
+    .table-container {
+        flex-grow: 1;
+        overflow-y: auto;
+    }
+    .select2-container { width: 100% !important; }
+    .select2-container--default .select2-selection--single { height: calc(1.5em + .75rem + 2px); padding: .375rem .75rem; border-radius: .25rem; }
+    .select2-container--default .select2-selection--single .select2-selection__arrow { height: calc(1.5em + .75rem); }
+</style>
+{% endblock %}
+
+
+{% block content %}
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h3>กระทบยอดประจำวัน</h3>
+        <div class="d-flex align-items-center">
+             <input type="date" id="reportDatePicker" class="form-control" style="width: 200px;" value="{{ report_date.strftime('%Y-%m-%d') }}">
+             <span class="ms-3">สถานะ: <strong id="reconciliation-status" class="text-capitalize">{{ reconciliation_record.status }}</strong></span>
+        </div>
+    </div>
+
+    <div class="row g-4">
+        <div class="col-lg-6">
+            <div class="reconciliation-panel">
+                <h5><i class="fas fa-desktop me-2"></i>รายการในระบบ วันที่ {{ report_date.strftime('%d/%m/%Y') }} ({{ system_movements | length }} รายการ)</h5>
+                <hr>
+                <div class="table-container">
+                    <table class="table table-sm table-hover" id="system-movements-table">
+                        <thead class="table-light">
+                            <tr>
+                                <th>สินค้า</th>
+                                <th>ประเภท</th>
+                                <th style="width: 30%;">ช่องทาง</th>
+                                <th>จำนวน</th>
+                                <th class="text-center">แก้ไข</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for move in system_movements %}
+                            <tr data-movement-id="{{move.id}}" data-item-type="{{move.item_type}}">
+                                <td>{{ move.brand | title }} {{ move.model | title }}<br><small class="text-muted">{{ move.size }}</small></td>
+                                <td>{% if move.type == 'IN' or move.type == 'RETURN' %}<span class="badge bg-success">{{ move.type }}</span>{% else %}<span class="badge bg-danger">{{ move.type }}</span>{% endif %}</td>
+                                <td><small><strong>{{ move.channel_name or 'N/A' }}</strong>{% if move.online_platform_name and move.online_platform_name != 'ไม่ระบุแพลตฟอร์ม' %}<br><span class="ps-2">&ndash; {{ move.online_platform_name }}</span>{% endif %}{% if move.wholesale_customer_name and move.wholesale_customer_name != 'ไม่ระบุลูกค้า' %}<br><span class="ps-2">&ndash; {{ move.wholesale_customer_name }}</span>{% endif %}{% if move.return_customer_type and move.type == 'RETURN' %}<br><span class="ps-2">&ndash; คืนจาก: {{ move.return_customer_type }}</span>{% endif %}</small></td>
+                                <td class="text-end">{{ move.quantity_change }}</td>
+                                <td class="text-center">{% if reconciliation_record.status == 'pending' %}<button class="btn btn-sm btn-outline-secondary edit-movement-btn"><i class="fas fa-pencil-alt"></i></button>{% endif %}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-6">
+            <div class="reconciliation-panel">
+                <h5><i class="fas fa-clipboard-check me-2"></i>การเช็ครายการ(ADMIN!)</h5>
+                <hr>
+                {% if reconciliation_record.status == 'pending' %}
+                <div class="border p-3 mb-3 rounded bg-light">
+                    <h5 class="mb-3">ข้อมูลการทำรายการ (สำหรับทุกรายการที่จะเพิ่ม)</h5>
+                    <div class="row g-3 mb-3">
+                        <div class="col-md-6"><label for="common_movement_type" class="form-label">ประเภท*</label><select class="form-select" id="common_movement_type" name="type" required></select></div>
+                        <div class="col-md-6" id="channel_section"><label for="common_channel_id" class="form-label">ช่องทาง*</label><select class="form-select" id="common_channel_id" name="channel_id"></select></div>
+                        <div class="col-12 d-none" id="common_return_customer_type_section"><label for="common_return_customer_type" class="form-label">คืนจาก</label><select class="form-select" id="common_return_customer_type" name="return_customer_type"></select></div>
+                        <div class="col-12 d-none" id="common_online_platform_section"><label for="common_online_platform_id" class="form-label">แพลตฟอร์มออนไลน์</label><select class="form-select" id="common_online_platform_id" name="online_platform_id"></select></div>
+                        <div class="col-12 d-none" id="common_wholesale_customer_section"><label for="common_wholesale_customer_id" class="form-label">ลูกค้าค้าส่ง</label><select class="form-select" id="common_wholesale_customer_id" name="wholesale_customer_id"></select></div>
+                    </div>
+                    <hr>
+                    <ul class="nav nav-tabs mb-3" id="managerItemTypeTab" role="tablist">
+                        <li class="nav-item" role="presentation"><button class="nav-link active" id="manager-tire-tab" data-bs-toggle="tab" data-bs-target="#manager-tire-pane" type="button"><i class="fas fa-tire me-2"></i>เพิ่มยาง</button></li>
+                        <li class="nav-item" role="presentation"><button class="nav-link" id="manager-wheel-tab" data-bs-toggle="tab" data-bs-target="#manager-wheel-pane" type="button"><i class="fas fa-compact-disc me-2"></i>เพิ่มแม็ก</button></li>
+                    </ul>
+                    <div class="tab-content">
+                        <div class="tab-pane fade show active" id="manager-tire-pane" role="tabpanel">
+                            <div class="row g-2 mb-3 align-items-end"><div class="col-sm-6"><label for="manager_tire_selector" class="form-label">ค้นหาสินค้า (ยาง)</label><select class="form-select item-selector" id="manager_tire_selector"></select></div><div class="col-sm-3"><label for="manager_tire_quantity" class="form-label">จำนวน</label><input type="number" class="form-control" id="manager_tire_quantity" placeholder="ใส่จำนวน" min="1"></div><div class="col-sm-3"><button type="button" class="btn btn-primary w-100 manager-add-item-btn" data-item-type="tire"><i class="fas fa-plus"></i> เพิ่ม</button></div></div>
+                            <h6>ลิสต์ชั่วคราว (ยาง)</h6>
+                            <div class="table-responsive border rounded mb-3" style="max-height: 150px; overflow-y: auto;"><table class="table table-sm table-striped mb-0"><tbody id="tire_staging_list"></tbody></table></div>
+                            <button type="button" class="btn btn-secondary w-100" id="add-all-tires-from-staging-btn"><i class="fas fa-check-double me-2"></i>ยืนยันเพิ่มรายการทั้งหมด</button>
+                        </div>
+                        <div class="tab-pane fade" id="manager-wheel-pane" role="tabpanel">
+                             <div class="row g-2 mb-3 align-items-end"><div class="col-sm-6"><label for="manager_wheel_selector" class="form-label">ค้นหาสินค้า (แม็ก)</label><select class="form-select item-selector" id="manager_wheel_selector"></select></div><div class="col-sm-3"><label for="manager_wheel_quantity" class="form-label">จำนวน</label><input type="number" class="form-control" id="manager_wheel_quantity" placeholder="ใส่จำนวน" min="1"></div><div class="col-sm-3"><button type="button" class="btn btn-primary w-100 manager-add-item-btn" data-item-type="wheel"><i class="fas fa-plus"></i> เพิ่ม</button></div></div>
+                             <h6>ลิสต์ชั่วคราว (แม็ก)</h6>
+                             <div class="table-responsive border rounded mb-3" style="max-height: 150px; overflow-y: auto;"><table class="table table-sm table-striped mb-0"><tbody id="wheel_staging_list"></tbody></table></div>
+                             <button type="button" class="btn btn-secondary w-100" id="add-all-wheels-from-staging-btn"><i class="fas fa-check-double me-2"></i>ยืนยันเพิ่มรายการทั้งหมด</button>
+                        </div>
+                    </div>
+                </div>
+                {% endif %}
+                <div class="table-container">
+                    <table class="table table-sm table-hover" id="manager-ledger-table">
+                        <thead class="table-light"><tr><th>สินค้า</th><th>ประเภท</th><th>ช่องทาง</th><th>จำนวน</th><th class="text-center">แก้ไข</th><th class="text-center">ลบ</th></tr></thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="mt-3 text-end">
+        {% if reconciliation_record.status == 'pending' %}
+            <button class="btn btn-info" id="compare-btn"><i class="fas fa-exchange-alt me-2"></i>เปรียบเทียบข้อมูล</button>
+            <button class="btn btn-success" id="save-ledger-btn"><i class="fas fa-save me-2"></i>บันทึกข้อมูล</button>
+            <form action="{{ url_for('complete_reconciliation_action', rec_id=reconciliation_record.id) }}" method="POST" class="d-inline" id="complete-rec-form">
+                <button type="button" class="btn btn-warning" id="complete-rec-btn-delayed"><i class="fas fa-check-circle me-2"></i>จบการทำงาน</button>
+            </form>
+        {% else %}
+            <div class="alert alert-success text-center"><i class="fas fa-check-circle me-2"></i>การเช็คความถูกต้องของรายการวันนี้เสร็จสมบูรณ์แล้ว</div>
+        {% endif %}
+    </div>
+
+    <form id="save-ledger-form" method="POST" action="{{ url_for('reconciliation', date=report_date.strftime('%Y-%m-%d')) }}" style="display: none;">
+        <input type="hidden" name="reconciliation_id" value="{{ reconciliation_record.id }}">
+        <input type="hidden" id="manager_ledger_data" name="manager_ledger_data">
+    </form>
+</div>
+
+<div class="modal fade" id="editManagerLedgerItemModal" tabindex="-1" aria-labelledby="editManagerLedgerItemModalLabel" aria-hidden="true">
+    <div class="modal-dialog"><div class="modal-content"><div class="modal-header"><h5 class="modal-title" id="editManagerLedgerItemModalLabel">แก้ไขรายการ: <span id="modal-manager-item-name"></span></h5><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button></div><div class="modal-body"><input type="hidden" id="modal-manager-composite-key"><div class="mb-3"><label for="modal-manager-quantity" class="form-label">จำนวน</label><input type="number" class="form-control" id="modal-manager-quantity" min="1" required></div></div><div class="modal-footer"><button type="button" class="btn btn-secondary" data-bs-dismiss="modal">ยกเลิก</button><button type="button" class="btn btn-primary" id="save-manager-ledger-item-btn">บันทึกการแก้ไข</button></div></div></div>
+</div>
+
+<div class="modal fade" id="editMovementModal" tabindex="-1" aria-labelledby="editMovementModalLabel" aria-hidden="true">
+    <div class="modal-dialog"><div class="modal-content"><div class="modal-header"><h5 class="modal-title" id="editMovementModalLabel">แก้ไขรายการ: <span id="modal-item-name"></span></h5><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button></div><div class="modal-body"><input type="hidden" id="modal-movement-id"><input type="hidden" id="modal-item-type"><input type="hidden" id="modal-image-filename"><div class="mb-3"><label for="modal-quantity" class="form-label">จำนวน</label><input type="number" class="form-control" id="modal-quantity" min="1" required></div><div class="mb-3"><label for="modal-move-type" class="form-label">ประเภท</label><select class="form-select" id="modal-move-type"></select></div><div class="mb-3"><label for="modal-channel" class="form-label">ช่องทาง</label><select class="form-select" id="modal-channel" required></select></div><div class="mb-3 d-none" id="modal-return-type-group"><label for="modal-return-customer-type" class="form-label">คืนจาก</label><select class="form-select" id="modal-return-customer-type"></select></div><div class="mb-3 d-none" id="modal-platform-group"><label for="modal-platform" class="form-label">แพลตฟอร์มออนไลน์</label><select class="form-select" id="modal-platform"></select></div><div class="mb-3 d-none" id="modal-customer-group"><label for="modal-customer" class="form-label">ลูกค้าค้าส่ง</label><select class="form-select" id="modal-customer"></select></div><div class="mb-3"><label for="modal-notes" class="form-label">หมายเหตุ</label><textarea class="form-control" id="modal-notes" rows="2"></textarea></div></div><div class="modal-footer"><button type="button" class="btn btn-secondary" data-bs-dismiss="modal">ยกเลิก</button><button type="button" class="btn btn-primary" id="save-correction-btn">บันทึกการแก้ไข</button></div></div></div>
+</div>
+{% endblock %}
+
+
+{% block scripts %}
+{{ super() }}
+<script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.all.min.js"></script>
+<script>
+    // ----- GLOBAL DATA FROM SERVER -----
+    const managerLedgerFromDB = {{ reconciliation_record.manager_ledger | tojson | safe }};
+    const allSalesChannels = {{ all_sales_channels | tojson | safe }};
+    const allOnlinePlatforms = {{ all_online_platforms | tojson | safe }};
+    const allWholesaleCustomers = {{ all_wholesale_customers | tojson | safe }};
+    const systemMovementsData = {{ system_movements | tojson | safe }};
+    const reconciliationId = {{ reconciliation_record.id | tojson }};
+    const movementTypes = [ { id: 'IN', text: 'รับเข้า' }, { id: 'OUT', text: 'จ่ายออก' }, { id: 'RETURN', text: 'รับคืน/ตีคืน' }];
+    const returnCustomerTypes = [ { id: 'หน้าร้านลูกค้า', text: 'ลูกค้าทั่วไป' }, { id: 'หน้าร้านร้านยาง', text: 'ร้านยาง' }, { id: 'ออนไลน์', text: 'ออนไลน์' }];
+
+    // ----- GLOBAL STATE -----
+    let managerLedgerItems = [];
+    let stagingItems = { tire: [], wheel: [] };
+
+    document.addEventListener('DOMContentLoaded', function() {
+        const editSystemMovementModal = new bootstrap.Modal(document.getElementById('editMovementModal'));
+        const editManagerLedgerItemModal = new bootstrap.Modal(document.getElementById('editManagerLedgerItemModal'));
+
+        // =================================================================
+        // SECTION 1: HELPER FUNCTIONS
+        // =================================================================
+        function populateSelect($select, data, placeholder, initialValue = null, isModal = false) {
+            if ($select.data('select2')) { $select.select2('destroy'); }
+            $select.empty().append(new Option(placeholder, ''));
+            data.forEach(item => $select.append(new Option(item.name || item.text, item.id)));
+            const select2Options = { width: '100%', dropdownParent: isModal ? $select.closest('.modal') : $(document.body) };
+            $select.select2(select2Options);
+            setTimeout(() => {
+                if (initialValue !== null && initialValue !== undefined) { $select.val(initialValue).trigger('change.select2'); }
+                else { $select.val(null).trigger('change.select2'); }
+            }, 50);
+        }
+
+        function buildComparisonKey(item) {
+            const getKeyPart = (value) => (value !== null && value !== undefined && value !== '') ? value : '';
+            const itemId = `${item.item_type}-${item.tire_id || item.wheel_id}`;
+            let platformIdPart = '', customerIdPart = '';
+            if (item.type === 'RETURN') {
+                if (item.return_customer_type === 'ออนไลน์') platformIdPart = getKeyPart(item.online_platform_id);
+                else if (item.return_customer_type === 'หน้าร้านร้านยาง') customerIdPart = getKeyPart(item.wholesale_customer_id);
+            } else if (item.type === 'OUT') {
+                platformIdPart = getKeyPart(item.online_platform_id);
+                customerIdPart = getKeyPart(item.wholesale_customer_id);
+            }
+            return `${itemId}_${getKeyPart(item.type)}_${getKeyPart(item.channel_id)}_${platformIdPart}_${customerIdPart}_${getKeyPart(item.return_customer_type)}`;
+        }
+
+        // =================================================================
+        // SECTION 2: UI RENDERING FUNCTIONS
+        // =================================================================
+        function renderStagingArea(itemType) {
+            const tbody = $(`#${itemType}_staging_list`).empty();
+            if (stagingItems[itemType].length === 0) {
+                tbody.append('<tr><td class="text-center text-muted fst-italic py-2">ยังไม่มีรายการ</td></tr>');
+                return;
+            }
+            stagingItems[itemType].forEach((item, index) => {
+                tbody.append(`
+                    <tr>
+                        <td class="align-middle">${item.text}</td>
+                        <td class="text-end align-middle fw-bold">${item.quantity}</td>
+                        <td class="text-center"><button type="button" class="btn btn-sm btn-outline-danger remove-from-staging-btn" data-item-type="${itemType}" data-index="${index}"><i class="fas fa-times"></i></button></td>
+                    </tr>`);
+            });
+        }
+
+        function renderManagerLedgerTablePreview() {
+            const tbody = $('#manager-ledger-table tbody').empty();
+            if (managerLedgerItems.length === 0) {
+                tbody.append('<tr><td colspan="6" class="text-center text-muted py-3">ไม่มีรายการในบันทึก</td></tr>');
+                return;
+            }
+            managerLedgerItems.sort((a, b) => a.text.localeCompare(b.text));
+            managerLedgerItems.forEach(itemData => {
+                const channel = allSalesChannels.find(c => c.id == itemData.channel_id);
+                let detailsHtml = `<strong>${channel ? channel.name : 'N/A'}</strong>`;
+
+                if (itemData.type === 'OUT') {
+                    if (itemData.online_platform_id) {
+                        const platform = allOnlinePlatforms.find(p => p.id == itemData.online_platform_id);
+                        if(platform) detailsHtml += `<br><small class="ps-2">&ndash; ${platform.name}</small>`;
+                    }
+                    if (itemData.wholesale_customer_id) {
+                        const customer = allWholesaleCustomers.find(c => c.id == itemData.wholesale_customer_id);
+                        if(customer) detailsHtml += `<br><small class="ps-2">&ndash; ${customer.name}</small>`;
+                    }
+                } else if (itemData.type === 'RETURN') {
+                    if (itemData.return_customer_type) {
+                        detailsHtml += `<br><small class="ps-2">&ndash; คืนจาก: ${itemData.return_customer_type}</small>`;
+                        if (itemData.return_customer_type === 'ออนไลน์' && itemData.online_platform_id) {
+                            const platform = allOnlinePlatforms.find(p => p.id == itemData.online_platform_id);
+                            if(platform) detailsHtml += `<br><small class="ps-4">&ndash; ${platform.name}</small>`;
+                        }
+                        if (itemData.return_customer_type === 'หน้าร้านร้านยาง' && itemData.wholesale_customer_id) {
+                            const customer = allWholesaleCustomers.find(c => c.id == itemData.wholesale_customer_id);
+                            if(customer) detailsHtml += `<br><small class="ps-4">&ndash; ${customer.name}</small>`;
+                        }
+                    }
+                }
+
+                tbody.append(`
+                    <tr data-composite-key="${itemData.compositeKey}">
+                        <td>${itemData.text}</td>
+                        <td><span class="badge ${['IN', 'RETURN'].includes(itemData.type) ? 'bg-success' : 'bg-danger'}">${itemData.type || 'N/A'}</span></td>
+                        <td><small>${detailsHtml}</small></td>
+                        <td class="text-end fw-bold">${itemData.quantity}</td>
+                        <td class="text-center"><button class="btn btn-sm btn-outline-secondary edit-manager-ledger-item-btn"><i class="fas fa-pencil-alt"></i></button></td>
+                        <td class="text-center"><button class="btn btn-sm btn-danger remove-manager-ledger-item-btn"><i class="fas fa-trash-alt"></i></button></td>
+                    </tr>`);
+            });
+        }
+        
+        // =================================================================
+        // SECTION 3: CASCADING DROPDOWN LOGIC
+        // =================================================================
+        function handleManagerReturnChange() {
+            const returnType = $('#common_return_customer_type').val();
+            $('#common_wholesale_customer_section, #common_online_platform_section').addClass('d-none');
+            if (returnType === 'หน้าร้านร้านยาง') $('#common_wholesale_customer_section').removeClass('d-none');
+            else if (returnType === 'ออนไลน์') $('#common_online_platform_section').removeClass('d-none');
+        }
+
+        function handleManagerChannelChange() {
+            const channelName = $('#common_channel_id option:selected').text();
+            $('#common_online_platform_section, #common_wholesale_customer_section, #common_return_customer_type_section').addClass('d-none');
+            if (channelName === 'ออนไลน์') $('#common_online_platform_section').removeClass('d-none');
+            else if (channelName === 'ค้าส่ง') $('#common_wholesale_customer_section').removeClass('d-none');
+            else if (channelName === 'รับคืน') {
+                $('#common_return_customer_type_section').removeClass('d-none');
+                handleManagerReturnChange();
+            }
+        }
+
+        function handleManagerMovementTypeChange() {
+            const typeValue = $('#common_movement_type').val();
+            const channelSelect = $('#common_channel_id');
+            const channelSection = $('#channel_section');
+            if (!typeValue) {
+                channelSection.addClass('d-none');
+                handleManagerChannelChange();
+                return;
+            }
+            channelSection.removeClass('d-none');
+            const buyInId = allSalesChannels.find(c => c.name === 'ซื้อเข้า')?.id;
+            const returnId = allSalesChannels.find(c => c.name === 'รับคืน')?.id;
+            const outIds = allSalesChannels.filter(c => ['ออนไลน์', 'ค้าส่ง', 'หน้าร้าน'].includes(c.name)).map(c => c.id);
+            let validChannels = [];
+            if (typeValue === 'IN') validChannels = allSalesChannels.filter(c => c.id === buyInId);
+            else if (typeValue === 'OUT') validChannels = allSalesChannels.filter(c => outIds.includes(c.id));
+            else if (typeValue === 'RETURN') validChannels = allSalesChannels.filter(c => c.id === returnId);
+            populateSelect(channelSelect, validChannels, '-- เลือกช่องทาง --');
+            if (validChannels.length === 1) {
+                channelSelect.val(validChannels[0].id).trigger('change');
+            }
+        }
+
+        function handleModalReturnChange() {
+            const returnType = $('#modal-return-customer-type').val();
+            $('#modal-customer-group, #modal-platform-group').addClass('d-none');
+            if (returnType === 'หน้าร้านร้านยาง') $('#modal-customer-group').removeClass('d-none');
+            else if (returnType === 'ออนไลน์') $('#modal-platform-group').removeClass('d-none');
+        }
+
+        function handleModalChannelChange() {
+            const channelName = $('#modal-channel option:selected').text();
+            $('#modal-platform-group, #modal-customer-group, #modal-return-type-group').addClass('d-none');
+            if (channelName === 'ออนไลน์') $('#modal-platform-group').removeClass('d-none');
+            else if (channelName === 'ค้าส่ง') $('#modal-customer-group').removeClass('d-none');
+            else if (channelName === 'รับคืน') {
+                $('#modal-return-type-group').removeClass('d-none');
+                handleModalReturnChange();
+            }
+        }
+
+        function handleModalMovementTypeChange() {
+            const typeValue = $('#modal-move-type').val();
+            const channelSelect = $('#modal-channel');
+            const buyInId = allSalesChannels.find(c => c.name === 'ซื้อเข้า')?.id;
+            const returnId = allSalesChannels.find(c => c.name === 'รับคืน')?.id;
+            const outIds = allSalesChannels.filter(c => ['ออนไลน์', 'ค้าส่ง', 'หน้าร้าน'].includes(c.name)).map(c => c.id);
+            let validChannels = [];
+            if (typeValue === 'IN') validChannels = allSalesChannels.filter(c => c.id === buyInId);
+            else if (typeValue === 'OUT') validChannels = allSalesChannels.filter(c => outIds.includes(c.id));
+            else if (typeValue === 'RETURN') validChannels = allSalesChannels.filter(c => c.id === returnId);
+            populateSelect(channelSelect, validChannels, '-- เลือกช่องทาง --', channelSelect.val(), true);
+            handleModalChannelChange();
+        }
+        
+        // =================================================================
+        // SECTION 4: EVENT HANDLERS
+        // =================================================================
+
+        // --- Staging Area Handlers ---
+        $('.manager-add-item-btn').on('click', function() {
+            const itemType = $(this).data('item-type');
+            const selector = $(`#manager_${itemType}_selector`);
+            const quantityInput = $(`#manager_${itemType}_quantity`);
+            const selectedOption = selector.select2('data')[0];
+            const quantity = parseInt(quantityInput.val());
+            if (!selectedOption || !selectedOption.id) { Swal.fire('ข้อผิดพลาด', 'กรุณาเลือกสินค้า', 'error'); return; }
+            if (isNaN(quantity) || quantity <= 0) { Swal.fire('ข้อผิดพลาด', 'กรุณาใส่จำนวน', 'error'); quantityInput.focus(); return; }
+            stagingItems[itemType].push({ id: selectedOption.id, text: selectedOption.text, quantity: quantity });
+            renderStagingArea(itemType);
+            selector.val(null).trigger('change');
+            quantityInput.val('');
+            selector.select2('open');
+        });
+
+        $(document).on('click', '.remove-from-staging-btn', function() {
+            const itemType = $(this).data('item-type');
+            const index = $(this).data('index');
+            stagingItems[itemType].splice(index, 1);
+            renderStagingArea(itemType);
+        });
+
+        $('#add-all-tires-from-staging-btn, #add-all-wheels-from-staging-btn').on('click', function() {
+            const itemType = $(this).attr('id').includes('tires') ? 'tire' : 'wheel';
+            const stagedItemsForType = stagingItems[itemType];
+            if (stagedItemsForType.length === 0) { Swal.fire('ไม่มีรายการ', 'ไม่มีรายการในลิสต์', 'info'); return; }
+            const moveType = $('#common_movement_type').val();
+            const channelId = $('#common_channel_id').val();
+            if (!moveType || !channelId) { Swal.fire('ข้อผิดพลาด', 'กรุณาระบุ "ประเภท" และ "ช่องทาง" ก่อน', 'error'); return; }
+
+            let addedItemCount = stagedItemsForType.length;
+            stagedItemsForType.forEach(stagedItem => {
+                const [item_type_from_id, db_id] = stagedItem.id.split('-');
+                const itemDataFromForm = {
+                    id: stagedItem.id, type: moveType, channel_id: channelId,
+                    online_platform_id: $('#common_online_platform_id').val(),
+                    wholesale_customer_id: $('#common_wholesale_customer_id').val(),
+                    return_customer_type: $('#common_return_customer_type').val(),
+                    item_type: item_type_from_id,
+                    tire_id: item_type_from_id === 'tire' ? db_id : null,
+                    wheel_id: item_type_from_id === 'wheel' ? db_id : null
+                };
+                const compositeKey = buildComparisonKey(itemDataFromForm);
+                const existingItem = managerLedgerItems.find(item => item.compositeKey === compositeKey);
+                if (existingItem) {
+                    existingItem.quantity += stagedItem.quantity;
+                } else {
+                    itemDataFromForm.text = stagedItem.text;
+                    itemDataFromForm.quantity = stagedItem.quantity;
+                    itemDataFromForm.compositeKey = compositeKey;
+                    managerLedgerItems.push(itemDataFromForm);
+                }
+            });
+
+            stagingItems[itemType] = [];
+            renderStagingArea(itemType);
+            renderManagerLedgerTablePreview();
+            Swal.fire('สำเร็จ', `เพิ่ม ${addedItemCount} รายการลงในบันทึกแล้ว`, 'success');
+        });
+
+        // --- Main Ledger Table Handlers ---
+        $(document).on('click', '.edit-manager-ledger-item-btn', function() {
+            const key = $(this).closest('tr').data('composite-key');
+            const item = managerLedgerItems.find(i => i.compositeKey === key);
+            if(item) {
+                $('#modal-manager-item-name').text(item.text);
+                $('#modal-manager-quantity').val(item.quantity);
+                $('#modal-manager-composite-key').val(key);
+                editManagerLedgerItemModal.show();
+            }
+        });
+
+        $('#save-manager-ledger-item-btn').on('click', function() {
+            const key = $('#modal-manager-composite-key').val();
+            const newQuantity = parseInt($('#modal-manager-quantity').val());
+            const item = managerLedgerItems.find(i => i.compositeKey === key);
+            if (item && newQuantity > 0) {
+                item.quantity = newQuantity;
+                renderManagerLedgerTablePreview();
+                editManagerLedgerItemModal.hide();
+            } else {
+                Swal.fire('ผิดพลาด', 'จำนวนต้องมากกว่า 0', 'error');
+            }
+        });
+
+        $(document).on('click', '.remove-manager-ledger-item-btn', function() {
+            const key = $(this).closest('tr').data('composite-key');
+            managerLedgerItems = managerLedgerItems.filter(i => i.compositeKey !== key);
+            renderManagerLedgerTablePreview();
+        });
+
+        // --- System Ledger Modal Handlers ---
+        $(document).on('click', '.edit-movement-btn', async function() {
+            const row = $(this).closest('tr');
+            const movementId = row.data('movement-id');
+            const itemType = row.data('item-type');
+            if (!movementId || !itemType) { Swal.fire('ผิดพลาด', 'ไม่พบข้อมูล movement ID', 'error'); return; }
+            try {
+                const response = await fetch(`/api/get_movement_details?item_type=${itemType}&movement_id=${movementId}`);
+                const data = await response.json();
+                if (!data.success) { Swal.fire('ผิดพลาด', data.message, 'error'); return; }
+                const d = data.details;
+                $('#modal-item-name').text(d.brand + ' ' + d.model);
+                $('#modal-movement-id').val(d.id);
+                $('#modal-item-type').val(itemType);
+                $('#modal-image-filename').val(d.image_filename);
+                $('#modal-quantity').val(d.quantity_change);
+                $('#modal-notes').val(d.notes);
+                populateSelect($('#modal-move-type'), movementTypes, 'เลือกประเภท', d.type, true);
+                let channelOptions = [];
+                if (d.type === 'IN') channelOptions = allSalesChannels.filter(c => c.name === 'ซื้อเข้า');
+                else if (d.type === 'OUT') channelOptions = allSalesChannels.filter(c => ['หน้าร้าน', 'ออนไลน์', 'ค้าส่ง'].includes(c.name));
+                else if (d.type === 'RETURN') channelOptions = allSalesChannels.filter(c => c.name === 'รับคืน');
+                populateSelect($('#modal-channel'), channelOptions, 'เลือกช่องทาง', d.channel_id, true);
+                populateSelect($('#modal-return-customer-type'), returnCustomerTypes, 'เลือกประเภทการคืน', d.return_customer_type, true);
+                populateSelect($('#modal-platform'), allOnlinePlatforms, 'เลือกแพลตฟอร์ม', d.online_platform_id, true);
+                populateSelect($('#modal-customer'), allWholesaleCustomers, 'เลือกลูกค้า', d.wholesale_customer_id, true);
+                $('#modal-move-type').trigger('change');
+                editSystemMovementModal.show();
+            } catch (error) { Swal.fire('ผิดพลาด', 'ไม่สามารถเชื่อมต่อกับเซิร์ฟเวอร์ได้', 'error'); }
+        });
+        
+        $('#save-correction-btn').on('click', async function() {
+            const payload = {
+                movement_id: $('#modal-movement-id').val(), item_type: $('#modal-item-type').val(),
+                quantity_change: $('#modal-quantity').val(), notes: $('#modal-notes').val(),
+                type: $('#modal-move-type').val(), channel_id: $('#modal-channel').val(),
+                online_platform_id: $('#modal-platform').val(), wholesale_customer_id: $('#modal-customer').val(),
+                return_customer_type: $('#modal-return-customer-type').val(), image_filename: $('#modal-image-filename').val()
+            };
+            try {
+                const response = await fetch('/api/correct_movement', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
+                });
+                const result = await response.json();
+                if (result.success) {
+                    editSystemMovementModal.hide();
+                    await Swal.fire('สำเร็จ!', result.message, 'success');
+                    window.location.reload();
+                } else { Swal.fire('ผิดพลาด', result.message, 'error'); }
+            } catch (error) { Swal.fire('ผิดพลาด', 'ไม่สามารถเชื่อมต่อกับเซิร์ฟเวอร์ได้', 'error'); }
+        });
+
+        // --- Main Page Action Handlers ---
+        $('#compare-btn').on('click', function() {
+            $('#system-movements-table tbody td, #manager-ledger-table tbody td').css('background-color', '');
+            const systemTotals = {}, managerTotals = {};
+            systemMovementsData.forEach(move => {
+                const key = buildComparisonKey(move);
+                systemTotals[key] = (systemTotals[key] || 0) + move.quantity_change;
+            });
+            managerLedgerItems.forEach(item => {
+                const key = item.compositeKey;
+                managerTotals[key] = (managerTotals[key] || 0) + item.quantity;
+            });
+            $('#system-movements-table tbody tr').each(function() {
+                const row = $(this);
+                const move = systemMovementsData.find(m => m.id == row.data('movement-id') && m.item_type === row.data('item-type'));
+                if (!move) return;
+                const key = buildComparisonKey(move);
+                let color = '';
+                if (!(key in managerTotals)) color = '#cff4fc';
+                else if (systemTotals[key] !== managerTotals[key]) color = '#fff3cd';
+                else color = '#d1e7dd';
+                row.find('td').css('background-color', color);
+            });
+            $('#manager-ledger-table tbody tr').each(function() {
+                const row = $(this);
+                const key = row.data('composite-key');
+                if (!key) return;
+                let color = '';
+                if (!(key in systemTotals)) color = '#f8d7da';
+                else if (systemTotals[key] !== managerTotals[key]) color = '#fff3cd';
+                else color = '#d1e7dd';
+                row.find('td').css('background-color', color);
+            });
+            Swal.fire('เปรียบเทียบสำเร็จ!', 'แสดงผลการเปรียบเทียบด้วยสีในตารางเรียบร้อยแล้ว', 'info');
+        });
+
+        $('#save-ledger-btn').on('click', function() {
+            Swal.fire({
+                title: 'ยืนยันการบันทึก', text: "คุณต้องการบันทึกข้อมูลใช่หรือไม่?",
+                icon: 'question', showCancelButton: true, confirmButtonColor: '#28a745',
+                confirmButtonText: 'ใช่, บันทึกเลย', cancelButtonText: 'ยกเลิก'
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    $('#manager_ledger_data').val(JSON.stringify(managerLedgerItems));
+                    $('#save-ledger-form').submit();
+                }
+            });
+        });
+
+        $('#complete-rec-btn-delayed').on('click', function() {
+            if (confirm('คุณแน่ใจหรือไม่ว่าต้องการบันทึกข้อมูล? การดำเนินการนี้ไม่สามารถย้อนกลับได้')) {
+                const button = $(this);
+                button.prop('disabled', true).html('<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> กำลังบันทึก...');
+                setTimeout(function() {
+                    $('#complete-rec-form').submit();
+                }, 500);
+            }
+        });
+        
+        // --- Cascading Dropdown Bindings ---
+        $('#common_movement_type').on('change', handleManagerMovementTypeChange);
+        $('#common_channel_id').on('change', handleManagerChannelChange);
+        $('#common_return_customer_type').on('change', handleManagerReturnChange);
+        $('#modal-move-type').on('change', handleModalMovementTypeChange);
+        $('#modal-channel').on('change', handleModalChannelChange);
+        $('#modal-return-customer-type').on('change', handleModalReturnChange);
+
+        // =================================================================
+        // SECTION 5: INITIALIZATION
+        // =================================================================
+        $('.item-selector').select2({
+            placeholder: "ค้นหาและเลือกสินค้า",
+            ajax: { url: "{{ url_for('api_search_all_items') }}", dataType: 'json', delay: 250, data: params => ({ q: params.term }), processResults: data => ({ results: data }), cache: true }
+        });
+        populateSelect($('#common_movement_type'), movementTypes, '-- เลือกประเภท --');
+        populateSelect($('#common_channel_id'), [], '-- เลือกช่องทาง --');
+        populateSelect($('#common_return_customer_type'), returnCustomerTypes, '-- เลือกประเภทการคืน --');
+        populateSelect($('#common_online_platform_id'), allOnlinePlatforms, '-- เลือกแพลตฟอร์ม --');
+        populateSelect($('#common_wholesale_customer_id'), allWholesaleCustomers, '-- เลือกลูกค้า --');
+        if (managerLedgerFromDB && Array.isArray(managerLedgerFromDB)) {
+            managerLedgerItems = JSON.parse(JSON.stringify(managerLedgerFromDB));
+        }
+        renderManagerLedgerTablePreview();
+        renderStagingArea('tire');
+        renderStagingArea('wheel');
+        handleManagerMovementTypeChange();
+    });
+</script>
+{% endblock %}
