@@ -50,6 +50,16 @@
     .color-box.discrepancy {
         background-color: #f8d7da; /* Light red */
     }
+    /* Style for sum by type */
+    .sum-by-type {
+        /* เปลี่ยนจาก display: block; เป็น inline-block หรือลบออก */
+        /* display: block; */ 
+        display: inline-block; /* ทำให้แสดงผลในบรรทัดเดียวกัน */
+        margin-left: 15px; /* เพิ่มระยะห่างด้านซ้ายระหว่างแต่ละประเภท */
+    }
+    .sum-by-type:first-child {
+        margin-left: 0; /* ไม่ต้องมี margin ด้านซ้ายสำหรับตัวแรก */
+    }
 </style>
 {% endblock %}
 
@@ -104,7 +114,12 @@
                         </tbody>
                     </table>
                 </div>
-                <div class="mt-2 text-end fw-bold">ยอดรวม: <span id="system-total-sum">0</span></div>
+                <div class="mt-2 text-end fw-bold">
+                    ยอดรวมระบบ:
+                    <span class="sum-by-type text-success">รับเข้า: <span id="system-total-in">0</span></span>
+                    <span class="sum-by-type text-danger">จ่ายออก: <span id="system-total-out">0</span></span>
+                    <span class="sum-by-type text-info">รับคืน: <span id="system-total-return">0</span></span>
+                </div>
             </div>
         </div>
 
@@ -158,7 +173,12 @@
                         <tbody></tbody>
                     </table>
                 </div>
-                <div class="mt-2 text-end fw-bold">ยอดรวม: <span id="manager-total-sum">0</span></div>
+                <div class="mt-2 text-end fw-bold">
+                    ยอดรวมผู้จัดการ:
+                    <span class="sum-by-type text-success">รับเข้า: <span id="manager-total-in">0</span></span>
+                    <span class="sum-by-type text-danger">จ่ายออก: <span id="manager-total-out">0</span></span>
+                    <span class="sum-by-type text-info">รับคืน: <span id="manager-total-return">0</span></span>
+                </div>
             </div>
         </div>
     </div>
@@ -176,11 +196,11 @@
 </div> 
 
 <div class="modal fade" id="editManagerLedgerItemModal" tabindex="-1" aria-labelledby="editManagerLedgerItemModalLabel" aria-hidden="true">
-    <div class="modal-dialog"><div class="modal-content"><div class="modal-header"><h5 class="modal-title" id="editManagerLedgerItemModalLabel">แก้ไขรายการ: <span id="modal-manager-item-name"></span></h5><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button></div><div class="modal-body"><input type="hidden" id="modal-manager-composite-key"><div class="mb-3"><label for="modal-manager-quantity" class="form-label">จำนวน</label><input type="number" class="form-control" id="modal-manager-quantity" min="1" required></div></div><div class="modal-footer"><button type="button" class="btn btn-secondary" data-bs-dismiss="modal">ยกเลิก</button><button type="button" class="btn btn-primary" id="save-manager-ledger-item-btn">บันทึกการแก้ไข</button></div></div></div>
+    <div class="modal-dialog"><div class="modal-content"><div class="modal-header"><h5 class="modal-title" id="editManagerLedgerItemModalLabel">แก้ไขรายการ: <span id="modal-manager-item-name"></span></h5><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button></div><div class="modal-body"><input type="hidden" id="modal-manager-composite-key"><div class="mb-3"><label for="modal-manager-quantity" class="form-label">จำนวน</label><input type="number" class="form-control" id="modal-manager-quantity" min="1" required></div></div><div class="modal-footer"><button type="button" class="btn secondary" data-bs-dismiss="modal">ยกเลิก</button><button type="button" class="btn btn-primary" id="save-manager-ledger-item-btn">บันทึกการแก้ไข</button></div></div></div>
 </div>
 
 <div class="modal fade" id="editMovementModal" tabindex="-1" aria-labelledby="editMovementModalLabel" aria-hidden="true">
-    <div class="modal-dialog"><div class="modal-content"><div class="modal-header"><h5 class="modal-title" id="editMovementModalLabel">แก้ไขรายการ: <span id="modal-item-name"></span></h5><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button></div><div class="modal-body"><input type="hidden" id="modal-movement-id"><input type="hidden" id="modal-item-type"><input type="hidden" id="modal-image-filename"><div class="mb-3"><label for="modal-quantity" class="form-label">จำนวน</label><input type="number" class="form-control" id="modal-quantity" min="1" required></div><div class="mb-3"><label for="modal-move-type" class="form-label">ประเภท</label><select class="form-select" id="modal-move-type"></select></div><div class="mb-3"><label for="modal-channel" class="form-label">ช่องทาง</label><select class="form-select" id="modal-channel" required></select></div><div class="mb-3 d-none" id="modal-return-type-group"><label for="modal-return-customer-type" class="form-label">คืนจาก</label><select class="form-select" id="modal-return-customer-type"></select></div><div class="mb-3 d-none" id="modal-platform-group"><label for="modal-platform" class="form-label">แพลตฟอร์มออนไลน์</label><select class="form-select" id="modal-platform"></select></div><div class="mb-3 d-none" id="modal-customer-group"><label for="modal-customer" class="form-label">ลูกค้าค้าส่ง</label><select class="form-select" id="modal-customer"></select></div><div class="mb-3"><label for="modal-notes" class="form-label">หมายเหตุ</label><textarea class="form-control" id="modal-notes" rows="2"></textarea></div></div><div class="modal-footer"><button type="button" class="btn btn-secondary" data-bs-dismiss="modal">ยกเลิก</button><button type="button" class="btn btn-primary" id="save-correction-btn">บันทึกการแก้ไข</button></div></div></div>
+    <div class="modal-dialog"><div class="modal-content"><div class="modal-header"><h5 class="modal-title" id="editMovementModalLabel">แก้ไขรายการ: <span id="modal-item-name"></span></h5><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button></div><div class="modal-body"><input type="hidden" id="modal-movement-id"><input type="hidden" id="modal-item-type"><input type="hidden" id="modal-image-filename"><div class="mb-3"><label for="modal-quantity" class="form-label">จำนวน</label><input type="number" class="form-control" id="modal-quantity" min="1" required></div><div class="mb-3"><label for="modal-move-type" class="form-label">ประเภท</label><select class="form-select" id="modal-move-type"></select></div><div class="mb-3"><label for="modal-channel" class="form-label">ช่องทาง</label><select class="form-select" id="modal-channel" required></select></div><div class="mb-3 d-none" id="modal-return-type-group"><label for="modal-return-customer-type" class="form-label">คืนจาก</label><select class="form-select" id="modal-return-customer-type"></select></div><div class="mb-3 d-none" id="modal-platform-group"><label for="modal-platform" class="form-label">แพลตฟอร์มออนไลน์</label><select class="form-select" id="modal-platform"></select></div><div class="mb-3 d-none" id="modal-customer-group"><label for="modal-customer" class="form-label">ลูกค้าค้าส่ง</label><select class="form-select" id="modal-customer"></select></div><div class="mb-3"><label for="modal-notes" class="form-label">หมายเหตุ</label><textarea class="form-control" id="modal-notes" rows="2"></textarea></div></div><div class="modal-footer"><button type="button" class="btn secondary" data-bs-dismiss="modal">ยกเลิก</button><button type="button" class="btn btn-primary" id="save-correction-btn">บันทึกการแก้ไข</button></div></div></div>
 </div>
 {% endblock %}
 
@@ -319,11 +339,15 @@
 
         function renderManagerLedgerTablePreview() {
             const tbody = $('#manager-ledger-table tbody').empty();
-            let managerTotalSum = 0; // Initialize sum for manager table
+            let managerTotalIn = 0;
+            let managerTotalOut = 0;
+            let managerTotalReturn = 0;
 
             if (managerLedgerItems.length === 0) {
                 tbody.append('<tr><td colspan="6" class="text-center text-muted py-3">ไม่มีรายการในบันทึก</td></tr>');
-                $('#manager-total-sum').text(managerTotalSum); // Update sum even if empty
+                $('#manager-total-in').text(0);
+                $('#manager-total-out').text(0);
+                $('#manager-total-return').text(0);
                 return;
             }
             managerLedgerItems.sort((a, b) => a.text.localeCompare(b.text));
@@ -335,10 +359,15 @@
                 let badgeClass;
                 if (itemData.type === 'IN') {
                     badgeClass = 'bg-success';
+                    managerTotalIn += itemData.quantity;
                 } else if (itemData.type === 'RETURN') {
                     badgeClass = 'bg-info'; // Changed to bg-info for RETURN type
-                } else {
+                    managerTotalReturn += itemData.quantity;
+                } else if (itemData.type === 'OUT') {
                     badgeClass = 'bg-danger';
+                    managerTotalOut += itemData.quantity;
+                } else {
+                    badgeClass = 'bg-secondary'; // Default or unknown type
                 }
 
                 const channel = allSalesChannels.find(c => c.id == itemData.channel_id);
@@ -374,19 +403,31 @@
                         <td class="text-center"><button class="btn btn-sm btn-outline-secondary edit-manager-ledger-item-btn"><i class="fas fa-pencil-alt"></i></button></td>
                         <td class="text-center"><button class="btn btn-sm btn-danger remove-manager-ledger-item-btn"><i class="fas fa-trash-alt"></i></button></td>
                     </tr>`);
-                managerTotalSum += itemData.quantity; // Add quantity to sum
             });
-            $('#manager-total-sum').text(managerTotalSum); // Update total sum display
+            $('#manager-total-in').text(managerTotalIn);
+            $('#manager-total-out').text(managerTotalOut);
+            $('#manager-total-return').text(managerTotalReturn);
             filterTable('#manager-ledger-table', $('#managerLedgerSearch').val());
         }
 
         // Function to calculate and update system total sum
         function updateSystemTotalSum() {
-            let systemTotalSum = 0;
+            let systemTotalIn = 0;
+            let systemTotalOut = 0;
+            let systemTotalReturn = 0;
+
             systemMovementsData.forEach(move => {
-                systemTotalSum += move.quantity_change;
+                if (move.type === 'IN') {
+                    systemTotalIn += move.quantity_change;
+                } else if (move.type === 'OUT') {
+                    systemTotalOut += move.quantity_change;
+                } else if (move.type === 'RETURN') {
+                    systemTotalReturn += move.quantity_change;
+                }
             });
-            $('#system-total-sum').text(systemTotalSum);
+            $('#system-total-in').text(systemTotalIn);
+            $('#system-total-out').text(systemTotalOut);
+            $('#system-total-return').text(systemTotalReturn);
         }
         
         // =================================================================
