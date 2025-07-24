@@ -40,7 +40,7 @@
                     <input type="text" id="color" name="color" class="form-control" value="{{ wheel.color if wheel.color is not none else '' }}">
                 </div>
                 <div class="col-md-6">
-                    <label for="retail_price" class="form-label">ราคาขายปลีก (บาท)*</label>
+                    <label for="retail_price" class="form-label">ราคาขายหน้าร้าน*</label>
                     <input type="number" id="retail_price" name="retail_price" class="form-control" value="{{ '%.2f'|format(wheel.retail_price) }}" step="0.01" required>
                 </div>
             </div>
@@ -53,15 +53,15 @@
                     <input type="number" id="cost" name="cost" class="form-control" value="{{ '%.2f'|format(wheel.cost) if wheel.cost is not none else '' }}" step="0.01">
                 </div>
                 <div class="col-md-3">
-                    <label for="cost_online" class="form-label">ทุน Online</label>
+                    <label for="cost_online" class="form-label">ทุนล็อต</label>
                     <input type="number" id="cost_online" name="cost_online" class="form-control" value="{{ '%.2f'|format(wheel.cost_online) if wheel.cost_online is not none else '' }}" step="0.01">
                 </div>
                 <div class="col-md-3">
-                    <label for="wholesale_price1" class="form-label">ราคาขายส่ง 1</label>
+                    <label for="wholesale_price1" class="form-label">ราคาส่ง 1</label>
                     <input type="number" id="wholesale_price1" name="wholesale_price1" class="form-control" value="{{ '%.2f'|format(wheel.wholesale_price1) if wheel.wholesale_price1 is not none else '' }}" step="0.01">
                 </div>
                 <div class="col-md-3">
-                    <label for="wholesale_price2" class="form-label">ราคาขายส่ง 2</label>
+                    <label for="wholesale_price2" class="form-label">ราคาส่งหน้าร้าน</label>
                     <input type="number" id="wholesale_price2" name="wholesale_price2" class="form-control" value="{{ '%.2f'|format(wheel.wholesale_price2) if wheel.wholesale_price2 is not none else '' }}" step="0.01">
                 </div>
             </div>

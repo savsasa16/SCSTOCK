@@ -48,11 +48,11 @@
             <h5 class="mb-3">ต้นทุนและราคาขายส่ง (ไม่บังคับ)</h5>
             <div class="row g-3">
                 <div class="col-md-4">
-                    <label for="cost_sc" class="form-label">ทุน SC</label>
+                    <label for="cost_sc" class="form-label">ทุน</label>
                     <input type="number" id="cost_sc" name="cost_sc" class="form-control" value="{{ '%.2f'|format(tire.cost_sc) if tire.cost_sc is not none else '' }}" step="0.01">
                 </div>
                 <div class="col-md-4">
-                    <label for="cost_dunlop" class="form-label">ทุน Dunlop</label>
+                    <label for="cost_dunlop" class="form-label">ทุนล็อต</label>
                     <input type="number" id="cost_dunlop" name="cost_dunlop" class="form-control" value="{{ '%.2f'|format(tire.cost_dunlop) if tire.cost_dunlop is not none else '' }}" step="0.01">
                 </div>
                 <div class="col-md-4">
@@ -60,11 +60,11 @@
                     <input type="number" id="cost_online" name="cost_online" class="form-control" value="{{ '%.2f'|format(tire.cost_online) if tire.cost_online is not none else '' }}" step="0.01">
                 </div>
                 <div class="col-md-6">
-                    <label for="wholesale_price1" class="form-label">ราคาขายส่ง 1</label>
+                    <label for="wholesale_price1" class="form-label">ราคาส่ง 1</label>
                     <input type="number" id="wholesale_price1" name="wholesale_price1" class="form-control" value="{{ '%.2f'|format(tire.wholesale_price1) if tire.wholesale_price1 is not none else '' }}" step="0.01">
                 </div>
                 <div class="col-md-6">
-                    <label for="wholesale_price2" class="form-label">ราคาขายส่ง 2</label>
+                    <label for="wholesale_price2" class="form-label">ราคาส่งหน้าร้าน</label>
                     <input type="number" id="wholesale_price2" name="wholesale_price2" class="form-control" value="{{ '%.2f'|format(tire.wholesale_price2) if tire.wholesale_price2 is not none else '' }}" step="0.01">
                 </div>
             </div>

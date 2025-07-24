@@ -61,11 +61,11 @@
                         </div>
 
                         <div class="col-md-6">
-                            <label for="tire_cost_sc" class="form-label">ทุน SC</label>
+                            <label for="tire_cost_sc" class="form-label">ทุน</label>
                             <input type="number" class="form-control" step="0.01" id="tire_cost_sc" name="cost_sc" value="{{ form_data.cost_sc if form_data and active_tab == 'tire' else '' }}">
                         </div>
                         <div class="col-md-6">
-                            <label for="tire_cost_dunlop" class="form-label">ทุน Dunlop</label>
+                            <label for="tire_cost_dunlop" class="form-label">ทุนล็อต</label>
                             <input type="number" class="form-control" step="0.01" id="tire_cost_dunlop" name="cost_dunlop" value="{{ form_data.cost_dunlop if form_data and active_tab == 'tire' else '' }}">
                         </div>
 
@@ -74,12 +74,12 @@
                             <input type="number" class="form-control" step="0.01" id="tire_cost_online" name="cost_online" value="{{ form_data.cost_online if form_data and active_tab == 'tire' else '' }}">
                         </div>
                         <div class="col-md-6">
-                            <label for="tire_wholesale_price1" class="form-label">ราคาขายส่ง 1</label>
+                            <label for="tire_wholesale_price1" class="form-label">ราคาส่ง 1</label>
                             <input type="number" class="form-control" step="0.01" id="tire_wholesale_price1" name="wholesale_price1" value="{{ form_data.wholesale_price1 if form_data and active_tab == 'tire' else '' }}">
                         </div>
 
                         <div class="col-md-6">
-                            <label for="tire_wholesale_price2" class="form-label">ราคาขายส่ง 2</label>
+                            <label for="tire_wholesale_price2" class="form-label">ราคาส่งหน้าร้าน</label>
                             <input type="number" class="form-control" step="0.01" id="tire_wholesale_price2" name="wholesale_price2" value="{{ form_data.wholesale_price2 if form_data and active_tab == 'tire' else '' }}">
                         </div>
                         <div class="col-md-6">
@@ -147,25 +147,25 @@
                         </div>
 
                         <div class="col-md-6">
-                            <label for="wheel_cost" class="form-label">ทุน (บาท)</label>
+                            <label for="wheel_cost" class="form-label">ทุน</label>
                             <input type="number" class="form-control" step="0.01" id="wheel_cost" name="cost" value="{{ form_data.cost if form_data and active_tab == 'wheel' else '' }}">
                         </div>
                         <div class="col-md-6">
-                            <label for="wheel_cost_online" class="form-label">ทุน Online (บาท)</label>
+                            <label for="wheel_cost_online" class="form-label">ทุนล็อต</label>
                             <input type="number" class="form-control" step="0.01" id="wheel_cost_online" name="cost_online" value="{{ form_data.cost_online if form_data and active_tab == 'wheel' else '' }}">
                         </div>
 
                         <div class="col-md-6">
-                            <label for="wheel_wholesale_price1" class="form-label">ราคาขายส่ง 1 (บาท)</label>
+                            <label for="wheel_wholesale_price1" class="form-label">ราคาส่ง 1</label>
                             <input type="number" class="form-control" step="0.01" id="wheel_wholesale_price1" name="wholesale_price1" value="{{ form_data.wholesale_price1 if form_data and active_tab == 'wheel' else '' }}">
                         </div>
                         <div class="col-md-6">
-                            <label for="wheel_wholesale_price2" class="form-label">ราคาขายส่ง 2 (บาท)</label>
+                            <label for="wheel_wholesale_price2" class="form-label">ราคาส่งหน้าร้าน</label>
                             <input type="number" class="form-control" step="0.01" id="wheel_wholesale_price2" name="wholesale_price2" value="{{ form_data.wholesale_price2 if form_data and active_tab == 'wheel' else '' }}">
                         </div>
                         
                         <div class="col-md-6">
-                            <label for="wheel_retail_price" class="form-label">ราคาขายปลีก (บาท)*</label>
+                            <label for="wheel_retail_price" class="form-label">ราคาขาย</label>
                             <input type="number" class="form-control" step="0.01" id="wheel_retail_price" name="retail_price" value="{{ form_data.retail_price if form_data and active_tab == 'wheel' else '' }}" required>
                         </div>
 

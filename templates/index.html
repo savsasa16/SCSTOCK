@@ -52,24 +52,24 @@
                                             <th>เบอร์ยาง</th>
                                             <th class="text-center">สต็อก</th>
                                             {% if current_user.can_view_cost() %}
-                                                <th class="text-end">ทุน(SC)</th>
-                                                <th class="text-end">ทุน(Dunlop)</th>
+                                                <th class="text-end">ทุน</th>
+                                                <th class="text-end">ทุนล็อต</th>
                                                 <th class="text-end">ทุน(Online)</th>
                                             {% endif %}
                                             {# --- START: แก้ไขส่วนหัวตารางยาง --- #}
                                             {% if current_user.can_view_wholesale_price_1() %}
-                                                <th class="text-center">ราคาค้าส่งเซล</th>
+                                                <th class="text-center">ราคาส่ง1</th>
                                             {% endif %}
                                             {% if current_user.can_view_wholesale_price_2() %}
-                                                <th class="text-center">ค้าส่ง 2</th>
+                                                <th class="text-center">ราคาส่งหน้าร้าน</th>
                                             {% endif %}
                                             {# --- END: แก้ไขส่วนหัวตารางยาง --- #}
                                             {% if current_user.can_view_retail_price() %}
                                                 <th class="text-end">ราคา/เส้น</th>
                                                 <th class="text-center">โปรโมชัน</th>
-                                                <th class="text-end">ราคา 4 เส้น</th>
+                                                <th class="text-end">ราคาหน้าร้าน</th>
                                             {% endif %}
-                                            <th class="text-center">ปี</th>
+                                            <th class="text-center">ปีผลิต</th>
                                             {% if current_user.can_edit() %}
                                                 <th class="text-center">จัดการ</th>
                                             {% endif %}
