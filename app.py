@@ -3234,108 +3234,99 @@ def export_tires_action():
             primary_barcode = barcodes[0]['barcode_string']
 
         data.append({
-            'ID (ห้ามแก้ไข)': tire['id'], # Changed header to indicate non-editable
             'ยี่ห้อ': tire['brand'],
             'รุ่นยาง': tire['model'],
             'เบอร์ยาง': tire['size'],
-            'สต็อก': tire['quantity'],
             'ปีผลิต': tire['year_of_manufacture'],
-            'ราคาต่อเส้น': tire['price_per_item'],
-            'Barcode ID': primary_barcode, # Keep primary barcode visible
-            'ทุน SC': tire['cost_sc'],
-            'ทุน Dunlop': tire['cost_dunlop'],
-            'ทุน Online': tire['cost_online'],
-            'ราคาขายส่ง 1': tire['wholesale_price1'],
-            'ราคาขายส่ง 2': tire['wholesale_price2'],
-            'ID โปรโมชัน (ระบบ)': tire['promotion_id'], # Changed header to indicate system-generated
-            'ชื่อโปรโมชัน (ระบบ)': tire['promo_name'], # Changed header to indicate system-generated
-            'ประเภทโปรโมชัน (ระบบ)': tire['promo_type'], # Changed header to indicate system-generated
-            'ค่าโปรโมชัน Value1 (ระบบ)': tire['promo_value1'], # Changed header to indicate system-generated
-            'ค่าโปรโมชัน Value2 (ระบบ)': tire['promo_value2'], # Changed header to indicate system-generated
-            'รายละเอียดโปรโมชัน (ระบบ)': tire['display_promo_description_text'], # Changed header to indicate system-generated
-            'ราคาโปรโมชันคำนวณ(เส้น) (ระบบ)': tire['display_promo_price_per_item'], # Changed header to indicate system-generated
-            'ราคาโปรโมชันคำนวณ(4เส้น) (ระบบ)': tire['display_price_for_4'], # Changed header to indicate system-generated
+            'สต็อก': tire['quantity'],
+            'ทุน': tire['cost_sc'],
+            'ทุนค้าส่ง 1': tire['cost_dunlop'],
+            'ทุนค้าส่ง 2': tire['cost_online'],
+            'ราคาค้าส่ง 1': tire['wholesale_price1'],
+            'ราคาค้าส่ง 2': tire['wholesale_price2'],
+            'ราคาหน้าร้าน': tire['price_per_item'],
+            'Barcode ID (ระบบ)': primary_barcode,
+            'ID (ห้ามแก้ไข)': tire['id'],
+            'ID โปรโมชัน (ระบบ)': tire['promotion_id'],
+            'ชื่อโปรโมชัน (ระบบ)': tire['promo_name'],
+            'ประเภทโปรโมชัน (ระบบ)': tire['promo_type'],
+            'ค่าโปรโมชัน Value1 (ระบบ)': tire['promo_value1'],
+            'ค่าโปรโมชัน Value2 (ระบบ)': tire['promo_value2'],
+            'รายละเอียดโปรโมชัน (ระบบ)': tire['display_promo_description_text'],
+            'ราคาโปรโมชันคำนวณ(เส้น) (ระบบ)': tire['display_promo_price_per_item'],
+            'ราคาโปรโมชันคำนวณ(4เส้น) (ระบบ)': tire['display_price_for_4'],
         })
 
     df = pd.DataFrame(data)
 
-    # --- Sort DataFrame before writing to Excel ---
-    df['ยี่ห้อ'] = df['ยี่ห้อ'].str.lower()
-    df['รุ่นยาง'] = df['รุ่นยาง'].str.lower()
-    df['เบอร์ยาง'] = df['เบอร์ยาง'].str.lower()
-    df = df.sort_values(by=['ยี่ห้อ', 'รุ่นยาง', 'เบอร์ยาง', 'ID (ห้ามแก้ไข)'], ascending=True)
+    # --- Sort DataFrame before writing to Excel (lowercase for consistent sorting) ---
+    df['ยี่ห้อ_sort'] = df['ยี่ห้อ'].str.lower()
+    df['รุ่นยาง_sort'] = df['รุ่นยาง'].str.lower()
+    df['เบอร์ยาง_sort'] = df['เบอร์ยาง'].str.lower()
+    df = df.sort_values(by=['ยี่ห้อ_sort', 'รุ่นยาง_sort', 'เบอร์ยาง_sort', 'ID (ห้ามแก้ไข)'], ascending=True)
+    df = df.drop(columns=['ยี่ห้อ_sort', 'รุ่นยาง_sort', 'เบอร์ยาง_sort']) # Drop sort columns
 
+    # Define column order for the main data sheet
+    main_sheet_cols = [
+        'ยี่ห้อ', 'รุ่นยาง', 'เบอร์ยาง', 'ปีผลิต', 'สต็อก',
+        'ทุน', 'ทุนค้าส่ง 1', 'ทุนค้าส่ง 2',
+        'ราคาค้าส่ง 1', 'ราคาค้าส่ง 2', 'ราคาหน้าร้าน',
+        'Barcode ID (ระบบ)', 'ID (ห้ามแก้ไข)', 
+        'ID โปรโมชัน (ระบบ)', 'ชื่อโปรโมชัน (ระบบ)', 'ประเภทโปรโมชัน (ระบบ)', 
+        'ค่าโปรโมชัน Value1 (ระบบ)', 'ค่าโปรโมชัน Value2 (ระบบ)', 
+        'รายละเอียดโปรโมชัน (ระบบ)', 'ราคาโปรโมชันคำนวณ(เส้น) (ระบบ)', 'ราคาโปรโมชันคำนวณ(4เส้น) (ระบบ)',
+    ]
+    df = df[main_sheet_cols] # Reorder DataFrame columns
 
     output = BytesIO()
     writer = pd.ExcelWriter(output, engine='xlsxwriter')
+    workbook = writer.book
 
-    # --- NEW: Add an Instructions Sheet ---
+    # --- Add an Instructions Sheet ---
     instructions_sheet_name = 'คำแนะนำการใช้งาน'
-    instructions_ws = writer.book.add_worksheet(instructions_sheet_name)
-    instructions_ws.write('A1', 'คำแนะนำการใช้งานไฟล์นำเข้า/ส่งออกข้อมูลยาง', writer.book.add_format({'bold': True, 'font_size': 14}))
-    instructions_ws.write('A3', 'วัตถุประสงค์:', writer.book.add_format({'bold': True}))
-    instructions_ws.write('A4', 'ไฟล์นี้ใช้สำหรับ Export ข้อมูลสต็อกยางปัจจุบัน และสามารถใช้เป็นแม่แบบเพื่อนำเข้าข้อมูลใหม่หรือแก้ไขข้อมูลที่มีอยู่ได้', writer.book.add_format({'text_wrap': True}))
-    instructions_ws.write('A6', 'ข้อควรระวัง:', writer.book.add_format({'bold': True, 'font_color': 'red'}))
-    instructions_ws.write('A7', '1. ห้าม! เปลี่ยนชื่อชีท "Tires Data" และห้าม! ลบ/ย้าย/เปลี่ยนชื่อคอลัมน์ในชีท "Tires Data"', writer.book.add_format({'font_color': 'red', 'text_wrap': True}))
-    instructions_ws.write('A8', '2. ข้อมูลในคอลัมน์ที่มีคำว่า "(ห้ามแก้ไข)" หรือ "(ระบบ)" เป็นข้อมูลที่สร้าง/คำนวณโดยระบบ ไม่ควรแก้ไข', writer.book.add_format({'font_color': 'red', 'text_wrap': True}))
-    instructions_ws.write('A9', '3. การแก้ไขค่าในคอลัมน์ "สต็อก" จะถูกบันทึกเป็นการเคลื่อนไหว (รับเข้า/จ่ายออก)', writer.book.add_format({'font_color': 'red', 'text_wrap': True}))
-    instructions_ws.write('A10', '4. หากต้องการเพิ่มสินค้าใหม่ ไม่ต้องกรอก "ID (ห้ามแก้ไข)"', writer.book.add_format({'font_color': 'red', 'text_wrap': True}))
-    instructions_ws.write('A11', '5. ตรวจสอบประเภทข้อมูลให้ถูกต้อง (ตัวเลข, ข้อความ)', writer.book.add_format({'font_color': 'red', 'text_wrap': True}))
-    instructions_ws.write('A12', '6. สามารถเปลี่ยนชื่อไฟล์ได้' , writer.book.add_format({'font_color': 'red', 'text_wrap': True}))
+    instructions_ws = workbook.add_worksheet(instructions_sheet_name)
+    instructions_ws.write('A1', 'คำแนะนำการใช้งานไฟล์นำเข้า/ส่งออกข้อมูลยาง', workbook.add_format({'bold': True, 'font_size': 14}))
+    instructions_ws.write('A3', 'วัตถุประสงค์:', workbook.add_format({'bold': True}))
+    instructions_ws.write('A4', 'ไฟล์นี้ใช้สำหรับ Export ข้อมูลสต็อกยางปัจจุบัน และสามารถใช้เป็นแม่แบบเพื่อนำเข้าข้อมูลใหม่หรือแก้ไขข้อมูลที่มีอยู่ได้', workbook.add_format({'text_wrap': True}))
+    instructions_ws.write('A6', 'ข้อควรระวัง:', workbook.add_format({'bold': True, 'font_color': 'red'}))
+    instructions_ws.write('A7', '1. ห้าม! เปลี่ยนชื่อชีท "Tires Data" และห้าม! ลบ/ย้าย/เปลี่ยนชื่อคอลัมน์ในชีท "Tires Data"', workbook.add_format({'font_color': 'red', 'text_wrap': True}))
+    instructions_ws.write('A8', '2. ข้อมูลในคอลัมน์ที่มีคำว่า "(ห้ามแก้ไข)" หรือ "(ระบบ)" เป็นข้อมูลที่สร้าง/คำนวณโดยระบบ ไม่ควรแก้ไข', workbook.add_format({'font_color': 'red', 'text_wrap': True}))
+    instructions_ws.write('A9', '3. การแก้ไขค่าในคอลัมน์ "สต็อก" จะถูกบันทึกเป็นการเคลื่อนไหว (รับเข้า/จ่ายออก)', workbook.add_format({'font_color': 'red', 'text_wrap': True}))
+    instructions_ws.write('A10', '4. หากต้องการเพิ่มสินค้าใหม่ ไม่ต้องกรอก "ID (ห้ามแก้ไข)"', workbook.add_format({'font_color': 'red', 'text_wrap': True}))
+    instructions_ws.write('A11', '5. ตรวจสอบประเภทข้อมูลให้ถูกต้อง (ตัวเลข, ข้อความ)', workbook.add_format({'font_color': 'red', 'text_wrap': True}))
+    instructions_ws.write('A12', '6. สามารถเปลี่ยนชื่อไฟล์ได้' , workbook.add_format({'font_color': 'red', 'text_wrap': True}))
     instructions_ws.set_column('A:A', 80) # Adjust width for instructions
 
-    # Write data to the main sheet
-    data_sheet_name = 'Tires Data' # Renamed for clarity
-    df.to_excel(writer, index=False, sheet_name=data_sheet_name)
+    # --- Write data to the main sheet with blank rows between brands ---
+    data_sheet_name = 'Tires Data'
+    worksheet = workbook.add_worksheet(data_sheet_name) # Create worksheet manually
 
-    # --- Get the xlsxwriter workbook and worksheet objects for the data sheet ---
-    workbook = writer.book
-    worksheet = writer.sheets[data_sheet_name]
-
-    # --- Define formats ---
+    # Define formats
     header_format = workbook.add_format({
-        'bold': True,
-        'text_wrap': True,
-        'valign': 'vcenter',
-        'fg_color': '#D7E4BC', # Light green background
-        'border': 1,
-        'align': 'center' # Center align headers
+        'bold': True, 'text_wrap': True, 'valign': 'vcenter',
+        'fg_color': '#D7E4BC', 'border': 1, 'align': 'center'
     })
     read_only_header_format = workbook.add_format({ # Format for headers of columns not meant for import
-        'bold': True,
-        'text_wrap': True,
-        'valign': 'vcenter',
-        'fg_color': '#D9D9D9', # Grey background for read-only
-        'border': 1,
-        'font_color': '#5C5C5C',
-        'align': 'center'
+        'bold': True, 'text_wrap': True, 'valign': 'vcenter',
+        'fg_color': '#D9D9D9', 'border': 1, 'font_color': '#5C5C5C', 'align': 'center'
     })
     read_only_cell_format = workbook.add_format({ # Format for cells in columns not meant for import
-        'font_color': '#808080', # Grey font
-        'italic': True, # Italic text
-        'align': 'center',
-        'valign': 'vcenter'
+        'font_color': '#808080', 'italic': True, 'align': 'center', 'valign': 'vcenter'
     })
-
-
-    # Number formats
     integer_format = workbook.add_format({'num_format': '#,##0', 'align': 'center'})
     decimal_format = workbook.add_format({'num_format': '#,##0.00', 'align': 'right'})
     text_center_format = workbook.add_format({'align': 'center'})
     text_left_format = workbook.add_format({'align': 'left'})
     
-    # Apply header format and set column widths
+    # Write headers to the main sheet
     for col_num, value in enumerate(df.columns.values):
         is_read_only_col = '(ห้ามแก้ไข)' in value or '(ระบบ)' in value
         current_header_format = read_only_header_format if is_read_only_col else header_format
         worksheet.write(0, col_num, value, current_header_format)
 
-        max_len = 0
-        column_data = df[value].astype(str)
-        # Calculate max length based on column content or header length
-        max_len = max(column_data.apply(len).max(), len(value)) + 2 # +2 for padding
-
-        # Define specific column widths and formats
+        # Set initial column widths based on header and max data length
+        max_len = max(df[value].astype(str).apply(len).max(), len(value)) + 2
+        
         if value == 'ยี่ห้อ':
             worksheet.set_column(col_num, col_num, max(max_len, 15), text_left_format)
         elif value == 'รุ่นยาง':
@@ -3346,22 +3337,112 @@ def export_tires_action():
             worksheet.set_column(col_num, col_num, max(max_len, 10), integer_format)
         elif value == 'ปีผลิต':
             worksheet.set_column(col_num, col_num, max(max_len, 8), text_center_format)
-        elif value == 'ราคาต่อเส้น':
+        elif value == 'ราคาหน้าร้าน': 
             worksheet.set_column(col_num, col_num, max(max_len, 12), decimal_format)
-        elif value == 'Barcode ID':
-            worksheet.set_column(col_num, col_num, max(max_len, 20), text_center_format)
-        elif value in ['ทุน SC', 'ทุน Dunlop', 'ทุน Online', 'ราคาขายส่ง 1', 'ราคาขายส่ง 2']:
+        elif value == 'Barcode ID (ระบบ)': # Hidden column
+            worksheet.set_column(col_num, col_num, max(max_len, 20), read_only_cell_format, {'hidden': True})
+        elif value in ['ทุน', 'ทุนค้าส่ง 1', 'ทุนค้าส่ง 2', 'ราคาค้าส่ง 1', 'ราคาค้าส่ง 2']: # Adjusted for new names
             worksheet.set_column(col_num, col_num, max(max_len, 12), decimal_format)
-        elif is_read_only_col: # Apply read-only format to the data cells
+        elif is_read_only_col: # Other read-only columns
             worksheet.set_column(col_num, col_num, max(max_len, 15), read_only_cell_format)
-            # Hide columns not relevant for manual import (system-generated/calculated)
             if value in ['ID (ห้ามแก้ไข)', 'ID โปรโมชัน (ระบบ)', 'ชื่อโปรโมชัน (ระบบ)', 'ประเภทโปรโมชัน (ระบบ)', 'ค่าโปรโมชัน Value1 (ระบบ)', 'ค่าโปรโมชัน Value2 (ระบบ)', 'รายละเอียดโปรโมชัน (ระบบ)', 'ราคาโปรโมชันคำนวณ(เส้น) (ระบบ)', 'ราคาโปรโมชันคำนวณ(4เส้น) (ระบบ)']:
                 worksheet.set_column(col_num, col_num, None, None, {'hidden': True})
-        else: # Default for other columns
+        else:
             worksheet.set_column(col_num, col_num, max_len)
+
+    # Write data rows with blank rows between brands
+    current_row = 1 # Start writing data from row 1 (after headers)
+    last_brand = None
+    
+    for index, row_data in df.iterrows():
+        current_brand = row_data['ยี่ห้อ']
+        if last_brand is not None and current_brand != last_brand:
+            current_row += 1 # Add a blank row between brands
+
+        for col_num, col_name in enumerate(df.columns.values):
+            cell_value = row_data[col_name]
+            cell_format = None
+
+            # Determine format based on column name and whether it's a read-only column
+            is_read_only_col = '(ห้ามแก้ไข)' in col_name or '(ระบบ)' in col_name
+            
+            if is_read_only_col:
+                cell_format = read_only_cell_format
+            elif col_name == 'สต็อก':
+                cell_format = integer_format
+            elif col_name in ['ทุน', 'ทุนค้าส่ง 1', 'ทุนค้าส่ง 2', 'ราคาค้าส่ง 1', 'ราคาค้าส่ง 2', 'ราคาหน้าร้าน']:
+                cell_format = decimal_format
+            elif col_name == 'ยี่ห้อ':
+                cell_format = text_left_format
+            elif col_name == 'รุ่นยาง':
+                cell_format = text_left_format
+            elif col_name in ['เบอร์ยาง', 'ปีผลิต']:
+                cell_format = text_center_format
+            
+            # --- Handle NaN values by writing None instead of np.nan ---
+            if pd.isna(cell_value):
+                worksheet.write(current_row, col_num, None, cell_format) # Write None to produce a blank cell
+            else:
+                worksheet.write(current_row, col_num, cell_value, cell_format)
+        current_row += 1
+        last_brand = current_brand
 
     # --- Add Freeze Panes ---
     worksheet.freeze_panes(1, 0) # Freeze the first row (headers)
+
+
+    # --- Create Summary by Brand Sheet (for Tires) ---
+    # summary_df = df.groupby('ยี่ห้อ').agg(
+    #     สต็อก_รวม=('สต็อก', 'sum'),
+    #     ทุน_รวม=('ทุน', 'sum'),
+    #     **{'ทุนค้าส่ง 1_รวม': ('ทุนค้าส่ง 1', 'sum')},
+    #     **{'ทุนค้าส่ง 2_รวม': ('ทุนค้าส่ง 2', 'sum')},
+    #     **{'ราคาค้าส่ง 1_รวม': ('ราคาค้าส่ง 1', 'sum')},
+    #     **{'ราคาค้าส่ง 2_รวม': ('ราคาค้าส่ง 2', 'sum')},
+    #     **{'ราคาหน้าร้าน_รวม': ('ราคาหน้าร้าน', 'sum')}
+    # ).reset_index()
+
+    # # Reorder columns for summary
+    # summary_df = summary_df[[
+    #     'ยี่ห้อ', 'สต็อก_รวม', 'ทุน_รวม', 'ทุนค้าส่ง 1_รวม', 'ทุนค้าส่ง 2_รวม',
+    #     'ราคาค้าส่ง 1_รวม', 'ราคาค้าส่ง 2_รวม', 'ราคาหน้าร้าน_รวม'
+    # ]]
+    # summary_df.columns = [
+    #     'ยี่ห้อ', 'สต็อกรวม', 'ทุนรวม', 'ทุนค้าส่ง 1 รวม', 'ทุนค้าส่ง 2 รวม',
+    #     'ราคาค้าส่ง 1 รวม', 'ราคาค้าส่ง 2 รวม', 'ราคาหน้าร้านรวม'
+    # ]
+
+
+    # summary_sheet_name = 'สรุปตามยี่ห้อ'
+    # summary_df.to_excel(writer, index=False, sheet_name=summary_sheet_name)
+    # summary_ws = writer.sheets[summary_sheet_name]
+
+    # # Apply formats to summary sheet
+    # summary_header_format = workbook.add_format({
+    #     'bold': True, 'text_wrap': True, 'valign': 'vcenter',
+    #     'fg_color': '#C6E0B4', # Slightly different green for summary header
+    #     'border': 1, 'align': 'center'
+    # })
+    # summary_integer_format = workbook.add_format({'num_format': '#,##0', 'align': 'center'})
+    # summary_decimal_format = workbook.add_format({'num_format': '#,##0.00', 'align': 'right'})
+    # summary_text_left_format = workbook.add_format({'align': 'left'})
+
+    # for col_num, value in enumerate(summary_df.columns.values):
+    #     summary_ws.write(0, col_num, value, summary_header_format)
+        
+    #     max_len = max(summary_df[value].astype(str).apply(len).max(), len(value)) + 2
+        
+    #     if value == 'ยี่ห้อ':
+    #         summary_ws.set_column(col_num, col_num, max(max_len, 15), summary_text_left_format)
+    #     elif 'รวม' in value and 'ราคา' not in value: # Stock totals
+    #         summary_ws.set_column(col_num, col_num, max(max_len, 12), summary_integer_format)
+    #     elif 'รวม' in value and 'ราคา' in value: # Price/Cost totals
+    #         summary_ws.set_column(col_num, col_num, max(max_len, 15), summary_decimal_format)
+    #     else:
+    #         summary_ws.set_column(col_num, col_num, max_len)
+
+    # summary_ws.freeze_panes(1, 0) # Freeze header row in summary sheet
+
 
     writer.close()
     output.seek(0)
@@ -3388,13 +3469,13 @@ def import_tires_action():
     
     if file and allowed_excel_file(file.filename):
         try:
-            # Read all sheets, including the instructions sheet
             xls = pd.ExcelFile(file)
             if 'Tires Data' not in xls.sheet_names:
                 flash('ไม่พบชีทชื่อ "Tires Data" ในไฟล์. โปรดตรวจสอบว่าคุณใช้ไฟล์แม่แบบที่ถูกต้อง', 'danger')
                 return redirect(url_for('export_import', tab='tires_excel'))
             
-            df = xls.parse('Tires Data', dtype={'Barcode ID': str}) # Parse only the data sheet
+            # Use original 'Barcode ID (ระบบ)' for parsing dtype (as it's the internal name)
+            df = xls.parse('Tires Data', dtype={'Barcode ID (ระบบ)': str}) 
             
             conn = get_db()
             imported_count = 0
@@ -3403,61 +3484,78 @@ def import_tires_action():
 
             # UPDATED: Expected column names now match the export format
             expected_tire_cols = [
-                'ยี่ห้อ', 'รุ่นยาง', 'เบอร์ยาง', 'สต็อก', 'ราคาต่อเส้น', 'Barcode ID'
+                'ยี่ห้อ', 'รุ่นยาง', 'เบอร์ยาง', 'ปีผลิต', 'สต็อก',
+                'ทุน', 'ทุนค้าส่ง 1', 'ทุนค้าส่ง 2',
+                'ราคาค้าส่ง 1', 'ราคาค้าส่ง 2', 'ราคาหน้าร้าน'
             ]
             
-            # Check for required columns by their *new* names
+            # Check if all required columns are present
             if not all(col in df.columns for col in expected_tire_cols):
                 missing_cols = [col for col in expected_tire_cols if col not in df.columns]
                 flash(f'ไฟล์ Excel ขาดคอลัมน์ที่จำเป็น: {", ".join(missing_cols)}. โปรดดาวน์โหลดไฟล์ตัวอย่างเพื่อดูรูปแบบที่ถูกต้อง.', 'danger')
                 return redirect(url_for('export_import', tab='tires_excel'))
 
             for index, row in df.iterrows():
+                # --- NEW: Skip blank rows ---
+                # Check if essential columns are NaN or empty strings
+                if pd.isna(row.get('ยี่ห้อ')) and \
+                   pd.isna(row.get('รุ่นยาง')) and \
+                   pd.isna(row.get('เบอร์ยาง')) and \
+                   pd.isna(row.get('สต็อก')):
+                    error_rows.append(f"แถวที่ {index + 2}: ข้อมูลหลัก (ยี่ห้อ, รุ่นยาง, เบอร์ยาง, สต็อก) ว่างเปล่า. แถวถูกข้าม.")
+                    continue # Skip this row
+
                 try:
-                    # UPDATED: Access columns by their new names
-                    # ID (ห้ามแก้ไข) is for existing items, new items won't have it
+                    # Retrieve optional/system columns with their new names
                     tire_id_from_excel = int(row.get('ID (ห้ามแก้ไข)')) if pd.notna(row.get('ID (ห้ามแก้ไข)')) else None
+                    barcode_id_from_excel = str(row.get('Barcode ID (ระบบ)', '')).strip() # Use new name
+                    promotion_id_from_excel_raw = row.get('ID โปรโมชัน (ระบบ)') # Use new name
+
+                    # Clean barcode string
+                    barcode_id_to_save = None
+                    if barcode_id_from_excel and barcode_id_from_excel.lower() not in ['none', 'nan']:
+                        barcode_id_to_save = barcode_id_from_excel
+
+                    # Required fields (using their new names from export)
                     brand = str(row.get('ยี่ห้อ', '')).strip().lower()
                     model = str(row.get('รุ่นยาง', '')).strip().lower()
                     size = str(row.get('เบอร์ยาง', '')).strip()
+                    year_of_manufacture_raw = row.get('ปีผลิต')
+                    quantity = int(row['สต็อก']) if pd.notna(row['สต็อก']) else 0
+                    cost_sc_raw = row.get('ทุน') # Use new name
+                    cost_dunlop_raw = row.get('ทุนค้าส่ง 1') # Use new name
+                    cost_online_raw = row.get('ทุนค้าส่ง 2') # Use new name
+                    wholesale_price1_raw = row.get('ราคาค้าส่ง 1') # Use new name
+                    wholesale_price2_raw = row.get('ราคาค้าส่ง 2') # Use new name
+                    price_per_item_raw = row.get('ราคาหน้าร้าน') # Use new name
 
-                    barcode_id_from_excel = str(row.get('Barcode ID', '')).strip()
-                    if not barcode_id_from_excel or barcode_id_from_excel.lower() == 'none' or barcode_id_from_excel.lower() == 'nan':
-                        barcode_id_to_save = None
-                    else:
-                        barcode_id_to_save = barcode_id_from_excel
-
+                    # Validation for required fields for new/update
                     if not brand or not model or not size:
                         raise ValueError("ข้อมูล 'ยี่ห้อ', 'รุ่นยาง', หรือ 'เบอร์ยาง' ไม่สามารถเว้นว่างได้")
+                    if pd.isna(price_per_item_raw):
+                         raise ValueError("ข้อมูล 'ราคาหน้าร้าน' ไม่สามารถเว้นว่างได้")
 
-                    quantity = int(row['สต็อก']) if pd.notna(row['สต็อก']) else 0
-                    price_per_item = float(row['ราคาต่อเส้น']) if pd.notna(row['ราคาต่อเส้น']) else 0.0
+                    # Type conversions
+                    try:
+                        price_per_item = float(price_per_item_raw)
+                        cost_sc = float(cost_sc_raw) if pd.notna(cost_sc_raw) else None
+                        cost_dunlop = float(cost_dunlop_raw) if pd.notna(cost_dunlop_raw) else None
+                        cost_online = float(cost_online_raw) if pd.notna(cost_online_raw) else None
+                        wholesale_price1 = float(wholesale_price1_raw) if pd.notna(wholesale_price1_raw) else None
+                        wholesale_price2 = float(wholesale_price2_raw) if pd.notna(wholesale_price2_raw) else None
+                    except ValueError as ve:
+                        raise ValueError(f"ข้อมูลตัวเลขไม่ถูกต้องในคอลัมน์ราคาหรือทุน: {ve}")
 
-                    # UPDATED: Access other columns by their new names
-                    cost_sc_raw = row.get('ทุน SC')
-                    cost_dunlop_raw = row.get('ทุน Dunlop')
-                    cost_online_raw = row.get('ทุน Online')
-                    wholesale_price1_raw = row.get('ราคาขายส่ง 1')
-                    wholesale_price2_raw = row.get('ราคาขายส่ง 2')
-                    year_of_manufacture_raw = row.get('ปีผลิต')
-
-                    cost_sc = float(cost_sc_raw) if pd.notna(cost_sc_raw) else None
-                    cost_dunlop = float(cost_dunlop_raw) if pd.notna(cost_dunlop_raw) else None
-                    cost_online = float(cost_online_raw) if pd.notna(cost_online_raw) else None
-                    wholesale_price1 = float(wholesale_price1_raw) if pd.notna(wholesale_price1_raw) else None
-                    wholesale_price2 = float(wholesale_price2_raw) if pd.notna(wholesale_price2_raw) else None
-                    
                     year_of_manufacture = None 
                     if pd.notna(year_of_manufacture_raw):
                         try:
                             year_of_manufacture = int(year_of_manufacture_raw)
                         except ValueError:
                             year_of_manufacture = str(year_of_manufacture_raw).strip()
-                            if year_of_manufacture == 'nan': # Handles 'nan' string from conversion
+                            if year_of_manufacture.lower() == 'nan':
                                 year_of_manufacture = None
 
-                    # UPDATED: Use the new column name for promotion ID
-                    promotion_id = int(row.get('ID โปรโมชัน (ระบบ)')) if pd.notna(row.get('ID โปรโมชัน (ระบบ)')) else None
+                    promotion_id_db = int(promotion_id_from_excel_raw) if pd.notna(promotion_id_from_excel_raw) else None
                     
                     cursor = conn.cursor()
 
@@ -3494,11 +3592,12 @@ def import_tires_action():
                     if existing_tire:
                         tire_id = existing_tire['id']
                         
+                        # Add or update barcode if provided and not already linked
                         if barcode_id_to_save and not database.get_tire_id_by_barcode(conn, barcode_id_to_save):
-                             database.add_tire_barcode(conn, tire_id, barcode_id_to_save, is_primary=False)
+                             database.add_tire_barcode(conn, tire_id, barcode_id_to_save, is_primary=False) # is_primary=False for added barcodes
                         
                         database.update_tire_import(conn, tire_id, brand, model, size, quantity, cost_sc, cost_dunlop, cost_online, wholesale_price1, wholesale_price2, price_per_item,
-                                                    promotion_id, year_of_manufacture) 
+                                                    promotion_id_db, year_of_manufacture) 
                         
                         old_quantity = existing_tire['quantity']
                         if quantity != old_quantity:
@@ -3509,9 +3608,9 @@ def import_tires_action():
                         
                     else: # New tire
                         new_tire_id = database.add_tire_import(conn, brand, model, size, quantity, cost_sc, cost_dunlop, cost_online, wholesale_price1, wholesale_price2, price_per_item,
-                                                                promotion_id, year_of_manufacture) 
+                                                                promotion_id_db, year_of_manufacture) 
                         if barcode_id_to_save:
-                            database.add_tire_barcode(conn, new_tire_id, barcode_id_to_save, is_primary=True) 
+                            database.add_tire_barcode(conn, new_tire_id, barcode_id_to_save, is_primary=True) # First barcode for new item is primary
                         database.add_tire_movement(conn, new_tire_id, 'IN', quantity, quantity, "Import from Excel (initial stock)", None, user_id=current_user.id)
                         imported_count += 1
                 
@@ -3522,6 +3621,10 @@ def import_tires_action():
             cache.delete_memoized(get_cached_tires)
             cache.delete_memoized(get_all_tires_list_cached)
             cache.delete_memoized(get_cached_tire_brands)
+            # Potentially clear wholesale_summary_cache and unread_notification_count if stock movements from import add notifications or affect wholesale
+            # (Assuming add_tire_movement adds notifications, and wholesale_summary is tied to movements)
+            cache.delete_memoized(get_cached_wholesale_summary)
+            cache.delete_memoized(get_cached_unread_notification_count)
 
             message = f'นำเข้าข้อมูลยางสำเร็จ: เพิ่มใหม่ {imported_count} รายการ, อัปเดต {updated_count} รายการ.'
             if error_rows:
@@ -3569,7 +3672,6 @@ def export_wheels_action():
             primary_barcode = barcodes[0]['barcode_string']
 
         data.append({
-            'ID (ห้ามแก้ไข)': wheel['id'],
             'ยี่ห้อ': wheel['brand'],
             'ลาย': wheel['model'],
             'ขอบ': wheel['diameter'],
@@ -3578,12 +3680,13 @@ def export_wheels_action():
             'ET': wheel['et'],
             'สี': wheel['color'],
             'สต็อก': wheel['quantity'],
-            'Barcode ID': primary_barcode, # Keep primary barcode visible
             'ทุน': wheel['cost'],
             'ทุน Online': wheel['cost_online'],
             'ราคาขายส่ง 1': wheel['wholesale_price1'],
             'ราคาขายส่ง 2': wheel['wholesale_price2'],
             'ราคาขายปลีก': wheel['retail_price'],
+            'Barcode ID (ระบบ)': primary_barcode, # Moved, and explicitly marked as system
+            'ID (ห้ามแก้ไข)': wheel['id'], # Moved to bottom, explicitly marked as non-editable
             'ไฟล์รูปภาพ (URL ระบบ)': wheel['image_filename'], # Indicate this is a system URL
         })
 
@@ -3596,31 +3699,28 @@ def export_wheels_action():
 
     output = BytesIO()
     writer = pd.ExcelWriter(output, engine='xlsxwriter')
+    workbook = writer.book # workbook is defined here
 
-    # --- NEW: Add an Instructions Sheet ---
+    # --- Add an Instructions Sheet ---
     instructions_sheet_name = 'คำแนะนำการใช้งาน'
-    instructions_ws = writer.book.add_worksheet(instructions_sheet_name)
-    instructions_ws.write('A1', 'คำแนะนำการใช้งานไฟล์นำเข้า/ส่งออกข้อมูลแม็ก', writer.book.add_format({'bold': True, 'font_size': 14}))
-    instructions_ws.write('A3', 'วัตถุประสงค์:', writer.book.add_format({'bold': True}))
-    instructions_ws.write('A4', 'ไฟล์นี้ใช้สำหรับ Export ข้อมูลสต็อกแม็กปัจจุบัน และสามารถใช้เป็นแม่แบบเพื่อนำเข้าข้อมูลใหม่หรือแก้ไขข้อมูลที่มีอยู่ได้', writer.book.add_format({'text_wrap': True}))
-    instructions_ws.write('A6', 'ข้อควรระวัง:', writer.book.add_format({'bold': True, 'font_color': 'red'}))
-    instructions_ws.write('A7', '1. ห้าม! เปลี่ยนชื่อชีท "Wheels Data" และห้าม! ลบ/ย้าย/เปลี่ยนชื่อคอลัมน์ในชีท "Wheels Data"', writer.book.add_format({'font_color': 'red', 'text_wrap': True}))
-    instructions_ws.write('A8', '2. ข้อมูลในคอลัมน์ที่มีคำว่า "(ห้ามแก้ไข)" หรือ "(ระบบ)" เป็นข้อมูลที่สร้าง/คำนวณโดยระบบ ไม่ควรแก้ไข', writer.book.add_format({'font_color': 'red', 'text_wrap': True}))
-    instructions_ws.write('A9', '3. การแก้ไขค่าในคอลัมน์ "สต็อก" จะถูกบันทึกเป็นการเคลื่อนไหว (รับเข้า/จ่ายออก)', writer.book.add_format({'font_color': 'red', 'text_wrap': True}))
-    instructions_ws.write('A10', '4. หากต้องการเพิ่มสินค้าใหม่ ไม่ต้องกรอก "ID (ห้ามแก้ไข)"', writer.book.add_format({'font_color': 'red', 'text_wrap': True}))
-    instructions_ws.write('A11', '5. "ไฟล์รูปภาพ (URL ระบบ)" คือ URL รูปภาพที่ระบบใช้ ไม่ควรแก้ไขโดยตรง หากต้องการเปลี่ยนรูป ให้ใช้ฟังก์ชันอัปโหลดในระบบ', writer.book.add_format({'font_color': 'red', 'text_wrap': True}))
-    instructions_ws.write('A12', '6. ตรวจสอบประเภทข้อมูลให้ถูกต้อง (ตัวเลข, ข้อความ)', writer.book.add_format({'font_color': 'red', 'text_wrap': True}))
+    instructions_ws = workbook.add_worksheet(instructions_sheet_name) # Use workbook here
+    instructions_ws.write('A1', 'คำแนะนำการใช้งานไฟล์นำเข้า/ส่งออกข้อมูลแม็ก', workbook.add_format({'bold': True, 'font_size': 14}))
+    instructions_ws.write('A3', 'วัตถุประสงค์:', workbook.add_format({'bold': True}))
+    instructions_ws.write('A4', 'ไฟล์นี้ใช้สำหรับ Export ข้อมูลสต็อกแม็กปัจจุบัน และสามารถใช้เป็นแม่แบบเพื่อนำเข้าข้อมูลใหม่หรือแก้ไขข้อมูลที่มีอยู่ได้', workbook.add_format({'text_wrap': True}))
+    instructions_ws.write('A6', 'ข้อควรระวัง:', workbook.add_format({'bold': True, 'font_color': 'red'}))
+    instructions_ws.write('A7', '1. ห้าม! เปลี่ยนชื่อชีท "Wheels Data" และห้าม! ลบ/ย้าย/เปลี่ยนชื่อคอลัมน์ในชีท "Wheels Data"', workbook.add_format({'font_color': 'red', 'text_wrap': True}))
+    instructions_ws.write('A8', '2. ข้อมูลในคอลัมน์ที่มีคำว่า "(ห้ามแก้ไข)" หรือ "(ระบบ)" เป็นข้อมูลที่สร้าง/คำนวณโดยระบบ ไม่ควรแก้ไข', workbook.add_format({'font_color': 'red', 'text_wrap': True}))
+    instructions_ws.write('A9', '3. การแก้ไขค่าในคอลัมน์ "สต็อก" จะถูกบันทึกเป็นการเคลื่อนไหว (รับเข้า/จ่ายออก)', workbook.add_format({'font_color': 'red', 'text_wrap': True}))
+    instructions_ws.write('A10', '4. หากต้องการเพิ่มสินค้าใหม่ ไม่ต้องกรอก "ID (ห้ามแก้ไข)"', workbook.add_format({'font_color': 'red', 'text_wrap': True}))
+    instructions_ws.write('A11', '5. "ไฟล์รูปภาพ (URL ระบบ)" คือ URL รูปภาพที่ระบบใช้ ไม่ควรแก้ไขโดยตรง หากต้องการเปลี่ยนรูป ให้ใช้ฟังก์ชันอัปโหลดในระบบ', workbook.add_format({'font_color': 'red', 'text_wrap': True}))
+    instructions_ws.write('A12', '6. ตรวจสอบประเภทข้อมูลให้ถูกต้อง (ตัวเลข, ข้อความ)', workbook.add_format({'font_color': 'red', 'text_wrap': True}))
     instructions_ws.set_column('A:A', 80) # Adjust width for instructions
 
     # Write data to the main sheet
     data_sheet_name = 'Wheels Data' # Renamed for clarity
-    df.to_excel(writer, index=False, sheet_name=data_sheet_name)
+    worksheet = workbook.add_worksheet(data_sheet_name) # Create worksheet manually
 
-    # --- Get the xlsxwriter workbook and worksheet objects ---
-    workbook = writer.book
-    worksheet = writer.sheets[data_sheet_name]
-
-    # --- Define formats ---
+    # Define formats
     header_format = workbook.add_format({
         'bold': True,
         'text_wrap': True,
@@ -3651,15 +3751,13 @@ def export_wheels_action():
     text_center_format = workbook.add_format({'align': 'center'})
     text_left_format = workbook.add_format({'align': 'left'})
     
-    # Apply header format and set column widths
+    # Apply header format and set column widths for main sheet
     for col_num, value in enumerate(df.columns.values):
         is_read_only_col = '(ห้ามแก้ไข)' in value or '(ระบบ)' in value or '(URL ระบบ)' in value
         current_header_format = read_only_header_format if is_read_only_col else header_format
         worksheet.write(0, col_num, value, current_header_format)
 
-        max_len = 0
-        column_data = df[value].astype(str)
-        max_len = max(column_data.apply(len).max(), len(value)) + 2
+        max_len = max(df[value].astype(str).apply(len).max(), len(value)) + 2
 
         if value == 'ยี่ห้อ':
             worksheet.set_column(col_num, col_num, max(max_len, 15), text_left_format)
@@ -3671,8 +3769,8 @@ def export_wheels_action():
             worksheet.set_column(col_num, col_num, max(max_len, 15), text_center_format)
         elif value == 'สต็อก':
             worksheet.set_column(col_num, col_num, max(max_len, 10), integer_format)
-        elif value == 'Barcode ID':
-            worksheet.set_column(col_num, col_num, max(max_len, 20), text_center_format)
+        elif value == 'Barcode ID (ระบบ)': # Now read-only and hidden
+            worksheet.set_column(col_num, col_num, max(max_len, 20), read_only_cell_format, {'hidden': True})
         elif value in ['ทุน', 'ทุน Online', 'ราคาขายส่ง 1', 'ราคาขายส่ง 2', 'ราคาขายปลีก']:
             worksheet.set_column(col_num, col_num, max(max_len, 12), decimal_format)
         elif is_read_only_col:
@@ -3681,9 +3779,96 @@ def export_wheels_action():
                 worksheet.set_column(col_num, col_num, None, None, {'hidden': True})
         else:
             worksheet.set_column(col_num, col_num, max_len)
+    
+    # Write data rows with blank rows between brands for Wheels
+    current_row = 1 # Start writing data from row 1 (after headers)
+    last_brand = None
+    
+    for index, row_data in df.iterrows():
+        current_brand = row_data['ยี่ห้อ']
+        if last_brand is not None and current_brand != last_brand:
+            current_row += 1 # Add a blank row between brands
+
+        for col_num, col_name in enumerate(df.columns.values):
+            cell_value = row_data[col_name]
+            cell_format = None
+
+            is_read_only_col = '(ห้ามแก้ไข)' in col_name or '(ระบบ)' in col_name or '(URL ระบบ)' in col_name
+            
+            if is_read_only_col:
+                cell_format = read_only_cell_format
+            elif col_name == 'สต็อก':
+                cell_format = integer_format
+            elif col_name in ['ทุน', 'ทุน Online', 'ราคาขายส่ง 1', 'ราคาขายส่ง 2', 'ราคาขายปลีก']:
+                cell_format = decimal_format
+            elif col_name == 'ยี่ห้อ':
+                cell_format = text_left_format
+            elif col_name == 'ลาย':
+                cell_format = text_left_format
+            elif col_name in ['ขอบ', 'กว้าง', 'ET', 'รู', 'สี']:
+                cell_format = text_center_format
+            
+            # --- Handle NaN values by writing None instead of np.nan ---
+            if pd.isna(cell_value):
+                worksheet.write(current_row, col_num, None, cell_format) # Write None to produce a blank cell
+            else:
+                worksheet.write(current_row, col_num, cell_value, cell_format)
+        current_row += 1
+        last_brand = current_brand
 
     # --- Add Freeze Panes ---
     worksheet.freeze_panes(1, 0) # Freeze the first row (headers)
+
+    # --- NEW: Create Summary by Brand Sheet (for Wheels) ---
+    # summary_df_wheels = df.groupby('ยี่ห้อ').agg(
+    #     สต็อก_รวม=('สต็อก', 'sum'),
+    #     ทุน_รวม=('ทุน', 'sum'),
+    #     **{'ทุน Online_รวม': ('ทุน Online', 'sum')},
+    #     **{'ราคาขายส่ง 1_รวม': ('ราคาขายส่ง 1', 'sum')},
+    #     **{'ราคาขายส่ง 2_รวม': ('ราคาขายส่ง 2', 'sum')},
+    #     **{'ราคาขายปลีก_รวม': ('ราคาขายปลีก', 'sum')}
+    # ).reset_index()
+
+    # # Reorder columns for summary
+    # summary_df_wheels = summary_df_wheels[[
+    #     'ยี่ห้อ', 'สต็อก_รวม', 'ทุน_รวม', 'ทุน Online_รวม',
+    #     'ราคาขายส่ง 1_รวม', 'ราคาขายส่ง 2_รวม', 'ราคาขายปลีก_รวม'
+    # ]]
+    # summary_df_wheels.columns = [
+    #     'ยี่ห้อ', 'สต็อกรวม', 'ทุนรวม', 'ทุน Online รวม',
+    #     'ราคาขายส่ง 1 รวม', 'ราคาขายส่ง 2 รวม', 'ราคาขายปลีกรวม'
+    # ]
+
+    # summary_sheet_name_wheels = 'สรุปตามยี่ห้อ'
+    # summary_df_wheels.to_excel(writer, index=False, sheet_name=summary_sheet_name_wheels)
+    # summary_ws_wheels = writer.sheets[summary_sheet_name_wheels]
+
+    # # Apply formats to summary sheet
+    # summary_header_format_wheels = workbook.add_format({
+    #     'bold': True, 'text_wrap': True, 'valign': 'vcenter',
+    #     'fg_color': '#C6E0B4', # Slightly different green for summary header
+    #     'border': 1, 'align': 'center'
+    # })
+    # summary_integer_format_wheels = workbook.add_format({'num_format': '#,##0', 'align': 'center'})
+    # summary_decimal_format_wheels = workbook.add_format({'num_format': '#,##0.00', 'align': 'right'})
+    # summary_text_left_format_wheels = workbook.add_format({'align': 'left'})
+
+    # for col_num, value in enumerate(summary_df_wheels.columns.values):
+    #     summary_ws_wheels.write(0, col_num, value, summary_header_format_wheels)
+        
+    #     max_len = max(summary_df_wheels[value].astype(str).apply(len).max(), len(value)) + 2
+        
+    #     if value == 'ยี่ห้อ':
+    #         summary_ws_wheels.set_column(col_num, col_num, max(max_len, 15), summary_text_left_format_wheels)
+    #     elif 'รวม' in value and 'ราคา' not in value: # Stock totals
+    #         summary_ws_wheels.set_column(col_num, col_num, max(max_len, 12), summary_integer_format_wheels)
+    #     elif 'รวม' in value and 'ราคา' in value: # Price/Cost totals
+    #         summary_ws_wheels.set_column(col_num, col_num, max(max_len, 15), summary_decimal_format_wheels)
+    #     else:
+    #         summary_ws_wheels.set_column(col_num, col_num, max_len)
+
+    # summary_ws_wheels.freeze_panes(1, 0) # Freeze header row in summary sheet
+
 
     writer.close()
     output.seek(0)
@@ -3715,7 +3900,8 @@ def import_wheels_action():
                 flash('ไม่พบชีทชื่อ "Wheels Data" ในไฟล์. โปรดตรวจสอบว่าคุณใช้ไฟล์แม่แบบที่ถูกต้อง', 'danger')
                 return redirect(url_for('export_import', tab='wheels_excel'))
             
-            df = xls.parse('Wheels Data', dtype={'Barcode ID': str}) # Parse only the data sheet
+            # Use original 'Barcode ID (ระบบ)' for parsing dtype (as it's the internal name)
+            df = xls.parse('Wheels Data', dtype={'Barcode ID (ระบบ)': str}) 
             
             conn = get_db()
             imported_count = 0
@@ -3724,52 +3910,72 @@ def import_wheels_action():
 
             # UPDATED: Expected column names now match the export format
             expected_wheel_cols = [
-                'ยี่ห้อ', 'ลาย', 'ขอบ', 'รู', 'กว้าง', 'สต็อก', 'ราคาขายปลีก', 'Barcode ID'
+                'ยี่ห้อ', 'ลาย', 'ขอบ', 'รู', 'กว้าง', 'ET', 'สี', 'สต็อก',
+                'ทุน', 'ทุน Online', 'ราคาขายส่ง 1', 'ราคาขายส่ง 2', 'ราคาขายปลีก'
             ]
             
-            # Check for required columns by their *new* names
+            # Check if all required columns are present
             if not all(col in df.columns for col in expected_wheel_cols):
                 missing_cols = [col for col in expected_wheel_cols if col not in df.columns]
                 flash(f'ไฟล์ Excel ขาดคอลัมน์ที่จำเป็น: {", ".join(missing_cols)}. โปรดดาวน์โหลดไฟล์ตัวอย่างเพื่อดูรูปแบบที่ถูกต้อง.', 'danger')
                 return redirect(url_for('export_import', tab='wheels_excel'))
 
             for index, row in df.iterrows():
-                try:
-                    # UPDATED: Access columns by their new names
-                    wheel_id_from_excel = int(row.get('ID (ห้ามแก้ไข)')) if pd.notna(row.get('ID (ห้ามแก้ไข)')) else None
-                    brand = str(row.get('ยี่ห้อ', '')).strip().lower()
-                    model = str(row.get('ลาย', '')).strip().lower()
-                    pcd = str(row.get('รู', '')).strip()
+                # --- NEW: Skip blank rows ---
+                # Check if essential columns are NaN or empty strings
+                if pd.isna(row.get('ยี่ห้อ')) and \
+                   pd.isna(row.get('ลาย')) and \
+                   pd.isna(row.get('ขอบ')) and \
+                   pd.isna(row.get('สต็อก')):
+                    error_rows.append(f"แถวที่ {index + 2}: ข้อมูลหลัก (ยี่ห้อ, ลาย, ขอบ, สต็อก) ว่างเปล่า. แถวถูกข้าม.")
+                    continue # Skip this row
 
-                    barcode_id_from_excel = str(row.get('Barcode ID', '')).strip()
-                    if not barcode_id_from_excel or barcode_id_from_excel.lower() == 'none' or barcode_id_from_excel.lower() == 'nan':
-                        barcode_id_to_save = None
-                    else:
+                try:
+                    # Retrieve optional/system columns with their new names
+                    wheel_id_from_excel = int(row.get('ID (ห้ามแก้ไข)')) if pd.notna(row.get('ID (ห้ามแก้ไข)')) else None
+                    barcode_id_from_excel = str(row.get('Barcode ID (ระบบ)', '')).strip() 
+
+                    # Clean barcode string
+                    barcode_id_to_save = None
+                    if barcode_id_from_excel and barcode_id_from_excel.lower() not in ['none', 'nan']:
                         barcode_id_to_save = barcode_id_from_excel
 
-                    if not brand or not model or not pcd:
-                            raise ValueError("ข้อมูล 'ยี่ห้อ', 'ลาย', หรือ 'รู' ไม่สามารถเว้นว่างได้")
-
-                    diameter = float(row['ขอบ']) if pd.notna(row['ขอบ']) else 0.0
-                    width = float(row['กว้าง']) if pd.notna(row['กว้าง']) else 0.0
-                    quantity = int(row['สต็อก']) if pd.notna(row['สต็อก']) else 0
-                    cost = float(row['ทุน']) if pd.notna(row['ทุน']) else None
-                    retail_price = float(row['ราคาขายปลีก']) if pd.notna(row['ราคาขายปลีก']) else 0.0
-
-                    # UPDATED: Access other columns by their new names
+                    # Required fields (using their new names from export)
+                    brand = str(row.get('ยี่ห้อ', '')).strip().lower()
+                    model = str(row.get('ลาย', '')).strip().lower()
+                    diameter_raw = row.get('ขอบ')
+                    pcd = str(row.get('รู', '')).strip()
+                    width_raw = row.get('กว้าง')
                     et_raw = row.get('ET')
-                    color_raw = row.get('สี')
-                    image_url_raw = row.get('ไฟล์รูปภาพ (URL ระบบ)')
+                    color = str(row.get('สี', '')).strip()
+                    quantity = int(row['สต็อก']) if pd.notna(row['สต็อก']) else 0
+                    cost_raw = row.get('ทุน')
                     cost_online_raw = row.get('ทุน Online')
                     wholesale_price1_raw = row.get('ราคาขายส่ง 1')
                     wholesale_price2_raw = row.get('ราคาขายส่ง 2')
+                    retail_price_raw = row.get('ราคาขายปลีก')
+                    image_url = str(row.get('ไฟล์รูปภาพ (URL ระบบ)', '')).strip() # Can read existing URL, but not for import
 
-                    et = int(et_raw) if pd.notna(et_raw) else None
-                    color = str(color_raw).strip() if pd.notna(color_raw) else None
-                    image_url = str(image_url_raw).strip() if pd.notna(image_url_raw) else None
-                    cost_online = float(cost_online_raw) if pd.notna(cost_online_raw) else None
-                    wholesale_price1 = float(wholesale_price1_raw) if pd.notna(wholesale_price1_raw) else None
-                    wholesale_price2 = float(wholesale_price2_raw) if pd.notna(wholesale_price2_raw) else None
+
+                    # Validation for required fields for new/update
+                    if not brand or not model or not pcd:
+                            raise ValueError("ข้อมูล 'ยี่ห้อ', 'ลาย', หรือ 'รู' ไม่สามารถเว้นว่างได้")
+                    if pd.isna(diameter_raw) or pd.isna(width_raw) or pd.isna(retail_price_raw):
+                        raise ValueError("ข้อมูล 'ขอบ', 'กว้าง', หรือ 'ราคาขายปลีก' ไม่สามารถเว้นว่างได้")
+
+
+                    # Type conversions
+                    try:
+                        diameter = float(diameter_raw)
+                        width = float(width_raw)
+                        retail_price = float(retail_price_raw)
+                        cost = float(cost_raw) if pd.notna(cost_raw) else None
+                        et = int(et_raw) if pd.notna(et_raw) else None
+                        cost_online = float(cost_online_raw) if pd.notna(cost_online_raw) else None
+                        wholesale_price1 = float(wholesale_price1_raw) if pd.notna(wholesale_price1_raw) else None
+                        wholesale_price2 = float(wholesale_price2_raw) if pd.notna(wholesale_price2_raw) else None
+                    except ValueError as ve:
+                        raise ValueError(f"ข้อมูลตัวเลขไม่ถูกต้องในคอลัมน์ราคา, ทุน, หรือขนาด: {ve}")
 
                     cursor = conn.cursor()
 
@@ -3795,7 +4001,7 @@ def import_wheels_action():
                             cursor.execute("SELECT id, brand, model, diameter, pcd, width, quantity FROM wheels WHERE brand = %s AND model = %s AND diameter = %s AND pcd = %s AND width = %s", 
                                         (brand, model, diameter, pcd, width))
                         else:
-                            cursor.execute("SELECT id, brand, model, diameter = ? AND pcd = ? AND width = ?", 
+                            cursor.execute("SELECT id, brand, model, diameter, pcd, width, quantity FROM wheels WHERE brand = ? AND model = ? AND diameter = ? AND pcd = ? AND width = ?", 
                                         (brand, model, diameter, pcd, width))
                         
                         found_wheel_data = cursor.fetchone()
@@ -3808,8 +4014,9 @@ def import_wheels_action():
                     if existing_wheel:
                         wheel_id = existing_wheel['id']
                         
+                        # Add or update barcode if provided and not already linked
                         if barcode_id_to_save and not database.get_wheel_id_by_barcode(conn, barcode_id_to_save):
-                             database.add_wheel_barcode(conn, wheel_id, barcode_id_to_save, is_primary=False)
+                             database.add_wheel_barcode(conn, wheel_id, barcode_id_to_save, is_primary=False) # is_primary=False for added barcodes
                         
                         database.update_wheel_import(conn, wheel_id, brand, model, diameter, pcd, width, et, color, quantity, cost, cost_online, wholesale_price1, wholesale_price2, retail_price, image_url) 
                         
@@ -3823,7 +4030,7 @@ def import_wheels_action():
                     else: # New wheel
                         new_wheel_id = database.add_wheel_import(conn, brand, model, diameter, pcd, width, et, color, quantity, cost, cost_online, wholesale_price1, wholesale_price2, retail_price, image_url) 
                         if barcode_id_to_save:
-                            database.add_wheel_barcode(conn, new_wheel_id, barcode_id_to_save, is_primary=True) 
+                            database.add_wheel_barcode(conn, new_wheel_id, barcode_id_to_save, is_primary=True) # First barcode for new item is primary
                         database.add_wheel_movement(conn, new_wheel_id, 'IN', quantity, quantity, "Import from Excel (initial stock)", None, user_id=current_user.id)
                         imported_count += 1
                 except Exception as row_e:
@@ -3833,6 +4040,10 @@ def import_wheels_action():
             cache.delete_memoized(get_cached_wheels)
             cache.delete_memoized(get_all_wheels_list_cached)
             cache.delete_memoized(get_cached_wheel_brands)
+            # Potentially clear wholesale_summary_cache and unread_notification_count if stock movements from import add notifications or affect wholesale
+            # (Assuming add_wheel_movement adds notifications, and wholesale_summary is tied to movements)
+            cache.delete_memoized(get_cached_wholesale_summary)
+            cache.delete_memoized(get_cached_unread_notification_count)
             
             message = f'นำเข้าข้อมูลแม็กสำเร็จ: เพิ่มใหม่ {imported_count} รายการ, อัปเดต {updated_count} รายการ.'
             if error_rows:
