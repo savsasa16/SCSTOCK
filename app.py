@@ -2807,33 +2807,30 @@ def daily_stock_report():
     conn = get_db()
 
     report_date_str = request.args.get('date')
-
     report_datetime_obj = None
 
     if report_date_str:
         try:
             report_datetime_obj = BKK_TZ.localize(datetime.strptime(report_date_str, '%Y-%m-%d')).replace(hour=0, minute=0, second=0, microsecond=0)
-            display_date_str = report_datetime_obj.strftime('%d %b %Y')
         except ValueError:
-            flash("รูปแบบวันที่ไม่ถูกต้อง กรุณาใช้YYYY-MM-DD", "danger")
+            flash("รูปแบบวันที่ไม่ถูกต้อง กรุณาใช้ YYYY-MM-DD", "danger")
             report_datetime_obj = get_bkk_time().replace(hour=0, minute=0, second=0, microsecond=0)
-            display_date_str = report_datetime_obj.strftime('%d %b %Y')
     else:
         report_datetime_obj = get_bkk_time().replace(hour=0, minute=0, second=0, microsecond=0)
-        display_date_str = report_datetime_obj.strftime('%d %b %Y')
 
+    # --- START: โค้ดที่แก้ไข ---
+    # กำหนดเวลาเริ่มต้นและสิ้นสุดของวันใน BKK Timezone สำหรับการ Query ที่ถูกต้อง
     start_of_report_day_iso = report_datetime_obj.isoformat()
-
+    end_of_report_day_iso = report_datetime_obj.replace(hour=23, minute=59, second=59, microsecond=999999).isoformat()
+    # --- END: โค้ดที่แก้ไข ---
+    
     report_date = report_datetime_obj.date()
-    sql_date_filter = report_date.strftime('%Y-%m-%d')
-    sql_date_filter_end_of_day = report_datetime_obj.replace(hour=23, minute=59, second=59, microsecond=999999).isoformat()
-
     is_psycopg2_conn = "psycopg2" in str(type(conn))
     timestamp_cast = "::timestamptz" if is_psycopg2_conn else ""
-    # กำหนด placeholder โดยตรงตามประเภทฐานข้อมูล
     placeholder = "%s" if is_psycopg2_conn else "?"
 
     # --- Tire Report Data ---
+    # --- START: โค้ดที่แก้ไข ---
     tire_movements_query_today = f"""
         SELECT
             tm.id, tm.timestamp, tm.type, tm.quantity_change, tm.remaining_quantity, tm.image_filename, tm.notes,
@@ -2849,16 +2846,17 @@ def daily_stock_report():
         LEFT JOIN sales_channels sc ON tm.channel_id = sc.id
         LEFT JOIN online_platforms op ON tm.online_platform_id = op.id
         LEFT JOIN wholesale_customers wc ON tm.wholesale_customer_id = wc.id
-        WHERE {database.get_sql_date_format_for_query('tm.timestamp')} = {placeholder}
+        WHERE tm.timestamp BETWEEN {placeholder} AND {placeholder}
         ORDER BY tm.timestamp DESC
     """
     if is_psycopg2_conn:
         cursor = conn.cursor()
-        cursor.execute(tire_movements_query_today, (sql_date_filter,))
+        cursor.execute(tire_movements_query_today, (start_of_report_day_iso, end_of_report_day_iso))
         tire_movements_raw_today = cursor.fetchall()
         cursor.close()
     else:
-        tire_movements_raw_today = conn.execute(tire_movements_query_today, (sql_date_filter,)).fetchall()
+        tire_movements_raw_today = conn.execute(tire_movements_query_today, (start_of_report_day_iso, end_of_report_day_iso)).fetchall()
+    # --- END: โค้ดที่แก้ไข ---
 
     processed_tire_movements_raw_today = []
     for movement in tire_movements_raw_today:
@@ -2866,8 +2864,8 @@ def daily_stock_report():
         movement_data['timestamp'] = convert_to_bkk_time(movement_data['timestamp'])
         processed_tire_movements_raw_today.append(movement_data)
     tire_movements_raw = processed_tire_movements_raw_today
-
-
+    
+    # ... (ส่วนที่เหลือของโค้ดในการคำนวณและประมวลผลข้อมูลยาง ไม่มีการเปลี่ยนแปลง) ...
     tire_quantities_before_report = defaultdict(int)
     tire_ids_involved = set()
     for movement in tire_movements_raw:
@@ -2876,6 +2874,7 @@ def daily_stock_report():
     day_before_report = report_datetime_obj.replace(hour=0, minute=0, second=0) - timedelta(microseconds=1)
     day_before_report_iso = day_before_report.isoformat()
 
+    sql_date_filter_end_of_day = report_datetime_obj.replace(hour=23, minute=59, second=59, microsecond=999999).isoformat()
     distinct_tire_ids_query_all_history = f"""
         SELECT DISTINCT tire_id
         FROM tire_movements
@@ -3019,8 +3018,8 @@ def daily_stock_report():
             'remaining_quantity': summary_data['current_quantity_sum']
         })
 
-
     # --- Wheel Report Data ---
+    # --- START: โค้ดที่แก้ไข ---
     wheel_movements_query_today = f"""
         SELECT
             wm.id, wm.timestamp, wm.type, wm.quantity_change, wm.remaining_quantity, wm.image_filename, wm.notes,
@@ -3036,16 +3035,17 @@ def daily_stock_report():
         LEFT JOIN sales_channels sc ON wm.channel_id = sc.id
         LEFT JOIN online_platforms op ON wm.online_platform_id = op.id
         LEFT JOIN wholesale_customers wc ON wm.wholesale_customer_id = wc.id
-        WHERE {database.get_sql_date_format_for_query('wm.timestamp')} = {placeholder}
+        WHERE wm.timestamp BETWEEN {placeholder} AND {placeholder}
         ORDER BY wm.timestamp DESC
     """
     if is_psycopg2_conn:
         cursor_wheel = conn.cursor()
-        cursor_wheel.execute(wheel_movements_query_today, (sql_date_filter,))
+        cursor_wheel.execute(wheel_movements_query_today, (start_of_report_day_iso, end_of_report_day_iso))
         wheel_movements_raw_today = cursor_wheel.fetchall()
         cursor_wheel.close()
     else:
-        wheel_movements_raw_today = conn.execute(wheel_movements_query_today, (sql_date_filter,)).fetchall()
+        wheel_movements_raw_today = conn.execute(wheel_movements_query_today, (start_of_report_day_iso, end_of_report_day_iso)).fetchall()
+    # --- END: โค้ดที่แก้ไข ---
 
     processed_wheel_movements_raw_today = []
     for movement in wheel_movements_raw_today:
@@ -3053,8 +3053,8 @@ def daily_stock_report():
         movement_data['timestamp'] = convert_to_bkk_time(movement_data['timestamp'])
         processed_wheel_movements_raw_today.append(movement_data)
     wheel_movements_raw = processed_wheel_movements_raw_today
-
-
+    
+    # ... (ส่วนที่เหลือของโค้ดในการคำนวณและประมวลผลข้อมูลแม็ก ไม่มีการเปลี่ยนแปลง) ...
     wheel_quantities_before_report = defaultdict(int)
     wheel_ids_involved = set()
     for movement in wheel_movements_raw:
@@ -3212,6 +3212,7 @@ def daily_stock_report():
         })
 
     # --- NEW: Spare Part Report Data ---
+    # --- START: โค้ดที่แก้ไข ---
     spare_part_movements_query_today = f"""
         SELECT
             spm.id, spm.timestamp, spm.type, spm.quantity_change, spm.remaining_quantity, spm.image_filename, spm.notes,
@@ -3229,16 +3230,17 @@ def daily_stock_report():
         LEFT JOIN sales_channels sc ON spm.channel_id = sc.id
         LEFT JOIN online_platforms op ON spm.online_platform_id = op.id
         LEFT JOIN wholesale_customers wc ON spm.wholesale_customer_id = wc.id
-        WHERE {database.get_sql_date_format_for_query('spm.timestamp')} = {placeholder}
+        WHERE spm.timestamp BETWEEN {placeholder} AND {placeholder}
         ORDER BY spm.timestamp DESC
     """
     if is_psycopg2_conn:
         cursor_spare_part = conn.cursor()
-        cursor_spare_part.execute(spare_part_movements_query_today, (sql_date_filter,))
+        cursor_spare_part.execute(spare_part_movements_query_today, (start_of_report_day_iso, end_of_report_day_iso))
         spare_part_movements_raw_today = cursor_spare_part.fetchall()
         cursor_spare_part.close()
     else:
-        spare_part_movements_raw_today = conn.execute(spare_part_movements_query_today, (sql_date_filter,)).fetchall()
+        spare_part_movements_raw_today = conn.execute(spare_part_movements_query_today, (start_of_report_day_iso, end_of_report_day_iso)).fetchall()
+    # --- END: โค้ดที่แก้ไข ---
 
     processed_spare_part_movements_raw_today = []
     for movement in spare_part_movements_raw_today:
@@ -3246,8 +3248,8 @@ def daily_stock_report():
         movement_data['timestamp'] = convert_to_bkk_time(movement_data['timestamp'])
         processed_spare_part_movements_raw_today.append(movement_data)
     spare_part_movements_raw = processed_spare_part_movements_raw_today
-
-
+    
+    # ... (ส่วนที่เหลือของโค้ดในการคำนวณและประมวลผลข้อมูลอะไหล่ ไม่มีการเปลี่ยนแปลง) ...
     spare_part_quantities_before_report = defaultdict(int)
     spare_part_ids_involved = set()
     for movement in spare_part_movements_raw:
@@ -3470,7 +3472,7 @@ def daily_stock_report():
     tomorrow_date_calc = report_datetime_obj + timedelta(days=1)
 
     return render_template('daily_stock_report.html',
-                           display_date_str=display_date_str,
+                           display_date_str=report_date.strftime('%d %b %Y'),
                            report_date_obj=report_date,
                            report_date_param=report_date.strftime('%Y-%m-%d'),
                            yesterday_date_param=yesterday_date_calc.strftime('%Y-%m-%d'),
