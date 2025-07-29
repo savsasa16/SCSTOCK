@@ -13,3 +13,4 @@ Flask-Caching
 redis
 python-barcode
 qrcode[pil]
+reportlab
