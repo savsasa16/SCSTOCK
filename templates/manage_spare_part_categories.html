@@ -1,0 +1,114 @@
+{% extends 'base.html' %}
+
+{% block page_title %}จัดการหมวดหมู่อะไหล่{% endblock %}
+
+{% block content %}
+<div class="card shadow-sm mb-4">
+    <div class="card-header bg-white d-flex justify-content-between align-items-center">
+        <h4 class="mb-0 text-dark"><i class="fas fa-sitemap me-2"></i>จัดการหมวดหมู่อะไหล่</h4>
+        <a href="#" class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#addCategoryModal"><i class="fas fa-plus me-1"></i>เพิ่มหมวดหมู่ใหม่</a>
+    </div>
+    <div class="card-body">
+        {% if categories %}
+        <div class="table-responsive">
+            <table class="table table-striped table-hover table-sm align-middle">
+                <thead class="table-light">
+                    <tr>
+                        <th>ID</th>
+                        <th>ชื่อหมวดหมู่</th>
+                        <th>หมวดหมู่แม่</th>
+                        <th class="text-center">จัดการ</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for category in categories %}
+                    <tr>
+                        <td>{{ category.id }}</td>
+                        <td>{{ category.name_display }}</td>
+                        <td>
+                            {% if category.parent_id %}
+                                {% for parent_cat in all_categories_flat %}
+                                    {% if parent_cat.id == category.parent_id %}{{ parent_cat.name }}{% endif %}
+                                {% endfor %}
+                            {% else %}
+                                <span class="text-muted">หมวดหมู่หลัก</span>
+                            {% endif %}
+                        </td>
+                        <td class="text-center">
+                            <a href="{{ url_for('edit_spare_part_category', category_id=category.id) }}" class="btn btn-warning btn-sm" title="แก้ไข"><i class="fas fa-edit"></i></a>
+                            <form action="{{ url_for('delete_spare_part_category', category_id=category.id) }}" method="POST" class="d-inline delete-category-form">
+                                <button type="submit" class="btn btn-danger btn-sm" title="ลบ" data-category-name="{{ category.name_display }}">
+                                    <i class="fas fa-trash-alt"></i>
+                                </button>
+                            </form>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="alert alert-info text-center">ยังไม่มีหมวดหมู่อะไหล่ในระบบ</div>
+        {% endif %}
+    </div>
+</div>
+
+{# Add Category Modal #}
+<div class="modal fade" id="addCategoryModal" tabindex="-1" aria-labelledby="addCategoryModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title" id="addCategoryModalLabel">เพิ่มหมวดหมู่อะไหล่ใหม่</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form action="{{ url_for('add_spare_part_category') }}" method="POST">
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="categoryName" class="form-label">ชื่อหมวดหมู่*</label>
+                        <input type="text" class="form-control" id="categoryName" name="name" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="parentCategory" class="form-label">หมวดหมู่แม่ (ถ้ามี)</label>
+                        <select class="form-select" id="parentCategory" name="parent_id">
+                            <option value="none">-- หมวดหมู่หลัก --</option>
+                            {% for cat in all_categories_flat %}
+                                <option value="{{ cat.id }}">{{ cat.name }}</option>
+                            {% endfor %}
+                        </select>
+                        <div class="form-text">เลือกหมวดหมู่แม่หากต้องการสร้างเป็นหมวดหมู่ย่อย</div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">ยกเลิก</button>
+                    <button type="submit" class="btn btn-primary"><i class="fas fa-plus me-1"></i>เพิ่มหมวดหมู่</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Handle delete form submission
+        document.querySelectorAll('.delete-category-form').forEach(form => {
+            form.addEventListener('submit', function(event) {
+                const categoryName = this.querySelector('button').dataset.categoryName;
+                if (!confirm(`คุณแน่ใจหรือไม่ว่าต้องการลบหมวดหมู่ "${categoryName}"? การลบจะทำได้ก็ต่อเมื่อไม่มีอะไหล่หรือหมวดหมู่ย่อยใดๆ ผูกกับหมวดหมู่นี้อยู่!`)) {
+                    event.preventDefault();
+                }
+            });
+        });
+
+        // Initialize Select2 for parentCategory dropdown if you're using Select2
+        // If not using Select2, this line can be removed.
+        // $('#parentCategory').select2({
+        //     theme: "bootstrap-5",
+        //     width: $(this).data('width') ? $(this).data('width') : $(this).hasClass('w-100') ? '100%' : 'style',
+        //     placeholder: "-- หมวดหมู่หลัก --",
+        //     allowClear: true
+        // });
+    });
+</script>
+{% endblock %}

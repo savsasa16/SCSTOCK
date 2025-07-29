@@ -2,6 +2,7 @@ import sqlite3
 from datetime import datetime, timedelta
 import pytz
 import re
+from collections import defaultdict
 from werkzeug.security import generate_password_hash, check_password_hash
 import os
 from urllib.parse import urlparse
@@ -111,6 +112,36 @@ def init_db(conn):
             method TEXT NOT NULL,
             url TEXT NOT NULL,
             FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
+            );
+        """)
+
+    # NEW: Tire Cost History Table
+    if is_postgres:
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS tire_cost_history (
+                id SERIAL PRIMARY KEY,
+                tire_id INTEGER NOT NULL,
+                changed_at TIMESTAMP WITH TIME ZONE NOT NULL,
+                old_cost_sc REAL NULL,
+                new_cost_sc REAL NULL,
+                user_id INTEGER NULL,
+                notes TEXT NULL, -- เผื่อต้องการใส่หมายเหตุ
+                FOREIGN KEY (tire_id) REFERENCES tires(id) ON DELETE CASCADE,
+                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
+            );
+        """)
+    else: # SQLite
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS tire_cost_history (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                tire_id INTEGER NOT NULL,
+                changed_at TEXT NOT NULL,
+                old_cost_sc REAL NULL,
+                new_cost_sc REAL NULL,
+                user_id INTEGER NULL,
+                notes TEXT NULL,
+                FOREIGN KEY (tire_id) REFERENCES tires(id) ON DELETE CASCADE,
+                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
             );
         """)
 
@@ -273,6 +304,30 @@ def init_db(conn):
                 is_deleted BOOLEAN DEFAULT 0, -- ADDED FOR SOFT DELETE
                 UNIQUE(brand, model, size),
                 FOREIGN KEY (promotion_id) REFERENCES promotions(id) ON DELETE SET NULL
+            );
+        """)
+        
+    # Notifications Table (NEW)
+    if is_postgres:
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS notifications (
+                id SERIAL PRIMARY KEY,
+                message TEXT NOT NULL,
+                user_id INTEGER NULL,
+                created_at TIMESTAMP WITH TIME ZONE NOT NULL,
+                is_read BOOLEAN DEFAULT FALSE,
+                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
+            );
+        """)
+    else: # SQLite
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS notifications (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                message TEXT NOT NULL,
+                user_id INTEGER NULL,
+                created_at TEXT NOT NULL,
+                is_read BOOLEAN DEFAULT 0,
+                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
             );
         """)
 
@@ -573,6 +628,282 @@ def init_db(conn):
                 FOREIGN KEY (manager_id) REFERENCES users(id)
             );
         """)
+
+    if is_postgres:
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS spare_part_categories (
+                id SERIAL PRIMARY KEY,
+                name VARCHAR(255) NOT NULL UNIQUE,
+                parent_id INTEGER NULL, -- สำหรับหมวดหมู่ย่อย (self-referencing)
+                FOREIGN KEY (parent_id) REFERENCES spare_part_categories(id) ON DELETE CASCADE
+            );
+        """)
+    else: # SQLite
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS spare_part_categories (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL UNIQUE,
+                parent_id INTEGER NULL,
+                FOREIGN KEY (parent_id) REFERENCES spare_part_categories(id) ON DELETE CASCADE
+            );
+        """)
+
+    # ตารางอะไหล่ (Spare Parts)
+    if is_postgres:
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS spare_parts (
+                id SERIAL PRIMARY KEY,
+                name VARCHAR(255) NOT NULL,
+                part_number VARCHAR(255) UNIQUE NULL, -- รหัสอะไหล่ (ถ้ามี)
+                brand VARCHAR(255) NULL,
+                description TEXT NULL,
+                quantity INTEGER DEFAULT 0,
+                cost REAL NULL,
+                retail_price REAL NOT NULL,
+                wholesale_price1 REAL NULL,
+                wholesale_price2 REAL NULL,
+                cost_online REAL NULL,
+                image_filename VARCHAR(500) NULL,
+                is_deleted BOOLEAN DEFAULT FALSE,
+                category_id INTEGER NULL, -- Foreign Key ไปที่ spare_part_categories
+                FOREIGN KEY (category_id) REFERENCES spare_part_categories(id) ON DELETE SET NULL
+            );
+        """)
+    else: # SQLite
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS spare_parts (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                part_number TEXT UNIQUE NULL,
+                brand TEXT NULL,
+                description TEXT NULL,
+                quantity INTEGER DEFAULT 0,
+                cost REAL NULL,
+                retail_price REAL NOT NULL,
+                wholesale_price1 REAL NULL,
+                wholesale_price2 REAL NULL,
+                cost_online REAL NULL,
+                image_filename TEXT NULL,
+                is_deleted BOOLEAN DEFAULT 0,
+                category_id INTEGER NULL,
+                FOREIGN KEY (category_id) REFERENCES spare_part_categories(id) ON DELETE SET NULL
+            );
+        """)
+
+    # ตารางบันทึกการเคลื่อนไหวอะไหล่ (Spare Part Movements)
+    if is_postgres:
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS spare_part_movements (
+                id SERIAL PRIMARY KEY,
+                spare_part_id INTEGER NOT NULL,
+                timestamp TIMESTAMP WITH TIME ZONE NOT NULL,
+                type VARCHAR(50) NOT NULL, -- IN, OUT, RETURN
+                quantity_change INTEGER NOT NULL,
+                remaining_quantity INTEGER NOT NULL,
+                notes TEXT,
+                image_filename VARCHAR(500) NULL,
+                user_id INTEGER NULL,
+                channel_id INTEGER NULL,
+                online_platform_id INTEGER NULL,
+                wholesale_customer_id INTEGER NULL,
+                return_customer_type VARCHAR(50) NULL,
+                FOREIGN KEY (spare_part_id) REFERENCES spare_parts(id),
+                FOREIGN KEY (user_id) REFERENCES users(id),
+                FOREIGN KEY (channel_id) REFERENCES sales_channels(id),
+                FOREIGN KEY (online_platform_id) REFERENCES online_platforms(id),
+                FOREIGN KEY (wholesale_customer_id) REFERENCES wholesale_customers(id)
+            );
+        """)
+    else: # SQLite
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS spare_part_movements (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                spare_part_id INTEGER NOT NULL,
+                timestamp TEXT NOT NULL,
+                type TEXT NOT NULL, -- IN, OUT, RETURN
+                quantity_change INTEGER NOT NULL,
+                remaining_quantity INTEGER NOT NULL,
+                notes TEXT,
+                image_filename TEXT NULL,
+                user_id INTEGER NULL,
+                channel_id INTEGER NULL,
+                online_platform_id INTEGER NULL,
+                wholesale_customer_id INTEGER NULL,
+                return_customer_type TEXT NULL,
+                FOREIGN KEY (spare_part_id) REFERENCES spare_parts(id),
+                FOREIGN KEY (user_id) REFERENCES users(id),
+                FOREIGN KEY (channel_id) REFERENCES sales_channels(id),
+                FOREIGN KEY (online_platform_id) REFERENCES online_platforms(id),
+                FOREIGN KEY (wholesale_customer_id) REFERENCES wholesale_customers(id)
+            );
+        """)
+
+    # ตาราง Barcode สำหรับอะไหล่ (Spare Part Barcodes)
+    if is_postgres:
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS spare_part_barcodes (
+                id SERIAL PRIMARY KEY,
+                spare_part_id INTEGER NOT NULL,
+                barcode_string VARCHAR(255) NOT NULL UNIQUE,
+                is_primary_barcode BOOLEAN DEFAULT FALSE,
+                FOREIGN KEY (spare_part_id) REFERENCES spare_parts(id) ON DELETE CASCADE
+            );
+        """)
+    else: # SQLite
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS spare_part_barcodes (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                spare_part_id INTEGER NOT NULL,
+                barcode_string TEXT NOT NULL UNIQUE,
+                is_primary_barcode BOOLEAN DEFAULT 0,
+                FOREIGN KEY (spare_part_id) REFERENCES spare_parts(id) ON DELETE CASCADE
+            );
+        """)
+
+    # --- START: NEW INDEX CREATION CODE TO BE ADDED ---
+    print("Creating necessary indexes for performance...")
+
+    # activity_logs
+    if is_postgres:
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_activity_logs_timestamp ON activity_logs(timestamp);")
+    else:
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_activity_logs_timestamp ON activity_logs(timestamp);")
+
+    # promotions
+    if is_postgres:
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_promotions_is_active_is_deleted ON promotions(is_active, is_deleted);")
+    else:
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_promotions_is_active_is_deleted ON promotions(is_active, is_deleted);")
+
+    # tires
+    if is_postgres:
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_tires_brand_model_size ON tires(brand, model, size);")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_tires_is_deleted ON tires(is_deleted);")
+    else:
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_tires_brand_model_size ON tires(brand, model, size);")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_tires_is_deleted ON tires(is_deleted);")
+
+    # tire_movements
+    # idx_tire_movements_tire_id is already in the original file
+    if is_postgres:
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_tire_movements_timestamp ON tire_movements(timestamp);")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_tire_movements_wholesale_customer_id ON tire_movements(wholesale_customer_id);")
+    else:
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_tire_movements_timestamp ON tire_movements(timestamp);")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_tire_movements_wholesale_customer_id ON tire_movements(wholesale_customer_id);")
+
+    # wheels
+    if is_postgres:
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_wheels_brand_model_diameter_pcd_width_et_color ON wheels(brand, model, diameter, pcd, width, et, color);")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_wheels_is_deleted ON wheels(is_deleted);")
+    else:
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_wheels_brand_model_diameter_pcd_width_et_color ON wheels(brand, model, diameter, pcd, width, et, color);")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_wheels_is_deleted ON wheels(is_deleted);")
+
+    # wheel_movements
+    # idx_wheel_movements_wheel_id is already in the original file
+    if is_postgres:
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_wheel_movements_timestamp ON wheel_movements(timestamp);")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_wheel_movements_wholesale_customer_id ON wheel_movements(wholesale_customer_id);")
+    else:
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_wheel_movements_timestamp ON wheel_movements(timestamp);")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_wheel_movements_wholesale_customer_id ON wheel_movements(wholesale_customer_id);")
+
+    # wheel_fitments
+    if is_postgres:
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_wheel_fitments_wheel_id ON wheel_fitments(wheel_id);")
+    else:
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_wheel_fitments_wheel_id ON wheel_fitments(wheel_id);")
+
+    # notifications
+    if is_postgres:
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_notifications_created_at ON notifications(created_at DESC);")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_notifications_is_read ON notifications(is_read);")
+    else:
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_notifications_created_at ON notifications(created_at DESC);")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_notifications_is_read ON notifications(is_read);")
+
+    # tire_barcodes
+    if is_postgres:
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_tire_barcodes_barcode_string ON tire_barcodes(barcode_string);")
+    else:
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_tire_barcodes_barcode_string ON tire_barcodes(barcode_string);")
+
+    # wheel_barcodes
+    if is_postgres:
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_wheel_barcodes_barcode_string ON wheel_barcodes(barcode_string);")
+    else:
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_wheel_barcodes_barcode_string ON wheel_barcodes(barcode_string);")
+
+    # spare_part_categories
+    if is_postgres:
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_spare_part_categories_parent_id ON spare_part_categories(parent_id);")
+    else:
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_spare_part_categories_parent_id ON spare_part_categories(parent_id);")
+
+    # spare_parts
+    if is_postgres:
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_spare_parts_name_part_number_brand ON spare_parts(name, part_number, brand);")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_spare_parts_category_id ON spare_parts(category_id);")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_spare_parts_is_deleted ON spare_parts(is_deleted);")
+    else:
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_spare_parts_name_part_number_brand ON spare_parts(name, part_number, brand);")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_spare_parts_category_id ON spare_parts(category_id);")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_spare_parts_is_deleted ON spare_parts(is_deleted);")
+
+    # spare_part_movements
+    if is_postgres:
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_spare_part_movements_spare_part_id ON spare_part_movements(spare_part_id);")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_spare_part_movements_timestamp ON spare_part_movements(timestamp);")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_spare_part_movements_wholesale_customer_id ON spare_part_movements(wholesale_customer_id);")
+    else:
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_spare_part_movements_spare_part_id ON spare_part_movements(spare_part_id);")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_spare_part_movements_timestamp ON spare_part_movements(timestamp);")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_spare_part_movements_wholesale_customer_id ON spare_part_movements(wholesale_customer_id);")
+
+    # spare_part_barcodes
+    if is_postgres:
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_spare_part_barcodes_barcode_string ON spare_part_barcodes(barcode_string);")
+    else:
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_spare_part_barcodes_barcode_string ON spare_part_barcodes(barcode_string);")
+
+    # feedback
+    if is_postgres:
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_feedback_created_at ON feedback(created_at DESC);")
+    else:
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_feedback_created_at ON feedback(created_at DESC);")
+
+    # announcements
+    if is_postgres:
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_announcements_is_active_created_at ON announcements(is_active, created_at DESC);")
+    else:
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_announcements_is_active_created_at ON announcements(is_active, created_at DESC);")
+
+    # sales_channels
+    if is_postgres:
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_sales_channels_name ON sales_channels(name);")
+    else:
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_sales_channels_name ON sales_channels(name);")
+
+    # online_platforms
+    if is_postgres:
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_online_platforms_name ON online_platforms(name);")
+    else:
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_online_platforms_name ON online_platforms(name);")
+
+    # wholesale_customers
+    if is_postgres:
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_wholesale_customers_name ON wholesale_customers(name);")
+    else:
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_wholesale_customers_name ON wholesale_customers(name);")
+
+    # daily_reconciliations
+    if is_postgres:
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_daily_reconciliations_date ON daily_reconciliations(reconciliation_date);")
+    else:
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_daily_reconciliations_date ON daily_reconciliations(reconciliation_date);")
+
+    # --- END NEW INDEX CREATION CODE ---
     
     # --- INSERT DEFAULT DATA (MOVED HERE TO ENSURE COMMIT) ---
     # เพิ่มข้อมูลเริ่มต้นสำหรับ sales_channels (ถ้ายังไม่มี)
@@ -623,6 +954,7 @@ def init_db(conn):
     except Exception as e:
         print(f"Error inserting default wholesale customers: {e}")
         conn.rollback() # Rollback if default customers insertion fails
+
 
 
     conn.commit() # <--- IMPORTANT: COMMIT ALL CHANGES AFTER CREATING TABLES AND INSERTING DEFAULTS
@@ -873,6 +1205,610 @@ def get_all_wholesale_customers(conn):
     else:
         cursor.execute("SELECT id, name FROM wholesale_customers ORDER BY name")
     return [dict(row) if not isinstance(row, dict) else row for row in cursor.fetchall()]
+
+def add_spare_part_category(conn, name, parent_id=None):
+    cursor = conn.cursor()
+    is_postgres = "psycopg2" in str(type(conn))
+    try:
+        if is_postgres:
+            cursor.execute("INSERT INTO spare_part_categories (name, parent_id) VALUES (%s, %s) RETURNING id", (name, parent_id))
+            category_id = cursor.fetchone()['id']
+        else:
+            cursor.execute("INSERT INTO spare_part_categories (name, parent_id) VALUES (?, ?)", (name, parent_id))
+            category_id = cursor.lastrowid
+        conn.commit()
+        return category_id
+    except (sqlite3.IntegrityError, Exception) as e:
+        conn.rollback()
+        if "UNIQUE constraint failed" in str(e) or "duplicate key value violates unique constraint" in str(e):
+            raise ValueError(f"ชื่อหมวดหมู่ '{name}' มีอยู่ในระบบแล้ว")
+        else:
+            raise ValueError(f"เกิดข้อผิดพลาดในการเพิ่มหมวดหมู่: {e}")
+
+def get_spare_part_category(conn, category_id):
+    cursor = conn.cursor()
+    is_postgres = "psycopg2" in str(type(conn))
+    if is_postgres:
+        cursor.execute("SELECT id, name, parent_id FROM spare_part_categories WHERE id = %s", (category_id,))
+    else:
+        cursor.execute("SELECT id, name, parent_id FROM spare_part_categories WHERE id = ?", (category_id,))
+    category_data = cursor.fetchone()
+    return dict(category_data) if category_data else None
+
+def get_all_spare_part_categories(conn):
+    cursor = conn.cursor()
+    is_postgres = "psycopg2" in str(type(conn))
+    if is_postgres:
+        cursor.execute("SELECT id, name, parent_id FROM spare_part_categories ORDER BY name")
+    else:
+        cursor.execute("SELECT id, name, parent_id FROM spare_part_categories ORDER BY name")
+    return [dict(row) for row in cursor.fetchall()]
+
+def get_all_spare_part_categories_hierarchical(conn, include_id=False):
+    """
+    ดึงหมวดหมู่ทั้งหมดและจัดโครงสร้างให้เป็นลำดับชั้น (สำหรับ Dropdown ที่แสดง Indent)
+    คืนค่าเป็น list ของ dictionaries ที่แต่ละ dict มี 'id', 'name_display', 'parent_id'
+    โดยที่ 'name_display' จะเป็นชื่อที่มีการเยื้องตามระดับชั้น
+    """
+    categories = get_all_spare_part_categories(conn)
+
+    # สร้าง dict เพื่อเก็บ children ของแต่ละ parent
+    children_map = defaultdict(list)
+    for cat in categories:
+        children_map[cat['parent_id']].append(cat)
+
+    # ฟังก์ชัน recursive เพื่อดึงและจัดเรียงหมวดหมู่
+    final_list = []
+    def traverse_categories(parent_id, level):
+        # เรียง children ตามชื่อ (หรือตามลำดับที่คุณต้องการ)
+        current_level_categories = sorted(children_map[parent_id], key=lambda x: x['name'])
+
+        for cat in current_level_categories:
+            prefix = "— " * level # "— " (em dash + space)
+            display_name = f"{prefix}{cat['name']}"
+
+            item = {'id': cat['id'], 'name_display': display_name, 'parent_id': cat['parent_id']}
+            if include_id: # ถ้าต้องการ id จริงๆ ก็ใส่เพิ่ม
+                item['actual_id'] = cat['id']
+
+            final_list.append(item)
+
+            # เรียกตัวเองซ้ำสำหรับ children
+            traverse_categories(cat['id'], level + 1)
+
+    traverse_categories(None, 0) # เริ่มจากหมวดหมู่หลัก (parent_id = None), level 0
+
+    return final_list
+
+
+def update_spare_part_category(conn, category_id, new_name, new_parent_id=None):
+    cursor = conn.cursor()
+    is_postgres = "psycopg2" in str(type(conn))
+
+    # ตรวจสอบว่าพยายามตั้งให้ตัวเองเป็น parent_id หรือไม่
+    if new_parent_id is not None and category_id == new_parent_id:
+        raise ValueError("ไม่สามารถกำหนดหมวดหมู่แม่เป็นตัวหมวดหมู่เองได้")
+
+    # ตรวจสอบการวนลูป (ถ้า A -> B -> A) - ซับซ้อนขึ้นอยู่กับการออกแบบ UI
+    # สำหรับตอนนี้ เราจะไม่ตรวจสอบการวนซ้ำแบบหลายชั้นลึกๆ แต่จะป้องกันแค่ self-parenting
+
+    try:
+        if is_postgres:
+            cursor.execute("""
+                UPDATE spare_part_categories SET name = %s, parent_id = %s WHERE id = %s
+            """, (new_name, new_parent_id, category_id))
+        else:
+            cursor.execute("""
+                UPDATE spare_part_categories SET name = ?, parent_id = ? WHERE id = ?
+            """, (new_name, new_parent_id, category_id))
+        conn.commit()
+    except (sqlite3.IntegrityError, Exception) as e:
+        conn.rollback()
+        if "UNIQUE constraint failed" in str(e) or "duplicate key value violates unique constraint" in str(e):
+            raise ValueError(f"ชื่อหมวดหมู่ '{new_name}' มีอยู่ในระบบแล้ว")
+        else:
+            raise ValueError(f"เกิดข้อผิดพลาดในการอัปเดตหมวดหมู่: {e}")
+
+def delete_spare_part_category(conn, category_id):
+    cursor = conn.cursor()
+    is_postgres = "psycopg2" in str(type(conn))
+
+    # ตรวจสอบว่ามีอะไหล่ใดๆ ใช้หมวดหมู่นี้อยู่หรือไม่
+    if is_postgres:
+        cursor.execute("SELECT COUNT(*) FROM spare_parts WHERE category_id = %s", (category_id,))
+    else:
+        cursor.execute("SELECT COUNT(*) FROM spare_parts WHERE category_id = ?", (category_id,))
+    spare_parts_count = cursor.fetchone()[0]
+    if spare_parts_count > 0:
+        raise ValueError(f"ไม่สามารถลบหมวดหมู่นี้ได้ มีอะไหล่ {spare_parts_count} รายการที่ใช้หมวดหมู่นี้อยู่")
+
+    # ตรวจสอบว่ามีหมวดหมู่ย่อยอื่นผูกอยู่หรือไม่
+    if is_postgres:
+        cursor.execute("SELECT COUNT(*) FROM spare_part_categories WHERE parent_id = %s", (category_id,))
+    else:
+        cursor.execute("SELECT COUNT(*) FROM spare_part_categories WHERE parent_id = ?", (category_id,))
+    subcategories_count = cursor.fetchone()[0]
+    if subcategories_count > 0:
+        raise ValueError(f"ไม่สามารถลบหมวดหมู่นี้ได้ มีหมวดหมู่ย่อย {subcategories_count} รายการที่ผูกอยู่")
+
+    if is_postgres:
+        cursor.execute("DELETE FROM spare_part_categories WHERE id = %s", (category_id,))
+    else:
+        cursor.execute("DELETE FROM spare_part_categories WHERE id = ?", (category_id,))
+    conn.commit()
+
+# --- Spare Part Functions (CRUD) ---
+def add_spare_part(conn, name, part_number, brand, description, quantity, cost, retail_price,
+                   wholesale_price1=None, wholesale_price2=None, cost_online=None,
+                   image_filename=None, category_id=None, user_id=None):
+    cursor = conn.cursor()
+    is_postgres = "psycopg2" in str(type(conn))
+
+    if is_postgres:
+        cursor.execute("""
+            INSERT INTO spare_parts (name, part_number, brand, description, quantity, cost, retail_price,
+                                     wholesale_price1, wholesale_price2, cost_online, image_filename,
+                                     is_deleted, category_id)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, FALSE, %s) RETURNING id
+        """, (name, part_number, brand, description, quantity, cost, retail_price,
+              wholesale_price1, wholesale_price2, cost_online, image_filename, category_id))
+        spare_part_id = cursor.fetchone()['id']
+    else:
+        cursor.execute("""
+            INSERT INTO spare_parts (name, part_number, brand, description, quantity, cost, retail_price,
+                                     wholesale_price1, wholesale_price2, cost_online, image_filename,
+                                     is_deleted, category_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)
+        """, (name, part_number, brand, description, quantity, cost, retail_price,
+              wholesale_price1, wholesale_price2, cost_online, image_filename, category_id))
+        spare_part_id = cursor.lastrowid
+
+    # บันทึกการเคลื่อนไหวเป็น "ซื้อเข้า"
+    buy_in_channel_id = get_sales_channel_id(conn, 'ซื้อเข้า')
+    add_spare_part_movement(conn, spare_part_id, 'IN', quantity, quantity, 'เพิ่มอะไหล่ใหม่เข้าสต็อก (ซื้อเข้า)',
+                            None, user_id=user_id, channel_id=buy_in_channel_id)
+
+    conn.commit()
+    return spare_part_id
+
+def get_spare_part(conn, spare_part_id):
+    cursor = conn.cursor()
+    is_postgres = "psycopg2" in str(type(conn))
+    if is_postgres:
+        cursor.execute("""
+            SELECT sp.*, spc.name AS category_name, spc.parent_id AS category_parent_id
+            FROM spare_parts sp
+            LEFT JOIN spare_part_categories spc ON sp.category_id = spc.id
+            WHERE sp.id = %s
+        """, (spare_part_id,))
+    else:
+        cursor.execute("""
+            SELECT sp.*, spc.name AS category_name, spc.parent_id AS category_parent_id
+            FROM spare_parts sp
+            LEFT JOIN spare_part_categories spc ON sp.category_id = spc.id
+            WHERE sp.id = ?
+        """, (spare_part_id,))
+    spare_part_data = cursor.fetchone()
+    return dict(spare_part_data) if spare_part_data else None
+
+def update_spare_part(conn, spare_part_id, name, part_number, brand, description, cost, retail_price,
+                      wholesale_price1, wholesale_price2, cost_online, image_filename, category_id):
+    cursor = conn.cursor()
+    is_postgres = "psycopg2" in str(type(conn))
+
+    if is_postgres:
+        cursor.execute("""
+            UPDATE spare_parts SET
+                name = %s, part_number = %s, brand = %s, description = %s, cost = %s, retail_price = %s,
+                wholesale_price1 = %s, wholesale_price2 = %s, cost_online = %s, image_filename = %s,
+                category_id = %s
+            WHERE id = %s
+        """, (name, part_number, brand, description, cost, retail_price,
+              wholesale_price1, wholesale_price2, cost_online, image_filename,
+              category_id, spare_part_id))
+    else:
+        cursor.execute("""
+            UPDATE spare_parts SET
+                name = ?, part_number = ?, brand = ?, description = ?, cost = ?, retail_price = ?,
+                wholesale_price1 = ?, wholesale_price2 = ?, cost_online = ?, image_filename = ?,
+                category_id = ?
+            WHERE id = ?
+        """, (name, part_number, brand, description, cost, retail_price,
+              wholesale_price1, wholesale_price2, cost_online, image_filename,
+              category_id, spare_part_id))
+    conn.commit()
+
+# --- Spare Part Functions (สำหรับ Import/Export) ---
+def add_spare_part_import(conn, name, part_number, brand, description, quantity, cost, retail_price,
+                          wholesale_price1, wholesale_price2, cost_online, image_filename, category_id):
+    cursor = conn.cursor()
+    is_postgres = "psycopg2" in str(type(conn))
+
+    if is_postgres:
+        cursor.execute("""
+            INSERT INTO spare_parts (name, part_number, brand, description, quantity, cost, retail_price,
+                                     wholesale_price1, wholesale_price2, cost_online, image_filename,
+                                     is_deleted, category_id)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, FALSE, %s) RETURNING id
+        """, (name, part_number, brand, description, quantity, cost, retail_price,
+              wholesale_price1, wholesale_price2, cost_online, image_filename, category_id))
+        spare_part_id = cursor.fetchone()['id']
+    else:
+        cursor.execute("""
+            INSERT INTO spare_parts (name, part_number, brand, description, quantity, cost, retail_price,
+                                     wholesale_price1, wholesale_price2, cost_online, image_filename,
+                                     is_deleted, category_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)
+        """, (name, part_number, brand, description, quantity, cost, retail_price,
+              wholesale_price1, wholesale_price2, cost_online, image_filename, category_id))
+        spare_part_id = cursor.lastrowid
+    conn.commit()
+    return spare_part_id
+
+def update_spare_part_import(conn, spare_part_id, name, part_number, brand, description, quantity, cost, retail_price,
+                             wholesale_price1, wholesale_price2, cost_online, image_filename, category_id):
+    cursor = conn.cursor()
+    is_postgres = "psycopg2" in str(type(conn))
+
+    if is_postgres:
+        cursor.execute("""
+            UPDATE spare_parts SET
+                name = %s, part_number = %s, brand = %s, description = %s, quantity = %s, cost = %s, retail_price = %s,
+                wholesale_price1 = %s, wholesale_price2 = %s, cost_online = %s, image_filename = %s,
+                category_id = %s
+            WHERE id = %s
+        """, (name, part_number, brand, description, quantity, cost, retail_price,
+              wholesale_price1, wholesale_price2, cost_online, image_filename,
+              category_id, spare_part_id))
+    else:
+        cursor.execute("""
+            UPDATE spare_parts SET
+                name = ?, part_number = ?, brand = ?, description = ?, quantity = ?, cost = ?, retail_price = ?,
+                wholesale_price1 = ?, wholesale_price2 = ?, cost_online = ?, image_filename = ?,
+                category_id = ?
+            WHERE id = ?
+        """, (name, part_number, brand, description, quantity, cost, retail_price,
+              wholesale_price1, wholesale_price2, cost_online, image_filename,
+              category_id, spare_part_id))
+    conn.commit()
+
+
+def get_all_spare_parts(conn, query=None, brand_filter='all', category_filter='all', include_deleted=False):
+    cursor = conn.cursor()
+    sql_query = """
+        SELECT sp.*, spc.name AS category_name, spc.parent_id AS category_parent_id
+        FROM spare_parts sp
+        LEFT JOIN spare_part_categories spc ON sp.category_id = spc.id
+    """
+    params = []
+    conditions = []
+    is_postgres = "psycopg2" in str(type(conn))
+
+    if not include_deleted:
+        conditions.append("sp.is_deleted = FALSE" if is_postgres else "sp.is_deleted = 0")
+
+    if query:
+        search_term = f"%{query}%"
+        like_op = "ILIKE" if is_postgres else "LIKE"
+        placeholder = "%s" if is_postgres else "?"
+        conditions.append(f"(sp.name {like_op} {placeholder} OR sp.part_number {like_op} {placeholder} OR sp.brand {like_op} {placeholder} OR spc.name {like_op} {placeholder})")
+        params.extend([search_term, search_term, search_term, search_term])
+
+    if brand_filter != 'all':
+        placeholder = "%s" if is_postgres else "?"
+        conditions.append(f"sp.brand = {placeholder}")
+        params.append(brand_filter)
+
+    # --- START: MODIFIED SECTION ---
+    # Check if category_filter has a value and is not 'all', then convert to integer
+    if category_filter and category_filter != 'all':
+        try:
+            category_id_int = int(category_filter)
+            placeholder = "%s" if is_postgres else "?"
+            conditions.append(f"sp.category_id = {placeholder}")
+            params.append(category_id_int) # Append the integer value
+        except (ValueError, TypeError):
+            # If the value is not a valid integer, ignore it to prevent errors
+            print(f"Warning: Invalid category_filter value received: {category_filter}")
+            pass
+    # --- END: MODIFIED SECTION ---
+
+
+    if conditions:
+        sql_query += " WHERE " + " AND ".join(conditions)
+
+    sql_query += " ORDER BY sp.brand, spc.name, sp.name"
+
+    if is_postgres:
+        # For psycopg2, placeholders are already %s
+        cursor.execute(sql_query, params)
+    else:
+        # For SQLite, replace all placeholders with ?
+        sql_query_sqlite = sql_query
+        for i in range(len(params)):
+             sql_query_sqlite = sql_query_sqlite.replace('%s', '?', 1)
+        sql_query_sqlite = sql_query_sqlite.replace('ILIKE', 'LIKE')
+        cursor.execute(sql_query_sqlite, params)
+
+    spare_parts = cursor.fetchall()
+    return [dict(row) for row in spare_parts]
+
+
+def update_spare_part_movement(conn, movement_id, new_notes, new_image_filename, new_type, new_quantity_change,
+                               new_channel_id, new_online_platform_id, new_wholesale_customer_id, new_return_customer_type):
+    cursor = conn.cursor()
+    is_postgres = "psycopg2" in str(type(conn))
+
+    # 1. ดึงข้อมูลการเคลื่อนไหวเดิม
+    if is_postgres:
+        cursor.execute("SELECT spare_part_id, type, quantity_change FROM spare_part_movements WHERE id = %s", (movement_id,))
+    else:
+        cursor.execute("SELECT spare_part_id, type, quantity_change FROM spare_part_movements WHERE id = ?", (movement_id,))
+
+    old_movement = cursor.fetchone()
+    if not old_movement:
+        raise ValueError("ไม่พบข้อมูลการเคลื่อนไหวอะไหล่ที่ระบุ")
+
+    old_spare_part_id = old_movement['spare_part_id']
+    old_type = old_movement['type']
+    old_quantity_change = old_movement['quantity_change']
+
+    # 2. ปรับยอดสต็อกของอะไหล่หลักกลับไปก่อนการเคลื่อนไหวเดิม
+    current_spare_part = get_spare_part(conn, old_spare_part_id)
+    if not current_spare_part:
+        raise ValueError("ไม่พบอะไหล่หลักที่เกี่ยวข้องกับการเคลื่อนไหวนี้")
+
+    current_quantity_in_stock = current_spare_part['quantity']
+
+    # ย้อนกลับการเปลี่ยนแปลงเก่า
+    if old_type == 'IN' or old_type == 'RETURN':
+        current_quantity_in_stock -= old_quantity_change
+    elif old_type == 'OUT':
+        current_quantity_in_stock += old_quantity_change
+
+    # 3. อัปเดตข้อมูลการเคลื่อนไหวในตาราง spare_part_movements
+    if is_postgres:
+        cursor.execute("""
+            UPDATE spare_part_movements
+            SET notes = %s, image_filename = %s, type = %s, quantity_change = %s,
+                channel_id = %s, online_platform_id = %s, wholesale_customer_id = %s, return_customer_type = %s
+            WHERE id = %s
+        """, (new_notes, new_image_filename, new_type, new_quantity_change,
+              new_channel_id, new_online_platform_id, new_wholesale_customer_id, new_return_customer_type,
+              movement_id))
+    else:
+        cursor.execute("""
+            UPDATE spare_part_movements
+            SET notes = ?, image_filename = ?, type = ?, quantity_change = ?,
+                channel_id = ?, online_platform_id = ?, wholesale_customer_id = ?, return_customer_type = ?
+            WHERE id = ?
+        """, (new_notes, new_image_filename, new_type, new_quantity_change,
+              new_channel_id, new_online_platform_id, new_wholesale_customer_id, new_return_customer_type,
+              movement_id))
+
+    # 4. ปรับยอดสต็อกของอะไหล่หลักตามการเคลื่อนไหวใหม่
+    if new_type == 'IN' or new_type == 'RETURN':
+        current_quantity_in_stock += new_quantity_change
+    elif new_type == 'OUT':
+        current_quantity_in_stock -= new_quantity_change
+
+    # 5. อัปเดตยอดคงเหลือในตาราง spare_parts
+    update_spare_part_quantity(conn, old_spare_part_id, current_quantity_in_stock)
+
+    # 6. อัปเดต remaining_quantity ในรายการ movement ที่แก้ไขและรายการหลังจากนั้น
+    if is_postgres:
+        cursor.execute("SELECT id, type, quantity_change, timestamp FROM spare_part_movements WHERE spare_part_id = %s AND timestamp >= (SELECT timestamp FROM spare_part_movements WHERE id = %s) ORDER BY timestamp ASC, id ASC", (old_spare_part_id, movement_id))
+    else:
+        cursor.execute("SELECT id, type, quantity_change, timestamp FROM spare_part_movements WHERE spare_part_id = ? AND timestamp >= (SELECT timestamp FROM spare_part_movements WHERE id = ?) ORDER BY timestamp ASC, id ASC", (old_spare_part_id, movement_id))
+
+    subsequent_movements = cursor.fetchall()
+
+    if is_postgres:
+        cursor.execute("SELECT COALESCE(SUM(CASE WHEN type IN ('IN', 'RETURN') THEN quantity_change ELSE -quantity_change END), 0) FROM spare_part_movements WHERE spare_part_id = %s AND timestamp < (SELECT timestamp FROM spare_part_movements WHERE id = %s)", (old_spare_part_id, movement_id))
+    else:
+        cursor.execute("SELECT COALESCE(SUM(CASE WHEN type IN ('IN', 'RETURN') THEN quantity_change ELSE -quantity_change END), 0) FROM spare_part_movements WHERE spare_part_id = ? AND timestamp < (SELECT timestamp FROM spare_part_movements WHERE id = ?)", (old_spare_part_id, movement_id))
+
+    initial_qty_before_edited_movement = cursor.fetchone()[0] or 0
+
+    new_remaining_qty = initial_qty_before_edited_movement
+    for sub_move in subsequent_movements:
+        if sub_move['id'] == movement_id:
+            if new_type == 'IN' or new_type == 'RETURN':
+                new_remaining_qty += new_quantity_change
+            else:
+                new_remaining_qty -= new_quantity_change
+        else:
+            if sub_move['type'] == 'IN' or sub_move['type'] == 'RETURN':
+                new_remaining_qty += sub_move['quantity_change']
+            else:
+                new_remaining_qty -= sub_move['quantity_change']
+
+        if is_postgres:
+            cursor.execute("UPDATE spare_part_movements SET remaining_quantity = %s WHERE id = %s", (new_remaining_qty, sub_move['id']))
+        else:
+            cursor.execute("UPDATE spare_part_movements SET remaining_quantity = ? WHERE id = ?", (new_remaining_qty, sub_move['id']))
+
+    conn.commit()
+
+
+def delete_spare_part_movement(conn, movement_id):
+    cursor = conn.cursor()
+    is_postgres = "psycopg2" in str(type(conn))
+
+    # 1. ดึงข้อมูลการเคลื่อนไหวที่จะลบ
+    if is_postgres:
+        cursor.execute("SELECT spare_part_id, type, quantity_change, timestamp FROM spare_part_movements WHERE id = %s", (movement_id,))
+    else:
+        cursor.execute("SELECT spare_part_id, type, quantity_change, timestamp FROM spare_part_movements WHERE id = ?", (movement_id,))
+
+    movement_to_delete = cursor.fetchone()
+    if not movement_to_delete:
+        raise ValueError("ไม่พบข้อมูลการเคลื่อนไหวอะไหล่ที่ระบุ")
+
+    spare_part_id = movement_to_delete['spare_part_id']
+    move_type = movement_to_delete['type']
+    quantity_change = movement_to_delete['quantity_change']
+    movement_timestamp = movement_to_delete['timestamp']
+
+    # 2. ปรับยอดสต็อกของอะไหล่หลัก
+    current_spare_part = get_spare_part(conn, spare_part_id)
+    if not current_spare_part:
+        raise ValueError("ไม่พบอะไหล่หลักที่เกี่ยวข้องกับการเคลื่อนไหวนี้")
+
+    new_quantity_for_main_item = current_spare_part['quantity']
+    if move_type == 'IN' or move_type == 'RETURN':
+        new_quantity_for_main_item -= quantity_change
+    elif move_type == 'OUT':
+        new_quantity_for_main_item += quantity_change
+
+    update_spare_part_quantity(conn, spare_part_id, new_quantity_for_main_item)
+
+    # 3. ลบรายการเคลื่อนไหว
+    if is_postgres:
+        cursor.execute("DELETE FROM spare_part_movements WHERE id = %s", (movement_id,))
+    else:
+        cursor.execute("DELETE FROM spare_part_movements WHERE id = ?", (movement_id,))
+
+    # 4. อัปเดต remaining_quantity สำหรับรายการ movement ที่เกิดขึ้นหลังจากรายการที่ถูกลบ
+    if is_postgres:
+        cursor.execute("SELECT id, type, quantity_change, timestamp FROM spare_part_movements WHERE spare_part_id = %s AND timestamp >= %s ORDER BY timestamp ASC, id ASC", (spare_part_id, movement_timestamp))
+    else:
+        cursor.execute("SELECT id, type, quantity_change, timestamp FROM spare_part_movements WHERE spare_part_id = ? AND timestamp >= ? ORDER BY timestamp ASC, id ASC", (spare_part_id, movement_timestamp))
+
+    subsequent_movements = cursor.fetchall()
+
+    if is_postgres:
+        cursor.execute("SELECT COALESCE(SUM(CASE WHEN type IN ('IN', 'RETURN') THEN quantity_change ELSE -quantity_change END), 0) FROM spare_part_movements WHERE spare_part_id = %s AND timestamp < %s", (spare_part_id, movement_timestamp))
+    else:
+        cursor.execute("SELECT COALESCE(SUM(CASE WHEN type IN ('IN', 'RETURN') THEN quantity_change ELSE -quantity_change END), 0) FROM spare_part_movements WHERE spare_part_id = ? AND timestamp < ?", (spare_part_id, movement_timestamp))
+
+    current_remaining_qty = cursor.fetchone()[0] or 0
+
+    for sub_move in subsequent_movements:
+        if sub_move['type'] == 'IN' or sub_move['type'] == 'RETURN':
+            current_remaining_qty += sub_move['quantity_change']
+        else:
+            current_remaining_qty -= sub_move['quantity_change']
+
+        if is_postgres:
+            cursor.execute("UPDATE spare_part_movements SET remaining_quantity = %s WHERE id = %s", (current_remaining_qty, sub_move['id']))
+        else:
+            cursor.execute("UPDATE spare_part_movements SET remaining_quantity = ? WHERE id = ?", (current_remaining_qty, sub_move['id']))
+
+    conn.commit()
+
+
+def update_spare_part_quantity(conn, spare_part_id, new_quantity):
+    cursor = conn.cursor()
+    is_postgres = "psycopg2" in str(type(conn))
+    if is_postgres:
+        cursor.execute("UPDATE spare_parts SET quantity = %s WHERE id = %s", (new_quantity, spare_part_id))
+    else:
+        cursor.execute("UPDATE spare_parts SET quantity = ? WHERE id = ?", (new_quantity, spare_part_id))
+    conn.commit()
+
+def add_spare_part_movement(conn, spare_part_id, move_type, quantity_change, remaining_quantity, notes, image_filename=None, user_id=None,
+                      channel_id=None, online_platform_id=None, wholesale_customer_id=None, return_customer_type=None):
+    timestamp = get_bkk_time().isoformat()
+    cursor = conn.cursor()
+    if "psycopg2" in str(type(conn)):
+        cursor.execute("""
+            INSERT INTO spare_part_movements (spare_part_id, timestamp, type, quantity_change, remaining_quantity, notes, image_filename, user_id,
+                                        channel_id, online_platform_id, wholesale_customer_id, return_customer_type)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        """, (spare_part_id, timestamp, move_type, quantity_change, remaining_quantity, notes, image_filename, user_id,
+              channel_id, online_platform_id, wholesale_customer_id, return_customer_type))
+    else:
+        cursor.execute("""
+            INSERT INTO spare_part_movements (spare_part_id, timestamp, type, quantity_change, remaining_quantity, notes, image_filename, user_id,
+                                        channel_id, online_platform_id, wholesale_customer_id, return_customer_type)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (spare_part_id, timestamp, move_type, quantity_change, remaining_quantity, notes, image_filename, user_id,
+              channel_id, online_platform_id, wholesale_customer_id, return_customer_type))
+    conn.commit()
+
+def delete_spare_part(conn, spare_part_id):
+    cursor = conn.cursor()
+    is_postgres = "psycopg2" in str(type(conn))
+    if is_postgres:
+        cursor.execute("UPDATE spare_parts SET is_deleted = TRUE WHERE id = %s", (spare_part_id,))
+    else:
+        cursor.execute("UPDATE spare_parts SET is_deleted = 1 WHERE id = ?", (spare_part_id,))
+    conn.commit()
+
+def get_deleted_spare_parts(conn):
+    cursor = conn.cursor()
+    is_postgres = "psycopg2" in str(type(conn))
+    sql_query = """
+        SELECT sp.*, spc.name AS category_name
+        FROM spare_parts sp
+        LEFT JOIN spare_part_categories spc ON sp.category_id = spc.id
+        WHERE sp.is_deleted = TRUE
+        ORDER BY sp.brand, sp.name
+    """
+    if is_postgres:
+        cursor.execute(sql_query)
+    else:
+        cursor.execute(sql_query.replace('TRUE', '1'))
+    spare_parts = cursor.fetchall()
+    return [dict(row) for row in spare_parts]
+
+def restore_spare_part(conn, spare_part_id):
+    cursor = conn.cursor()
+    is_postgres = "psycopg2" in str(type(conn))
+    if is_postgres:
+        cursor.execute("UPDATE spare_parts SET is_deleted = FALSE WHERE id = %s", (spare_part_id,))
+    else:
+        cursor.execute("UPDATE spare_parts SET is_deleted = 0 WHERE id = ?", (spare_part_id,))
+    conn.commit()
+
+def get_all_spare_part_brands(conn):
+    cursor = conn.cursor()
+    is_postgres = "psycopg2" in str(type(conn))
+    if is_postgres:
+        cursor.execute("SELECT DISTINCT brand FROM spare_parts WHERE is_deleted = FALSE AND brand IS NOT NULL AND brand != '' ORDER BY brand")
+    else:
+        cursor.execute("SELECT DISTINCT brand FROM spare_parts WHERE is_deleted = 0 AND brand IS NOT NULL AND brand != '' ORDER BY brand")
+    brands_data = cursor.fetchall()
+    return [row['brand'] for row in brands_data]
+
+# --- Spare Part Barcode Functions ---
+def add_spare_part_barcode(conn, spare_part_id, barcode_string, is_primary=False):
+    cursor = conn.cursor()
+    is_postgres = "psycopg2" in str(type(conn))
+    if is_postgres:
+        cursor.execute("INSERT INTO spare_part_barcodes (spare_part_id, barcode_string, is_primary_barcode) VALUES (%s, %s, %s) ON CONFLICT (barcode_string) DO NOTHING",
+                       (spare_part_id, barcode_string, is_primary))
+    else:
+        cursor.execute("INSERT OR IGNORE INTO spare_part_barcodes (spare_part_id, barcode_string, is_primary_barcode) VALUES (?, ?, ?)",
+                       (spare_part_id, barcode_string, is_primary))
+
+def get_spare_part_id_by_barcode(conn, barcode_string):
+    cursor = conn.cursor()
+    is_postgres = "psycopg2" in str(type(conn))
+    if is_postgres:
+        cursor.execute("SELECT spare_part_id FROM spare_part_barcodes WHERE barcode_string = %s", (barcode_string,))
+    else:
+        cursor.execute("SELECT spare_part_id FROM spare_part_barcodes WHERE barcode_string = ?", (barcode_string,))
+    result = cursor.fetchone()
+    return result['spare_part_id'] if result else None
+
+def get_barcodes_for_spare_part(conn, spare_part_id):
+    cursor = conn.cursor()
+    is_postgres = "psycopg2" in str(type(conn))
+    if is_postgres:
+        cursor.execute("SELECT barcode_string, is_primary_barcode FROM spare_part_barcodes WHERE spare_part_id = %s ORDER BY is_primary_barcode DESC, barcode_string ASC", (spare_part_id,))
+    else:
+        cursor.execute("SELECT barcode_string, is_primary_barcode FROM spare_part_barcodes WHERE spare_part_id = ? ORDER BY is_primary_barcode DESC, barcode_string ASC", (spare_part_id,))
+    return [dict(row) for row in cursor.fetchall()]
+
+def delete_spare_part_barcode(conn, barcode_string):
+    cursor = conn.cursor()
+    is_postgres = "psycopg2" in str(type(conn))
+    if is_postgres:
+        cursor.execute("DELETE FROM spare_part_barcodes WHERE barcode_string = %s", (barcode_string,))
+    else:
+        cursor.execute("DELETE FROM spare_part_barcodes WHERE barcode_string = ?", (barcode_string,))
 
 # --- Promotion Functions ---
 def add_promotion(conn, name, promo_type, value1, value2, is_active):
@@ -1899,7 +2835,7 @@ def add_wheel(conn, brand, model, diameter, pcd, width, et, color, quantity, cos
     conn.commit()
     return wheel_id
     
-def update_wheel(conn, wheel_id, brand, model, diameter, pcd, width, et, color, cost, cost_online, wholesale_price1, wholesale_price2, retail_price, image_url):
+def update_wheel(conn, wheel_id, brand, model, diameter, pcd, width, et, color, quantity, cost, cost_online, wholesale_price1, wholesale_price2, retail_price, image_url):
     cursor = conn.cursor()
     if "psycopg2" in str(type(conn)):
         cursor.execute("""
@@ -1910,6 +2846,7 @@ def update_wheel(conn, wheel_id, brand, model, diameter, pcd, width, et, color, 
                 pcd = %s,
                 width = %s,
                 et = %s,
+                quantity = %s,
                 color = %s,
                 cost = %s,
                 cost_online = %s,
@@ -1918,7 +2855,7 @@ def update_wheel(conn, wheel_id, brand, model, diameter, pcd, width, et, color, 
                 retail_price = %s,
                 image_filename = %s
             WHERE id = %s
-        """, (brand, model, diameter, pcd, width, et, color, cost, cost_online, wholesale_price1, wholesale_price2, retail_price, image_url, wheel_id))
+        """, (brand, model, diameter, pcd, width, et, color, quantity, cost, cost_online, wholesale_price1, wholesale_price2, retail_price, image_url, wheel_id))
     else:
         cursor.execute("""
             UPDATE wheels SET
@@ -1929,6 +2866,7 @@ def update_wheel(conn, wheel_id, brand, model, diameter, pcd, width, et, color, 
                 width = ?,
                 et = ?,
                 color = ?,
+                quantity = ?,
                 cost = ?,
                 cost_online = ?,
                 wholesale_price1 = ?,
@@ -2218,12 +3156,12 @@ def recalculate_all_stock_histories(conn):
         print(f"  Recalculating for tire_id: {tire_id}")
         # ดึงประวัติทั้งหมดของยางเส้นนี้ เรียงตามเวลา
         sql_get_movements = f"""
-            SELECT id, type, quantity_change FROM tire_movements 
+            SELECT id, type, quantity_change FROM tire_movements
             WHERE tire_id = ? ORDER BY timestamp ASC, id ASC
         """
         cursor.execute(sql_get_movements.replace('?','%s') if is_postgres else sql_get_movements, (tire_id,))
         movements = cursor.fetchall()
-        
+
         # เริ่มคำนวณใหม่จาก 0
         running_stock = 0
         for move in movements:
@@ -2231,7 +3169,7 @@ def recalculate_all_stock_histories(conn):
                 running_stock += move['quantity_change']
             elif move['type'] == 'OUT':
                 running_stock -= move['quantity_change']
-            
+
             # อัปเดตค่า remaining_quantity ของทุกรายการให้ถูกต้อง
             sql_update_remaining = f"UPDATE tire_movements SET remaining_quantity = ? WHERE id = ?"
             cursor.execute(sql_update_remaining.replace('?','%s') if is_postgres else sql_update_remaining, (running_stock, move['id']))
@@ -2245,7 +3183,7 @@ def recalculate_all_stock_histories(conn):
         print(f"  Recalculating for wheel_id: {wheel_id}")
         # ดึงประวัติทั้งหมดของแม็กวงนี้ เรียงตามเวลา
         sql_get_movements = f"""
-            SELECT id, type, quantity_change FROM wheel_movements 
+            SELECT id, type, quantity_change FROM wheel_movements
             WHERE wheel_id = ? ORDER BY timestamp ASC, id ASC
         """
         cursor.execute(sql_get_movements.replace('?','%s') if is_postgres else sql_get_movements, (wheel_id,))
@@ -2259,6 +3197,30 @@ def recalculate_all_stock_histories(conn):
                 running_stock -= move['quantity_change']
 
             sql_update_remaining = f"UPDATE wheel_movements SET remaining_quantity = ? WHERE id = ?"
+            cursor.execute(sql_update_remaining.replace('?','%s') if is_postgres else sql_update_remaining, (running_stock, move['id']))
+
+    # --- NEW: Recalculate for all SPARE PARTS ---
+    print("Processing spare parts...")
+    cursor.execute("SELECT DISTINCT spare_part_id FROM spare_part_movements")
+    all_spare_part_ids = [row['spare_part_id'] for row in cursor.fetchall()]
+
+    for spare_part_id in all_spare_part_ids:
+        print(f"  Recalculating for spare_part_id: {spare_part_id}")
+        sql_get_movements = f"""
+            SELECT id, type, quantity_change FROM spare_part_movements
+            WHERE spare_part_id = ? ORDER BY timestamp ASC, id ASC
+        """
+        cursor.execute(sql_get_movements.replace('?','%s') if is_postgres else sql_get_movements, (spare_part_id,))
+        movements = cursor.fetchall()
+
+        running_stock = 0
+        for move in movements:
+            if move['type'] in ('IN', 'RETURN'):
+                running_stock += move['quantity_change']
+            elif move['type'] == 'OUT':
+                running_stock -= move['quantity_change']
+
+            sql_update_remaining = f"UPDATE spare_part_movements SET remaining_quantity = ? WHERE id = ?"
             cursor.execute(sql_update_remaining.replace('?','%s') if is_postgres else sql_update_remaining, (running_stock, move['id']))
 
     conn.commit()
@@ -2466,8 +3428,8 @@ def get_wholesale_customers_with_summary(conn, query=None):
 
     # ใช้ Subquery เพื่อรวมยอดซื้อจากทั้งยางและแม็ก
     sql = f"""
-        SELECT 
-            wc.id, 
+        SELECT
+            wc.id,
             wc.name,
             COALESCE(SUM(total_out.quantity), 0) as total_items_purchased
         FROM wholesale_customers wc
@@ -2475,6 +3437,8 @@ def get_wholesale_customers_with_summary(conn, query=None):
             SELECT wholesale_customer_id, quantity_change as quantity FROM tire_movements WHERE type = 'OUT'
             UNION ALL
             SELECT wholesale_customer_id, quantity_change as quantity FROM wheel_movements WHERE type = 'OUT'
+            UNION ALL -- NEW: Include spare_part_movements
+            SELECT wholesale_customer_id, quantity_change as quantity FROM spare_part_movements WHERE type = 'OUT'
         ) AS total_out ON wc.id = total_out.wholesale_customer_id
     """
 
@@ -2539,38 +3503,64 @@ def get_wholesale_customer_purchase_history(conn, customer_id, start_date=None, 
     """
     is_postgres = "psycopg2" in str(type(conn))
     placeholder = "%s" if is_postgres else "?"
+    timestamp_cast = "::timestamptz" if is_postgres else ""
 
-    sql = f"""
-        SELECT 'tire' as item_type, tm.timestamp, t.brand, t.model, t.size, tm.quantity_change
+    sql_parts = []
+    params = []
+
+    # Tire Movements
+    sql_parts.append(f"""
+        SELECT 'tire' as item_type, tm.timestamp, t.brand, t.model, t.size AS item_details, tm.quantity_change
         FROM tire_movements tm
         JOIN tires t ON tm.tire_id = t.id
         WHERE tm.type = 'OUT' AND tm.wholesale_customer_id = {placeholder}
-    """
-    params = [customer_id]
-
+    """)
+    params.append(customer_id)
     if start_date and end_date:
-        sql += f" AND tm.timestamp BETWEEN {placeholder} AND {placeholder}"
+        sql_parts[-1] += f" AND tm.timestamp BETWEEN {placeholder}{timestamp_cast} AND {placeholder}{timestamp_cast}"
         params.extend([start_date.isoformat(), end_date.isoformat()])
 
-    sql += f"""
-        UNION ALL
-        SELECT 'wheel' as item_type, wm.timestamp, w.brand, w.model, 
-               w.diameter || 'x' || w.width || ' ' || w.pcd as size, 
+    # Wheel Movements
+    wheel_size_concat = "CONCAT(w.diameter, 'x', w.width, ' ', w.pcd)" if is_postgres else "(w.diameter || 'x' || w.width || ' ' || w.pcd)"
+    sql_parts.append(f"""
+        SELECT 'wheel' as item_type, wm.timestamp, w.brand, w.model,
+               {wheel_size_concat} as item_details,
                wm.quantity_change
         FROM wheel_movements wm
         JOIN wheels w ON wm.wheel_id = w.id
         WHERE wm.type = 'OUT' AND wm.wholesale_customer_id = {placeholder}
-    """
+    """)
     params.append(customer_id)
-
     if start_date and end_date:
-        sql += f" AND wm.timestamp BETWEEN {placeholder} AND {placeholder}"
+        sql_parts[-1] += f" AND wm.timestamp BETWEEN {placeholder}{timestamp_cast} AND {placeholder}{timestamp_cast}"
         params.extend([start_date.isoformat(), end_date.isoformat()])
 
-    sql += " ORDER BY timestamp DESC"
+    # NEW: Spare Part Movements
+    spare_part_details_concat = "CONCAT(sp.name, ' (', COALESCE(sp.brand, ''), ')')" if is_postgres else "(sp.name || ' (' || COALESCE(sp.brand, '') || ')')"
+    sql_parts.append(f"""
+        SELECT 'spare_part' as item_type, spm.timestamp, sp.name AS brand, sp.part_number AS model,
+               {spare_part_details_concat} as item_details, -- Changed size to item_details for spare_parts
+               spm.quantity_change
+        FROM spare_part_movements spm
+        JOIN spare_parts sp ON spm.spare_part_id = sp.id
+        WHERE spm.type = 'OUT' AND spm.wholesale_customer_id = {placeholder}
+    """)
+    params.append(customer_id)
+    if start_date and end_date:
+        sql_parts[-1] += f" AND spm.timestamp BETWEEN {placeholder}{timestamp_cast} AND {placeholder}{timestamp_cast}"
+        params.extend([start_date.isoformat(), end_date.isoformat()])
+
+
+    full_sql = " UNION ALL ".join(sql_parts)
+    full_sql += " ORDER BY timestamp DESC"
+
+    # Replace placeholders for SQLite
+    if not is_postgres:
+        full_sql = full_sql.replace(timestamp_cast, "") # Remove timestamp cast for SQLite
+        full_sql = full_sql.replace(placeholder, '?')
 
     cursor = conn.cursor()
-    cursor.execute(sql, tuple(params))
+    cursor.execute(full_sql, tuple(params))
 
     history = []
     for row in cursor.fetchall():
@@ -2765,4 +3755,46 @@ def get_reconciliation_by_id(conn, reconciliation_id):
     cursor = conn.cursor()
     cursor.execute(query, (reconciliation_id,))
     return cursor.fetchone()
+
+def add_tire_cost_history(conn, tire_id, old_cost, new_cost, user_id, notes=""):
+    """บันทึกการเปลี่ยนแปลงราคาทุนของยาง"""
+    changed_at = get_bkk_time().isoformat()
+    cursor = conn.cursor()
+    is_postgres = "psycopg2" in str(type(conn))
+    
+    query = "INSERT INTO tire_cost_history (tire_id, changed_at, old_cost_sc, new_cost_sc, user_id, notes) VALUES (?, ?, ?, ?, ?, ?)"
+    params = (tire_id, changed_at, old_cost, new_cost, user_id, notes)
+
+    if is_postgres:
+        query = query.replace('?', '%s')
+
+    cursor.execute(query, params)
+    # ไม่ต้อง commit ที่นี่ เพราะจะถูกจัดการโดยฟังก์ชันที่เรียกใช้
+
+def get_tire_cost_history(conn, tire_id):
+    """ดึงประวัติการเปลี่ยนแปลงราคาทุนของยางที่ระบุ"""
+    cursor = conn.cursor()
+    is_postgres = "psycopg2" in str(type(conn))
+    
+    query = """
+        SELECT h.*, u.username
+        FROM tire_cost_history h
+        LEFT JOIN users u ON h.user_id = u.id
+        WHERE h.tire_id = ?
+        ORDER BY h.changed_at DESC
+    """
+    params = (tire_id,)
+    
+    if is_postgres:
+        query = query.replace('?', '%s')
+        
+    cursor.execute(query, params)
+    
+    history = []
+    for row in cursor.fetchall():
+        history_item = dict(row)
+        history_item['changed_at'] = convert_to_bkk_time(history_item['changed_at'])
+        history.append(history_item)
+        
+    return history
   

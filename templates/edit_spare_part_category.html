@@ -1,0 +1,59 @@
+{% extends 'base.html' %}
+
+{% block page_title %}{% if category %}แก้ไขหมวดหมู่อะไหล่: {{ category.name }}{% else %}เพิ่มหมวดหมู่อะไหล่ใหม่{% endif %}{% endblock %}
+
+{% block content %}
+<div class="card shadow-sm mb-4">
+    <div class="card-header bg-white d-flex justify-content-between align-items-center">
+        <h4 class="mb-0 text-dark">
+            <i class="fas fa-edit me-2"></i>
+            {% if category %}แก้ไขหมวดหมู่อะไหล่: {{ category.name }}{% else %}เพิ่มหมวดหมู่อะไหล่ใหม่{% endif %}
+        </h4>
+        <a href="{{ url_for('manage_spare_part_categories') }}" class="btn btn-secondary btn-sm">
+            <i class="fas fa-arrow-left me-1"></i>กลับไปหน้าจัดการหมวดหมู่
+        </a>
+    </div>
+    <div class="card-body">
+        <form action="{% if category %}{{ url_for('edit_spare_part_category', category_id=category.id) }}{% else %}{{ url_for('add_spare_part_category') }}{% endif %}" method="POST">
+            <div class="mb-3">
+                <label for="categoryName" class="form-label">ชื่อหมวดหมู่*</label>
+                <input type="text" class="form-control" id="categoryName" name="name" value="{{ category.name if category else '' }}" required>
+            </div>
+            <div class="mb-3">
+                <label for="parentCategory" class="form-label">หมวดหมู่แม่ (ถ้ามี)</label>
+                <select class="form-select" id="parentCategory" name="parent_id">
+                    <option value="none">-- หมวดหมู่หลัก --</option>
+                    {% for cat in all_categories_flat %}
+                        <option value="{{ cat.id }}"
+                            {% if category and category.parent_id == cat.id %}selected{% endif %}
+                            {% if category and category.id == cat.id %}disabled style="background-color: #e9ecef;"{% endif %} {# Prevent selecting itself as parent #}
+                            >
+                            {{ cat.name }}
+                        </option>
+                    {% endfor %}
+                </select>
+                <div class="form-text">เลือกหมวดหมู่แม่หากต้องการสร้างเป็นหมวดหมู่ย่อย (ไม่สามารถเลือกตัวเองเป็นหมวดหมู่แม่ได้)</div>
+            </div>
+            <button type="submit" class="btn btn-primary mt-3">
+                <i class="fas fa-save me-1"></i>
+                {% if category %}บันทึกการแก้ไข{% else %}เพิ่มหมวดหมู่{% endif %}
+            </button>
+            <a href="{{ url_for('manage_spare_part_categories') }}" class="btn btn-secondary mt-3 ms-2">ยกเลิก</a>
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Initialize Select2 for parentCategory dropdown if you're using Select2
+        // $('#parentCategory').select2({
+        //     theme: "bootstrap-5",
+        //     width: $(this).data('width') ? $(this).data('width') : $(this).hasClass('w-100') ? '100%' : 'style',
+        //     placeholder: "-- หมวดหมู่หลัก --",
+        //     allowClear: true
+        // });
+    });
+</script>
+{% endblock %}

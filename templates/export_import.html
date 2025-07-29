@@ -16,6 +16,12 @@
                     <i class="fas fa-compact-disc me-2"></i>แม็ก (Excel)
                 </button>
             </li>
+            {# NEW: Spare Parts Excel Tab #}
+            <li class="nav-item" role="presentation">
+                <button class="nav-link {% if active_tab == 'spare_parts_excel' %}active{% endif %}" id="spare-parts-excel-tab" data-bs-toggle="tab" data-bs-target="#spare-parts-excel-pane" type="button" role="tab" aria-controls="spare-parts-excel-pane" aria-selected="false">
+                    <i class="fas fa-tools me-2"></i>อะไหล่ (Excel)
+                </button>
+            </li>
         </ul>
     </div>
     <div class="card-body">
@@ -75,6 +81,34 @@
                 </div>
             </div>
 
+            {# NEW: Spare Parts Excel Pane #}
+            <div class="tab-pane fade {% if active_tab == 'spare_parts_excel' %}show active{% endif %}" id="spare-parts-excel-pane" role="tabpanel" aria-labelledby="spare-parts-excel-tab">
+                <div class="row g-4">
+                    <div class="col-md-6">
+                        <div class="border p-3 rounded h-100 d-flex flex-column">
+                            <h5 class="text-primary"><i class="fas fa-file-export me-2"></i>ส่งออกข้อมูลอะไหล่</h5>
+                            <p class="text-muted">คลิกปุ่มด้านล่างเพื่อดาวน์โหลดข้อมูลสต็อกอะไหล่ทั้งหมดในรูปแบบไฟล์ Excel (.xlsx)</p>
+                            <div class="mt-auto">
+                                <a href="{{ url_for('export_spare_parts_action') }}" class="btn btn-primary w-100">ส่งออกข้อมูลอะไหล่</a>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="border p-3 rounded h-100 d-flex flex-column">
+                            <h5 class="text-success"><i class="fas fa-file-import me-2"></i>นำเข้าข้อมูลอะไหล่</h5>
+                            <p class="text-muted">ระบบจะอัปเดตข้อมูลอะไหล่เดิมที่มีอยู่ (จาก `spare_part_id`) และเพิ่มรายการใหม่หากไม่พบ `spare_part_id` หรือ Part Number/ชื่อที่ตรงกัน</p>
+                            <form action="{{ url_for('import_spare_parts_action') }}" method="post" enctype="multipart/form-data" class="mt-auto">
+                                <div class="mb-3">
+                                    <label for="spare_part_file" class="form-label">เลือกไฟล์ Excel สำหรับอะไหล่:</label>
+                                    <input type="file" class="form-control" name="file" id="spare_part_file" accept=".xlsx, .xls" required>
+                                </div>
+                                <button type="submit" class="btn btn-success w-100">นำเข้าข้อมูล</button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
         </div>
     </div>
 </div>
@@ -91,7 +125,7 @@
                 const targetPaneId = event.target.getAttribute('data-bs-target');
                 // Convert it to a URL-friendly name like 'tires_excel'
                 const newTabName = targetPaneId.replace('#', '').replace('-pane', '').replace('-', '_');
-                
+
                 const url = new URL(window.location);
                 url.searchParams.set('tab', newTabName);
                 window.history.pushState({}, '', url);

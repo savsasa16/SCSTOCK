@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>พิมพ์บาร์โค้ด</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        :root {
+            --paper-width: 210mm;
+            --paper-height: 297mm;
+            --paper-aspect-ratio: calc(var(--paper-width) / var(--paper-height));
+            --paper-margin: 10mm;
+            --label-width: 70mm;
+            --label-height: 37mm;
+            --v-gap: 0mm;
+            --h-gap: 0mm;
+        }
+        body { background-color: #52585f; }
+        .print-area { padding: 2rem 0; }
+        #page-preview {
+            background: white; margin: 0 auto; box-shadow: 0 8px 25px rgba(0,0,0,0.3);
+            box-sizing: border-box; overflow: hidden; width: 95%; max-width: var(--paper-width); 
+            aspect-ratio: var(--paper-aspect-ratio); padding: var(--paper-margin);
+        }
+        .barcode-label {
+            page-break-inside: avoid; display: flex; flex-direction: column; 
+            justify-content: space-between; align-items: center;
+            overflow: hidden; width: var(--label-width); height: var(--label-height); 
+            box-sizing: border-box; padding: 1.5mm; border: 1px dashed #eee;
+        }
+        .svg-container { display: flex; justify-content: center; align-items: center; width: 100%; flex-grow: 1; min-height: 0; }
+        .svg-container.barcode svg { max-width: 100%; height: auto; max-height: 50%; }
+        /* START: REVISED QR CODE STYLE */
+        .svg-container.qrcode svg {
+            width: 100%;
+            height: 100%;
+            object-fit: contain; /* This ensures it scales within the container */
+            aspect-ratio: 1/1;
+        }
+        /* END: REVISED QR CODE STYLE */
+        .label-text { width: 100%; text-align: center; }
+        .label-item-name { font-size: 8px; word-break: break-all; line-height: 1.1; }
+        .label-price { font-size: 10px; font-weight: bold; }
+        .barcode-text { font-family: 'Courier New', monospace; font-size: 9px; word-break: break-all; }
+        .barcode-grid { display: flex; flex-wrap: wrap; align-content: flex-start; gap: var(--v-gap) var(--h-gap); }
+
+        @media print {
+            body { background-color: white; }
+            .no-print { display: none !important; }
+            .print-area { padding: 0; }
+            #page-preview { width: 100%; height: 100%; margin: 0; padding: 0; box-shadow: none; aspect-ratio: auto; overflow: visible; }
+            .barcode-label { border: none; }
+            @page { size: var(--paper-width) var(--paper-height); margin: var(--paper-margin); }
+        }
+    </style>
+</head>
+<body>
+    <div class="container-fluid my-4">
+        <div class="card mb-3 no-print">
+            <div class="card-header bg-light d-flex justify-content-between align-items-center">
+                <h5 class="mb-0"><i class="fas fa-print me-2"></i>ตั้งค่าการพิมพ์บาร์โค้ด</h5>
+                <div class="d-flex gap-2">
+                    <a href="{{ request.referrer or url_for('index') }}" class="btn btn-outline-secondary">&larr; กลับ</a>
+                    <button onclick="window.print()" class="btn btn-primary"><i class="fas fa-print me-2"></i>พิมพ์</button>
+                </div>
+            </div>
+            <div class="card-body">
+                <div class="row g-3">
+                    <div class="col-lg-4 col-md-6">
+                        <h6>1. ตั้งค่าหลัก</h6>
+                        <div class="mb-3"><label for="paperSizeSelector" class="form-label">ขนาดกระดาษ:</label><select id="paperSizeSelector" class="form-select"></select></div>
+                        <div class="mb-3"><label for="labelSizeSelector" class="form-label">ขนาดสติกเกอร์:</label><select id="labelSizeSelector" class="form-select"></select></div>
+                        <div class="mb-3"><label class="form-label">ประเภทโค้ด:</label>
+                            <div class="btn-group w-100"><input type="radio" class="btn-check" name="codeType" id="typeBarcode" value="barcode" checked><label class="btn btn-outline-primary" for="typeBarcode">Barcode</label><input type="radio" class="btn-check" name="codeType" id="typeQrCode" value="qrcode"><label class="btn btn-outline-primary" for="typeQrCode">QR Code</label></div>
+                        </div>
+                    </div>
+                    <div class="col-lg-4 col-md-6">
+                        <h6>2. เนื้อหาบนป้าย</h6>
+                        <div class="form-check form-switch"><input class="form-check-input" type="checkbox" id="showName" checked><label class="form-check-label" for="showName">แสดงชื่อสินค้า</label></div>
+                        <div class="form-check form-switch"><input class="form-check-input" type="checkbox" id="showPrice"><label class="form-check-label" for="showPrice">แสดงราคา</label></div>
+                        <div class="form-check form-switch"><input class="form-check-input" type="checkbox" id="showText" checked><label class="form-check-label" for="showText">แสดงรหัสบาร์โค้ด</label></div>
+                        <hr>
+                        <label class="form-label">จำนวนที่พิมพ์ได้:</label>
+                        <input type="text" id="printableCount" class="form-control" readonly disabled>
+                    </div>
+                    <div class="col-lg-4 col-md-12" id="customControls" style="display: none;">
+                        <h6>3. ปรับละเอียด (mm)</h6>
+                        <div class="row g-2">
+                            <div class="col-6"><label for="labelWidth" class="form-label">กว้าง:</label><input type="number" id="labelWidth" class="form-control"></div>
+                            <div class="col-6"><label for="labelHeight" class="form-label">สูง:</label><input type="number" id="labelHeight" class="form-control"></div>
+                            <div class="col-6"><label for="vGap" class="form-label">ห่างตั้ง:</label><input type="number" id="vGap" class="form-control" value="0"></div>
+                            <div class="col-6"><label for="hGap" class="form-label">ห่างนอน:</label><input type="number" id="hGap" class="form-control" value="0"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="print-area"><div id="page-preview"><div id="barcode-container" class="barcode-grid"></div></div></div>
+    </div>
+    
+    <script src="https://kit.fontawesome.com/a076d05399.js" crossorigin="anonymous"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const controls = {
+                paper: document.getElementById('paperSizeSelector'),
+                label: document.getElementById('labelSizeSelector'),
+                count: document.getElementById('printableCount'),
+                container: document.getElementById('barcode-container'),
+                codeTypeRadios: document.querySelectorAll('input[name="codeType"]'),
+                showName: document.getElementById('showName'),
+                showPrice: document.getElementById('showPrice'),
+                showText: document.getElementById('showText'),
+                width: document.getElementById('labelWidth'),
+                height: document.getElementById('labelHeight'),
+                vGap: document.getElementById('vGap'),
+                hGap: document.getElementById('hGap'),
+                customControls: document.getElementById('customControls'),
+                root: document.documentElement
+            };
+
+            const barcodeData = {{ barcodes|tojson }};
+            const itemInfo = {{ item_info|tojson }};
+
+            const paperSizes = [ { name: "A4 (210 x 297mm)", w: 210, h: 297 }, { name: "A5 (148 x 210mm)", w: 148, h: 210 } ];
+            
+            // --- START: SEPARATE LABEL SIZES ---
+            const barcodeStandardSizes = [
+                { name: "--- กำหนดเอง ---", w: 70, h: 37 },
+                { name: "3x8 (70 x 37mm)", w: 70, h: 37 },
+                { name: "3x7 (70 x 42.3mm)", w: 70, h: 42.3 },
+                { name: "4x11 (48.5 x 25.4mm)", w: 48.5, h: 25.4 },
+                { name: "2x7 (105 x 42.3mm)", w: 105, h: 42.3 }
+            ];
+            const qrCodeStandardSizes = [
+                { name: "--- กำหนดเอง ---", w: 40, h: 40 },
+                { name: "5x7 (40 x 40mm)", w: 40, h: 40 },
+                { name: "6x9 (30 x 30mm)", w: 30, h: 30 },
+                { name: "7x10 (25 x 25mm)", w: 25, h: 25 }
+            ];
+            // --- END: SEPARATE LABEL SIZES ---
+
+            function populatePaperSelector() {
+                paperSizes.forEach((p, i) => { controls.paper.add(new Option(p.name, i)); });
+            }
+            
+            function populateLabelSelector() {
+                const codeType = document.querySelector('input[name="codeType"]:checked').value;
+                const relevantSizes = (codeType === 'qrcode') ? qrCodeStandardSizes : barcodeStandardSizes;
+                
+                controls.label.innerHTML = ''; // Clear existing options
+                relevantSizes.forEach((l, i) => { controls.label.add(new Option(l.name, i)); });
+            }
+
+            function updateLayout() {
+                const selectedPaper = paperSizes[controls.paper.value];
+                const codeType = document.querySelector('input[name="codeType"]:checked').value;
+                const relevantSizes = (codeType === 'qrcode') ? qrCodeStandardSizes : barcodeStandardSizes;
+                const selectedLabelPreset = relevantSizes[controls.label.value];
+                
+                const isCustom = controls.label.value == 0;
+                controls.customControls.style.display = isCustom ? 'block' : 'none';
+                
+                if (!isCustom) {
+                    controls.width.value = selectedLabelPreset.w;
+                    controls.height.value = selectedLabelPreset.h;
+                }
+                
+                const margin = 10;
+                const printableW = selectedPaper.w - (margin * 2);
+                const printableH = selectedPaper.h - (margin * 2);
+                const labelW = parseFloat(controls.width.value);
+                const labelH = parseFloat(controls.height.value);
+                const vGap = parseFloat(controls.vGap.value) || 0;
+                const hGap = parseFloat(controls.hGap.value) || 0;
+
+                if (!labelW || !labelH) { controls.count.value = "0 ดวง"; controls.container.innerHTML = ''; return; }
+                
+                const maxCols = Math.floor((printableW + hGap) / (labelW + hGap));
+                const maxRows = Math.floor((printableH + vGap) / (labelH + vGap));
+                const totalLabels = maxCols * maxRows;
+
+                controls.root.style.setProperty('--paper-width', `${selectedPaper.w}mm`);
+                controls.root.style.setProperty('--paper-height', `${selectedPaper.h}mm`);
+                controls.root.style.setProperty('--paper-aspect-ratio', `${selectedPaper.w} / ${selectedPaper.h}`);
+                controls.root.style.setProperty('--label-width', `${labelW}mm`);
+                controls.root.style.setProperty('--label-height', `${labelH}mm`);
+                controls.root.style.setProperty('--v-gap', `${vGap}mm`);
+                controls.root.style.setProperty('--h-gap', `${hGap}mm`);
+                
+                controls.count.value = `${totalLabels} ดวง`;
+                generateLabels(totalLabels);
+            }
+
+            function generateLabels(count) {
+                controls.container.innerHTML = '';
+                if (!barcodeData.length || count === 0) return;
+                
+                const codeType = document.querySelector('input[name="codeType"]:checked').value;
+                const barcode = barcodeData[0];
+                const svgToUse = (codeType === 'qrcode') ? barcode.svg_qrcode : barcode.svg_barcode;
+                
+                const nameHTML = controls.showName.checked ? `<div class="label-item-name">${itemInfo.name}</div>` : '';
+                const priceHTML = (controls.showPrice.checked && itemInfo.price) ? `<div class="label-price">${parseFloat(itemInfo.price).toLocaleString('th-TH', { style: 'currency', currency: 'THB' })}</div>` : '';
+                const textHTML = controls.showText.checked ? `<div class="barcode-text">${barcode.text}</div>` : '';
+
+                for (let i = 0; i < count; i++) {
+                    const labelDiv = document.createElement('div');
+                    labelDiv.className = 'barcode-label';
+                    labelDiv.innerHTML = `
+                        <div class="label-text">${nameHTML}</div>
+                        <div class="svg-container ${codeType}">${svgToUse}</div>
+                        <div class="label-text">${priceHTML}${textHTML}</div>
+                    `;
+                    controls.container.appendChild(labelDiv);
+                }
+            }
+            
+            controls.codeTypeRadios.forEach(radio => {
+                radio.addEventListener('change', () => {
+                    populateLabelSelector();
+                    updateLayout();
+                });
+            });
+            
+            [controls.paper, controls.label, controls.showName, controls.showPrice, controls.showText, 
+             controls.width, controls.height, controls.vGap, controls.hGap].forEach(el => {
+                el.addEventListener('change', updateLayout);
+            });
+            
+            populatePaperSelector();
+            populateLabelSelector();
+            updateLayout();
+        });
+    </script>
+</body>
+</html>

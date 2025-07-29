@@ -1,3 +1,7 @@
+import qrcode
+import qrcode.image.svg
+import barcode
+from barcode.writer import SVGWriter
 import sqlite3
 from datetime import datetime, timedelta
 import pytz
@@ -12,7 +16,8 @@ from flask_login import LoginManager, login_user, logout_user, login_required, c
 from flask_caching import Cache
 import os
 import json
-import database # Your existing database.py file
+import document_generator
+import database
 
 # *** Add Cloudinary imports ***
 import cloudinary
@@ -158,6 +163,24 @@ def get_cached_tires(query, brand_filter):
 def get_cached_unread_notification_count():
     conn = get_db()
     return database.get_unread_notification_count(conn)
+
+@cache.memoize(timeout=300)
+def get_cached_spare_parts(query, brand_filter, category_filter): # NEW
+    print(f"--- CACHE MISS (SPARE PARTS) --- Fetching spare parts from DB...")
+    conn = get_db()
+    return database.get_all_spare_parts(conn, query=query, brand_filter=brand_filter, category_filter=category_filter, include_deleted=False)
+
+@cache.memoize(timeout=900)
+def get_cached_spare_part_brands(): # NEW
+    print("--- CACHE MISS (SPARE PART BRANDS) --- Fetching spare part brands from DB")
+    conn = get_db()
+    return database.get_all_spare_part_brands(conn)
+
+@cache.memoize(timeout=900)
+def get_cached_spare_part_categories_hierarchical(): # NEW
+    print("--- CACHE MISS (SPARE PART CATEGORIES) --- Fetching spare part categories hierarchically from DB")
+    conn = get_db()
+    return database.get_all_spare_part_categories_hierarchical(conn)
 
 @cache.memoize(timeout=86400) # Cache 3 ชั่วโมง
 def get_all_sales_channels_cached():
@@ -352,7 +375,7 @@ def process_tire_report_data(all_tires, current_user_obj, include_summary_in_out
         # ถ้ายังไม่มีแบรนด์นี้ใน grouped_data ให้สร้าง entry ใหม่
         if brand not in grouped_data:
             grouped_data[brand] = {'items_list': [], 'summary': {}} # เปลี่ยนชื่อเป็น items_list
-        
+
         # เพิ่มรายการยางลงใน 'items_list'
         grouped_data[brand]['items_list'].append({
             'is_summary': False,
@@ -400,7 +423,7 @@ def process_wheel_report_data(all_wheels, include_summary_in_output=True):
         brand = wheel['brand']
         if brand not in grouped_data:
             grouped_data[brand] = {'items_list': [], 'summary': {}}
-            
+
         grouped_data[brand]['items_list'].append({
             'is_summary': False,
             'brand': wheel['brand'],
@@ -432,19 +455,82 @@ def process_wheel_report_data(all_wheels, include_summary_in_output=True):
         }
     return grouped_data
 
+# NEW: Helper function for processing spare parts data
+def process_spare_part_report_data(all_spare_parts, include_summary_in_output=True):
+    grouped_data = OrderedDict()
+    category_quantities = defaultdict(int)
+    brand_quantities = defaultdict(int) # สามารถสรุปตามแบรนด์ได้ด้วย
+
+    # เรียงตามหมวดหมู่ก่อน จากนั้นค่อยตามแบรนด์และชื่ออะไหล่
+    sorted_parts = sorted(all_spare_parts, key=lambda x: (x['category_name'] or '', x['brand'] or '', x['name']))
+
+    for part in sorted_parts:
+        category_name = part['category_name'] or 'ไม่ระบุหมวดหมู่'
+        brand = part['brand'] or 'ไม่ระบุยี่ห้อ' # ใช้ brand สำหรับการรวมย่อย
+
+        # จัดกลุ่มหลักตามหมวดหมู่
+        if category_name not in grouped_data:
+            grouped_data[category_name] = {'brands': OrderedDict(), 'summary': {}}
+
+        # ภายในหมวดหมู่ จัดกลุ่มย่อยตามแบรนด์
+        if brand not in grouped_data[category_name]['brands']:
+            grouped_data[category_name]['brands'][brand] = {'items_list': [], 'summary': {}}
+
+        grouped_data[category_name]['brands'][brand]['items_list'].append({
+            'is_summary': False,
+            'id': part['id'],
+            'name': part['name'],
+            'part_number': part['part_number'],
+            'brand': part['brand'],
+            'description': part['description'],
+            'quantity': part['quantity'],
+            'cost': part['cost'],
+            'retail_price': part['retail_price'],
+            'wholesale_price1': part.get('wholesale_price1'),
+            'wholesale_price2': part.get('wholesale_price2'),
+            'cost_online': part.get('cost_online'),
+            'image_filename': part['image_filename'],
+            'category_name': part['category_name']
+        })
+        category_quantities[category_name] += part['quantity']
+        brand_quantities[f"{category_name}|{brand}"] += part['quantity'] # ใช้ key ผสมสำหรับ brand_quantities
+
+    # คำนวณ summary สำหรับแต่ละ brand ภายใน category
+    for cat_name, cat_data in grouped_data.items():
+        for brand_name, brand_data in cat_data['brands'].items():
+            brand_data['summary'] = {
+                'is_summary': True,
+                'is_summary_to_show': include_summary_in_output,
+                'type': 'brand_summary',
+                'brand': brand_name,
+                'quantity': brand_quantities[f"{cat_name}|{brand_name}"],
+                'formatted_quantity': f'<span class="summary-quantity-value">{brand_quantities[f"{cat_name}|{brand_name}"]}</span>'
+            }
+
+        # คำนวณ summary สำหรับแต่ละ category
+        cat_data['summary'] = {
+            'is_summary': True,
+            'is_summary_to_show': include_summary_in_output,
+            'type': 'category_summary',
+            'category': cat_name,
+            'quantity': category_quantities[cat_name],
+            'formatted_quantity': f'<span class="summary-quantity-value">{category_quantities[cat_name]}</span>'
+        }
+
+    return grouped_data
+
 
 @app.route('/')
 @login_required
 def index():
     conn = get_db()
-    
 
     tire_query = request.args.get('tire_query', '').strip()
     tire_selected_brand = request.args.get('tire_brand_filter', 'all').strip()
     is_tire_search_active = bool(tire_query or (tire_selected_brand and tire_selected_brand != 'all'))
     all_tires_raw = get_cached_tires(tire_query, tire_selected_brand)
     available_tire_brands = get_cached_tire_brands()
-    
+
     # NEW: Filter tire data based on viewing permissions before sending to template
     tires_for_display_filtered_by_permissions = []
     for tire_data in all_tires_raw:
@@ -457,7 +543,7 @@ def index():
             filtered_tire['wholesale_price1'] = None
         if not current_user.can_view_wholesale_price_2():
             filtered_tire['wholesale_price2'] = None
-            
+
         # NOTE: Logic for hiding retail price and promotions for 'wholesale_sales' and 'viewer' roles
         # will be handled in process_tire_report_data using current_user.can_view_retail_price()
         # and current_user.is_retail_sales() together.
@@ -481,13 +567,13 @@ def index():
         current_user, # Pass the current_user object
         include_summary_in_output=is_tire_search_active
     )
-    
+
     wheel_query = request.args.get('wheel_query', '').strip()
     wheel_selected_brand = request.args.get('wheel_brand_filter', 'all').strip()
     is_wheel_search_active = bool(wheel_query or (wheel_selected_brand and wheel_selected_brand != 'all'))
     all_wheels = get_cached_wheels(wheel_query, wheel_selected_brand)
     available_wheel_brands = get_cached_wheel_brands()
-    
+
     # NEW: Filter wheel data based on viewing permissions before sending to template
     wheels_for_display = []
     for wheel_data in all_wheels:
@@ -504,18 +590,58 @@ def index():
         wheels_for_display.append(filtered_wheel) #
 
     wheels_by_brand_for_display = process_wheel_report_data(wheels_for_display, include_summary_in_output=is_wheel_search_active)
-    
+
+    # NEW: Spare Part data for index page
+    spare_part_query = request.args.get('spare_part_query', '').strip()
+    spare_part_selected_brand = request.args.get('spare_part_brand_filter', 'all').strip()
+    spare_part_selected_category = request.args.get('spare_part_category_filter', 'all').strip()
+
+    is_spare_part_search_active = bool(spare_part_query or
+                                       (spare_part_selected_brand and spare_part_selected_brand != 'all') or
+                                       (spare_part_selected_category and spare_part_selected_category != 'all'))
+
+    all_spare_parts_raw = get_cached_spare_parts(spare_part_query, spare_part_selected_brand, spare_part_selected_category)
+    available_spare_part_brands = get_cached_spare_part_brands()
+    available_spare_part_categories = get_cached_spare_part_categories_hierarchical()
+
+    # Filter spare part data based on viewing permissions
+    spare_parts_for_display = []
+    for part_data in all_spare_parts_raw:
+        filtered_part = dict(part_data)
+        if not current_user.can_view_cost():
+            filtered_part['cost'] = None
+            filtered_part['cost_online'] = None
+        if not current_user.can_view_wholesale_price_1():
+            filtered_part['wholesale_price1'] = None
+        if not current_user.can_view_wholesale_price_2():
+            filtered_part['wholesale_price2'] = None
+        if not current_user.can_view_retail_price():
+            filtered_part['retail_price'] = None
+        spare_parts_for_display.append(filtered_part)
+
+    spare_parts_by_category_and_brand = process_spare_part_report_data(
+        spare_parts_for_display,
+        include_summary_in_output=is_spare_part_search_active
+    )
+
+
     active_tab = request.args.get('tab', 'tires')
 
     return render_template('index.html',
                            tires_by_brand_for_display=tires_by_brand_for_display,
                            wheels_by_brand_for_display=wheels_by_brand_for_display,
+                           spare_parts_by_category_and_brand=spare_parts_by_category_and_brand, # NEW
                            tire_query=tire_query,
                            available_tire_brands=available_tire_brands,
                            tire_selected_brand=tire_selected_brand,
                            wheel_query=wheel_query,
                            available_wheel_brands=available_wheel_brands,
                            wheel_selected_brand=wheel_selected_brand,
+                           spare_part_query=spare_part_query, # NEW
+                           available_spare_part_brands=available_spare_part_brands, # NEW
+                           spare_part_selected_brand=spare_part_selected_brand, # NEW
+                           available_spare_part_categories=available_spare_part_categories, # NEW
+                           spare_part_selected_category=spare_part_selected_category, # NEW
                            active_tab=active_tab,
                            current_user=current_user # Pass current_user to template
                           )
@@ -660,14 +786,16 @@ def add_item():
     if not current_user.can_edit(): # Admin or Editor
         flash('คุณไม่มีสิทธิ์ในการเพิ่มสินค้า', 'danger')
         return redirect(url_for('index'))
-        
+
     conn = get_db()
     current_year = get_bkk_time().year
     form_data = None
     active_tab = request.args.get('tab', 'tire')
 
     all_promotions = get_all_promotions_cached()
-    
+    # NEW: สำหรับอะไหล่
+    all_spare_part_categories = get_cached_spare_part_categories_hierarchical()
+
 
     if request.method == 'POST':
         submit_type = request.form.get('submit_type')
@@ -702,15 +830,16 @@ def add_item():
             if not brand or not model or not size or not quantity or not price_per_item:
                 flash('กรุณากรอกข้อมูลยางให้ครบถ้วนในช่องที่มีเครื่องหมาย *', 'danger')
                 active_tab = 'tire'
-                return render_template('add_item.html', form_data=form_data, active_tab=active_tab, current_year=current_year, all_promotions=all_promotions, current_user=current_user)
-            
+                return render_template('add_item.html', form_data=form_data, active_tab=active_tab, current_year=current_year, all_promotions=all_promotions, all_spare_part_categories=all_spare_part_categories, current_user=current_user)
+
             if scanned_barcode_for_add:
                 existing_barcode_tire_id = database.get_tire_id_by_barcode(conn, scanned_barcode_for_add)
                 existing_barcode_wheel_id = database.get_wheel_id_by_barcode(conn, scanned_barcode_for_add)
-                if existing_barcode_tire_id or existing_barcode_wheel_id:
+                existing_barcode_spare_part_id = database.get_spare_part_id_by_barcode(conn, scanned_barcode_for_add) # NEW
+                if existing_barcode_tire_id or existing_barcode_wheel_id or existing_barcode_spare_part_id: # NEW
                     flash(f"Barcode ID '{scanned_barcode_for_add}' มีอยู่ในระบบแล้ว. ไม่สามารถใช้ซ้ำได้.", 'danger')
                     active_tab = 'tire'
-                    return render_template('add_item.html', form_data=form_data, active_tab=active_tab, current_year=current_year, all_promotions=all_promotions, current_user=current_user)
+                    return render_template('add_item.html', form_data=form_data, active_tab=active_tab, current_year=current_year, all_promotions=all_promotions, all_spare_part_categories=all_spare_part_categories, current_user=current_user)
 
             try:
                 quantity = int(quantity)
@@ -721,7 +850,7 @@ def add_item():
                 cost_online = float(cost_online) if cost_online and cost_online.strip() else None
                 wholesale_price1 = float(wholesale_price1) if wholesale_price1 and wholesale_price1.strip() else None
                 wholesale_price2 = float(wholesale_price2) if wholesale_price2 and wholesale_price2.strip() else None
-                
+
                 year_of_manufacture = year_of_manufacture.strip() if year_of_manufacture and year_of_manufacture.strip() else None
 
                 cursor = conn.cursor()
@@ -729,7 +858,7 @@ def add_item():
                     cursor.execute("SELECT id FROM tires WHERE brand = %s AND model = %s AND size = %s", (brand, model, size))
                 else:
                     cursor.execute("SELECT id FROM tires WHERE brand = ? AND model = ? AND size = ?", (brand, model, size))
-                
+
                 existing_tire = cursor.fetchone()
 
                 if existing_tire:
@@ -753,7 +882,7 @@ def add_item():
                 conn.rollback()
                 flash('ข้อมูลตัวเลขไม่ถูกต้อง กรุณาตรวจสอบ', 'danger')
                 active_tab = 'tire'
-                return render_template('add_item.html', form_data=form_data, active_tab=active_tab, current_year=current_year, all_promotions=all_promotions, current_user=current_user)
+                return render_template('add_item.html', form_data=form_data, active_tab=active_tab, current_year=current_year, all_promotions=all_promotions, all_spare_part_categories=all_spare_part_categories, current_user=current_user)
             except (sqlite3.IntegrityError, Exception) as e:
                 conn.rollback()
                 if "UNIQUE constraint failed" in str(e) or "duplicate key value violates unique constraint" in str(e):
@@ -761,7 +890,7 @@ def add_item():
                 else:
                     flash(f'เกิดข้อผิดพลาดในการเพิ่มยาง: {e}', 'danger')
                 active_tab = 'tire'
-                return render_template('add_item.html', form_data=form_data, active_tab=active_tab, current_year=current_year, all_promotions=all_promotions, current_user=current_user)
+                return render_template('add_item.html', form_data=form_data, active_tab=active_tab, current_year=current_year, all_promotions=all_promotions, all_spare_part_categories=all_spare_part_categories, current_user=current_user)
 
 
         elif submit_type == 'add_wheel':
@@ -781,10 +910,10 @@ def add_item():
             cost_online = request.form.get('cost_online')
             wholesale_price1 = request.form.get('wholesale_price1')
             wholesale_price2 = request.form.get('wholesale_price2')
-            
-            image_file = request.files.get('image_file') 
+
+            image_file = request.files.get('image_file')
             image_url = None # Set initial value
-            
+
             if image_file and image_file.filename != '':
                 if allowed_image_file(image_file.filename):
                     try:
@@ -793,24 +922,25 @@ def add_item():
                     except Exception as e:
                         flash(f'เกิดข้อผิดพลาดในการอัปโหลดรูปภาพไปยังเซิฟเวอร์: {e}', 'danger')
                         active_tab = 'wheel'
-                        return render_template('add_item.html', form_data=form_data, active_tab=active_tab, current_year=current_year, all_promotions=all_promotions, current_user=current_user)
+                        return render_template('add_item.html', form_data=form_data, active_tab=active_tab, current_year=current_year, all_promotions=all_promotions, all_spare_part_categories=all_spare_part_categories, current_user=current_user)
                 else:
                     flash('ชนิดไฟล์รูปภาพไม่ถูกต้อง อนุญาตเฉพาะ .png, .jpg, .jpeg, .gif เท่านั้น', 'danger')
                     active_tab = 'wheel'
-                    return render_template('add_item.html', form_data=form_data, active_tab=active_tab, current_year=current_year, all_promotions=all_promotions, current_user=current_user)
+                    return render_template('add_item.html', form_data=form_data, active_tab=active_tab, current_year=current_year, all_promotions=all_promotions, all_spare_part_categories=all_spare_part_categories, current_user=current_user)
 
             if not brand or not model or not pcd or not diameter or not width or not quantity or not retail_price:
                 flash('กรุณากรอกข้อมูลแม็กให้ครบถ้วนในช่องที่มีเครื่องหมาย *', 'danger')
                 active_tab = 'wheel'
-                return render_template('add_item.html', form_data=form_data, active_tab=active_tab, current_year=current_year, all_promotions=all_promotions, current_user=current_user)
-            
+                return render_template('add_item.html', form_data=form_data, active_tab=active_tab, current_year=current_year, all_promotions=all_promotions, all_spare_part_categories=all_spare_part_categories, current_user=current_user)
+
             if scanned_barcode_for_add:
                 existing_barcode_tire_id = database.get_tire_id_by_barcode(conn, scanned_barcode_for_add)
                 existing_barcode_wheel_id = database.get_wheel_id_by_barcode(conn, scanned_barcode_for_add)
-                if existing_barcode_tire_id or existing_barcode_wheel_id:
+                existing_barcode_spare_part_id = database.get_spare_part_id_by_barcode(conn, scanned_barcode_for_add) # NEW
+                if existing_barcode_tire_id or existing_barcode_wheel_id or existing_barcode_spare_part_id: # NEW
                     flash(f"Barcode ID '{scanned_barcode_for_add}' มีอยู่ในระบบแล้ว. ไม่สามารถใช้ซ้ำได้.", 'danger')
                     active_tab = 'wheel'
-                    return render_template('add_item.html', form_data=form_data, active_tab=active_tab, current_year=current_year, all_promotions=all_promotions, current_user=current_user)
+                    return render_template('add_item.html', form_data=form_data, active_tab=active_tab, current_year=current_year, all_promotions=all_promotions, all_spare_part_categories=all_spare_part_categories, current_user=current_user)
 
             try:
                 diameter = float(diameter)
@@ -823,21 +953,21 @@ def add_item():
                 cost_online = float(cost_online) if cost_online and cost_online.strip() else None
                 wholesale_price1 = float(wholesale_price1) if wholesale_price1 and wholesale_price1.strip() else None
                 wholesale_price2 = float(wholesale_price2) if wholesale_price2 and wholesale_price2.strip() else None
-                
+
                 cursor = conn.cursor()
                 if "psycopg2" in str(type(conn)):
-                    cursor.execute("SELECT id FROM wheels WHERE brand = %s AND model = %s AND diameter = %s AND width = %s AND pcd = %s AND et = %s", 
+                    cursor.execute("SELECT id FROM wheels WHERE brand = %s AND model = %s AND diameter = %s AND width = %s AND pcd = %s AND et = %s",
                                    (brand, model, diameter, width, pcd, et))
                 else:
-                    cursor.execute("SELECT id FROM wheels WHERE brand = ? AND model = ? AND diameter = ? AND width = ? AND pcd = ? AND et = ?", 
+                    cursor.execute("SELECT id FROM wheels WHERE brand = ? AND model = ? AND diameter = ? AND width = ? AND pcd = ? AND et = ?",
                                    (brand, model, diameter, width, pcd, et))
-                
+
                 existing_wheel = cursor.fetchone()
 
                 if existing_wheel:
                     flash(f'แม็ก {brand.title()} ลาย {model.title()} ขนาด {diameter}x{width} มีอยู่ในระบบแล้ว', 'warning')
                 else:
-                    new_wheel_id = database.add_wheel(conn, brand, model, diameter, pcd, width, et, color, 
+                    new_wheel_id = database.add_wheel(conn, brand, model, diameter, pcd, width, et, color,
                                                     quantity, cost, cost_online, wholesale_price1, wholesale_price2, retail_price, image_url, user_id=current_user.id)
                     if scanned_barcode_for_add:
                         database.add_wheel_barcode(conn, new_wheel_id, scanned_barcode_for_add, is_primary=True)
@@ -850,7 +980,7 @@ def add_item():
                 conn.rollback()
                 flash('ข้อมูลตัวเลขไม่ถูกต้อง กรุณาตรวจสอบ', 'danger')
                 active_tab = 'wheel'
-                return render_template('add_item.html', form_data=form_data, active_tab=active_tab, current_year=current_year, all_promotions=all_promotions, current_user=current_user)
+                return render_template('add_item.html', form_data=form_data, active_tab=active_tab, current_year=current_year, all_promotions=all_promotions, all_spare_part_categories=all_spare_part_categories, current_user=current_user)
             except (sqlite3.IntegrityError, Exception) as e:
                 conn.rollback()
                 if "UNIQUE constraint failed" in str(e) or "duplicate key value violates unique constraint" in str(e):
@@ -858,9 +988,116 @@ def add_item():
                 else:
                     flash(f'เกิดข้อผิดพลาดในการเพิ่มแม็ก: {e}', 'danger')
                 active_tab = 'wheel'
-                return render_template('add_item.html', form_data=form_data, active_tab=active_tab, current_year=current_year, all_promotions=all_promotions, current_user=current_user)
-    
-    return render_template('add_item.html', form_data=form_data, active_tab=active_tab, current_year=current_year, all_promotions=all_promotions, current_user=current_user)
+                return render_template('add_item.html', form_data=form_data, active_tab=active_tab, current_year=current_year, all_promotions=all_promotions, all_spare_part_categories=all_spare_part_categories, current_user=current_user)
+
+        # NEW: Logic for adding Spare Parts
+        elif submit_type == 'add_spare_part':
+            name = request.form['name'].strip()
+            part_number = request.form.get('part_number', '').strip()
+            brand = request.form.get('brand', '').strip().lower()
+            description = request.form.get('description', '').strip()
+            quantity = request.form['quantity']
+            retail_price = request.form['retail_price']
+            category_id = request.form.get('category_id') # NEW: รับ category_id
+
+            scanned_barcode_for_add = request.form.get('barcode_id_for_add', '').strip()
+
+            cost = request.form.get('cost')
+            cost_online = request.form.get('cost_online')
+            wholesale_price1 = request.form.get('wholesale_price1')
+            wholesale_price2 = request.form.get('wholesale_price2')
+
+            image_file = request.files.get('image_file')
+            image_url = None
+
+            if not name or not quantity or not retail_price:
+                flash('กรุณากรอกข้อมูลอะไหล่ให้ครบถ้วนในช่องที่มีเครื่องหมาย * (ชื่อ, จำนวน, ราคาขายปลีก)', 'danger')
+                active_tab = 'spare_part'
+                return render_template('add_item.html', form_data=form_data, active_tab=active_tab, current_year=current_year, all_promotions=all_promotions, all_spare_part_categories=all_spare_part_categories, current_user=current_user)
+
+            if category_id == 'none' or not category_id: # Check if category is selected
+                category_id_db = None
+            else:
+                category_id_db = int(category_id)
+
+            if scanned_barcode_for_add:
+                existing_barcode_tire_id = database.get_tire_id_by_barcode(conn, scanned_barcode_for_add)
+                existing_barcode_wheel_id = database.get_wheel_id_by_barcode(conn, scanned_barcode_for_add)
+                existing_barcode_spare_part_id = database.get_spare_part_id_by_barcode(conn, scanned_barcode_for_add)
+                if existing_barcode_tire_id or existing_barcode_wheel_id or existing_barcode_spare_part_id:
+                    flash(f"Barcode ID '{scanned_barcode_for_add}' มีอยู่ในระบบแล้ว. ไม่สามารถใช้ซ้ำได้.", 'danger')
+                    active_tab = 'spare_part'
+                    return render_template('add_item.html', form_data=form_data, active_tab=active_tab, current_year=current_year, all_promotions=all_promotions, all_spare_part_categories=all_spare_part_categories, current_user=current_user)
+
+            if image_file and image_file.filename != '':
+                if allowed_image_file(image_file.filename):
+                    try:
+                        upload_result = cloudinary.uploader.upload(image_file)
+                        image_url = upload_result['secure_url']
+                    except Exception as e:
+                        flash(f'เกิดข้อผิดพลาดในการอัปโหลดรูปภาพไปยังเซิฟเวอร์: {e}', 'danger')
+                        active_tab = 'spare_part'
+                        return render_template('add_item.html', form_data=form_data, active_tab=active_tab, current_year=current_year, all_promotions=all_promotions, all_spare_part_categories=all_spare_part_categories, current_user=current_user)
+                else:
+                    flash('ชนิดไฟล์รูปภาพไม่ถูกต้อง อนุญาตเฉพาะ .png, .jpg, .jpeg, .gif เท่านั้น', 'danger')
+                    active_tab = 'spare_part'
+                    return render_template('add_item.html', form_data=form_data, active_tab=active_tab, current_year=current_year, all_promotions=all_promotions, all_spare_part_categories=all_spare_part_categories, current_user=current_user)
+
+            try:
+                quantity = int(quantity)
+                retail_price = float(retail_price)
+
+                cost = float(cost) if cost and cost.strip() else None
+                cost_online = float(cost_online) if cost_online and cost_online.strip() else None
+                wholesale_price1 = float(wholesale_price1) if wholesale_price1 and wholesale_price1.strip() else None
+                wholesale_price2 = float(wholesale_price2) if wholesale_price2 and wholesale_price2.strip() else None
+
+                cursor = conn.cursor()
+                is_postgres = "psycopg2" in str(type(conn))
+
+                # Check for existing spare part by name and (optional) part_number/brand
+                if part_number: # Prefer part_number if provided for uniqueness
+                    if is_postgres:
+                        cursor.execute("SELECT id FROM spare_parts WHERE name = %s AND part_number = %s", (name, part_number))
+                    else:
+                        cursor.execute("SELECT id FROM spare_parts WHERE name = ? AND part_number = ?", (name, part_number))
+                else: # Fallback to just name and brand if no part_number
+                    if is_postgres:
+                        cursor.execute("SELECT id FROM spare_parts WHERE name = %s AND brand = %s", (name, brand))
+                    else:
+                        cursor.execute("SELECT id FROM spare_parts WHERE name = ? AND brand = ?", (name, brand))
+
+                existing_spare_part = cursor.fetchone()
+
+                if existing_spare_part:
+                    flash(f'อะไหล่ "{name}" (Part No: {part_number if part_number else "N/A"}) มีอยู่ในระบบแล้ว', 'warning')
+                else:
+                    new_spare_part_id = database.add_spare_part(conn, name, part_number, brand, description, quantity,
+                                                                 cost, retail_price, wholesale_price1, wholesale_price2,
+                                                                 cost_online, image_url, category_id_db, user_id=current_user_id)
+                    if scanned_barcode_for_add:
+                        database.add_spare_part_barcode(conn, new_spare_part_id, scanned_barcode_for_add, is_primary=True)
+                    conn.commit()
+                    flash(f'เพิ่มอะไหล่ "{name}" จำนวน {quantity} ชิ้น สำเร็จ!', 'success')
+                    cache.delete_memoized(get_cached_spare_parts)
+                    cache.delete_memoized(get_cached_spare_part_brands)
+                return redirect(url_for('add_item', tab='spare_part'))
+
+            except ValueError as e:
+                conn.rollback()
+                flash(f'ข้อมูลตัวเลขไม่ถูกต้อง กรุณาตรวจสอบ: {e}', 'danger')
+                active_tab = 'spare_part'
+                return render_template('add_item.html', form_data=form_data, active_tab=active_tab, current_year=current_year, all_promotions=all_promotions, all_spare_part_categories=all_spare_part_categories, current_user=current_user)
+            except (sqlite3.IntegrityError, Exception) as e:
+                conn.rollback()
+                if "UNIQUE constraint failed" in str(e) or "duplicate key value violates unique constraint" in str(e):
+                    flash(f'เกิดข้อผิดพลาด: รหัสอะไหล่หรือชื่อซ้ำซ้อนในระบบ หรือ Barcode ID นี้มีอยู่แล้ว. รายละเอียด: {e}', 'warning')
+                else:
+                    flash(f'เกิดข้อผิดพลาดในการเพิ่มอะไหล่: {e}', 'danger')
+                active_tab = 'spare_part'
+                return render_template('add_item.html', form_data=form_data, active_tab=active_tab, current_year=current_year, all_promotions=all_promotions, all_spare_part_categories=all_spare_part_categories, current_user=current_user)
+
+    return render_template('add_item.html', form_data=form_data, active_tab=active_tab, current_year=current_year, all_promotions=all_promotions, all_spare_part_categories=all_spare_part_categories, current_user=current_user)
 
 @app.route('/edit_tire/<int:tire_id>', methods=('GET', 'POST'))
 @login_required
@@ -880,6 +1117,9 @@ def edit_tire(tire_id):
 
     all_promotions = get_all_promotions_cached()
     tire_barcodes = database.get_barcodes_for_tire(conn, tire_id)
+    
+    # NEW: ดึงประวัติการเปลี่ยนแปลงราคาทุน
+    cost_history = database.get_tire_cost_history(conn, tire_id)
 
     if request.method == 'POST':
         brand = request.form['brand'].strip().lower()
@@ -908,7 +1148,8 @@ def edit_tire(tire_id):
             try:
                 price_per_item = float(price_per_item)
 
-                cost_sc = float(cost_sc) if cost_sc and cost_sc.strip() else None
+                # Adjusted variable name for clarity
+                new_cost_sc_float = float(cost_sc) if cost_sc and cost_sc.strip() else None
                 cost_dunlop = float(cost_dunlop) if cost_dunlop and cost_dunlop.strip() else None
                 cost_online = float(cost_online) if cost_online and cost_online.strip() else None
                 wholesale_price1 = float(wholesale_price1) if pd.notna(wholesale_price1) and wholesale_price1.strip() else None
@@ -916,7 +1157,22 @@ def edit_tire(tire_id):
                 
                 year_of_manufacture = year_of_manufacture.strip() if year_of_manufacture and year_of_manufacture.strip() else None
 
-                database.update_tire(conn, tire_id, brand, model, size, cost_sc, cost_dunlop, cost_online, 
+                # --- START: ส่วนที่เพิ่มเข้ามาเพื่อบันทึกประวัติ ---
+                old_cost_sc_float = tire.get('cost_sc')
+                
+                # ตรวจสอบว่ามีการเปลี่ยนแปลงค่า cost_sc จริงๆ
+                if old_cost_sc_float != new_cost_sc_float:
+                    database.add_tire_cost_history(
+                        conn=conn,
+                        tire_id=tire_id,
+                        old_cost=old_cost_sc_float,
+                        new_cost=new_cost_sc_float,
+                        user_id=current_user.id,
+                        notes="แก้ไขผ่านหน้าเว็บ"
+                    )
+                # --- END: ส่วนที่เพิ่มเข้ามา ---
+
+                database.update_tire(conn, tire_id, brand, model, size, new_cost_sc_float, cost_dunlop, cost_online, 
                                      wholesale_price1, wholesale_price2, price_per_item, 
                                      promotion_id_db, 
                                      year_of_manufacture)
@@ -932,7 +1188,8 @@ def edit_tire(tire_id):
                 else:
                     flash(f'เกิดข้อผิดพลาดในการแก้ไขข้อมูลยาง: {e}', 'danger')
 
-    return render_template('edit_tire.html', tire=tire, current_year=current_year, all_promotions=all_promotions, tire_barcodes=tire_barcodes, current_user=current_user)
+    # NEW: ส่ง cost_history ไปที่ template
+    return render_template('edit_tire.html', tire=tire, current_year=current_year, all_promotions=all_promotions, tire_barcodes=tire_barcodes, cost_history=cost_history, current_user=current_user)
     
 @app.route('/api/tire/<int:tire_id>/barcodes', methods=['GET', 'POST', 'DELETE']) # <--- เพิ่ม 'GET' เข้าไป
 @login_required
@@ -1052,6 +1309,7 @@ def edit_wheel(wheel_id):
         wholesale_price2 = request.form.get('wholesale_price2')
         retail_price = float(request.form['retail_price'])
         image_file = request.files.get('image_file')
+        current_quantity = wheel['quantity']
 
         if not brand or not model or not pcd or not str(diameter) or not str(width) or not str(retail_price):
             flash('กรุณากรอกข้อมูลแม็กให้ครบถ้วนในช่องที่มีเครื่องหมาย *', 'danger')
@@ -1089,7 +1347,7 @@ def edit_wheel(wheel_id):
                         flash('ชนิดไฟล์รูปภาพไม่ถูกต้อง อนุญาตเฉพาะ .png, .jpg, .jpeg, .gif เท่านั้น', 'danger')
                         return render_template('edit_wheel.html', wheel=wheel, current_year=current_year, current_user=current_user)
 
-                database.update_wheel(conn, wheel_id, brand, model, diameter, pcd, width, et, color, cost, cost_online, wholesale_price1, wholesale_price2, retail_price, current_image_url)
+                database.update_wheel(conn, wheel_id, brand, model, diameter, pcd, width, et, color, current_quantity, cost, cost_online, wholesale_price1, wholesale_price2, retail_price, current_image_url)
                 flash('แก้ไขข้อมูลแม็กสำเร็จ!', 'success')
                 cache.delete_memoized(get_all_wheels_list_cached)
                 cache.delete_memoized(get_cached_wheels)
@@ -1240,6 +1498,209 @@ def delete_fitment(fitment_id, wheel_id):
     
     return redirect(url_for('wheel_detail', wheel_id=wheel_id))
 
+@app.route('/spare_part_detail/<int:spare_part_id>')
+@login_required
+def spare_part_detail(spare_part_id):
+    conn = get_db()
+    spare_part = database.get_spare_part(conn, spare_part_id)
+
+    if spare_part is None:
+        flash('ไม่พบอะไหล่ที่ระบุ', 'danger')
+        return redirect(url_for('index', tab='spare_parts'))
+
+    # Filter data based on viewing permissions
+    if not current_user.can_view_cost():
+        spare_part['cost'] = None
+        spare_part['cost_online'] = None
+    if not current_user.can_view_wholesale_price_1():
+        spare_part['wholesale_price1'] = None
+    if not current_user.can_view_wholesale_price_2():
+        spare_part['wholesale_price2'] = None
+    if not current_user.can_view_retail_price():
+        spare_part['retail_price'] = None
+
+
+    return render_template('spare_part_detail.html', spare_part=spare_part, current_user=current_user)
+
+@app.route('/edit_spare_part/<int:spare_part_id>', methods=('GET', 'POST'))
+@login_required
+def edit_spare_part(spare_part_id):
+    if not current_user.can_edit():
+        flash('คุณไม่มีสิทธิ์ในการแก้ไขข้อมูลอะไหล่', 'danger')
+        return redirect(url_for('index'))
+
+    conn = get_db()
+    spare_part = database.get_spare_part(conn, spare_part_id)
+    all_spare_part_categories = get_cached_spare_part_categories_hierarchical()
+
+    if spare_part is None:
+        flash('ไม่พบอะไหล่ที่ระบุ', 'danger')
+        return redirect(url_for('index', tab='spare_parts'))
+
+    spare_part_barcodes = database.get_barcodes_for_spare_part(conn, spare_part_id)
+
+    if request.method == 'POST':
+        name = request.form['name'].strip()
+        part_number = request.form.get('part_number', '').strip()
+        brand = request.form.get('brand', '').strip().lower()
+        description = request.form.get('description', '').strip()
+        retail_price = request.form['retail_price']
+        category_id = request.form.get('category_id')
+
+        cost = request.form.get('cost')
+        cost_online = request.form.get('cost_online')
+        wholesale_price1 = request.form.get('wholesale_price1')
+        wholesale_price2 = request.form.get('wholesale_price2')
+
+        image_file = request.files.get('image_file')
+        current_image_url = spare_part['image_filename']
+
+        if not name or not retail_price:
+            flash('กรุณากรอกข้อมูลอะไหล่ให้ครบถ้วนในช่องที่มีเครื่องหมาย *', 'danger')
+        else:
+            if category_id == 'none' or not category_id:
+                category_id_db = None
+            else:
+                category_id_db = int(category_id)
+
+            if image_file and image_file.filename != '':
+                if allowed_image_file(image_file.filename):
+                    try:
+                        upload_result = cloudinary.uploader.upload(image_file)
+                        new_image_url = upload_result['secure_url']
+
+                        if current_image_url and "res.cloudinary.com" in current_image_url:
+                            public_id_match = re.search(r'v\d+/([^/.]+)', current_image_url)
+                            if public_id_match:
+                                public_id = public_id_match.group(1)
+                                try:
+                                    cloudinary.uploader.destroy(public_id)
+                                except Exception as e:
+                                    print(f"Error deleting old image from Cloudinary for spare part: {e}")
+
+                        current_image_url = new_image_url
+
+                    except Exception as e:
+                        flash(f'เกิดข้อผิดพลาดในการอัปโหลดรูปภาพไปยัง Cloudinary: {e}', 'danger')
+                        return render_template('edit_spare_part.html', spare_part=spare_part, all_spare_part_categories=all_spare_part_categories, spare_part_barcodes=spare_part_barcodes, current_user=current_user)
+                else:
+                    flash('ชนิดไฟล์รูปภาพไม่ถูกต้อง อนุญาตเฉพาะ .png, .jpg, .jpeg, .gif เท่านั้น', 'danger')
+                    return render_template('edit_spare_part.html', spare_part=spare_part, all_spare_part_categories=all_spare_part_categories, spare_part_barcodes=spare_part_barcodes, current_user=current_user)
+
+            try:
+                retail_price = float(retail_price)
+                cost = float(cost) if cost and cost.strip() else None
+                cost_online = float(cost_online) if cost_online and cost_online.strip() else None
+                wholesale_price1 = float(wholesale_price1) if wholesale_price1 and wholesale_price1.strip() else None
+                wholesale_price2 = float(wholesale_price2) if wholesale_price2 and wholesale_price2.strip() else None
+
+                database.update_spare_part(conn, spare_part_id, name, part_number, brand, description,
+                                           cost, retail_price, wholesale_price1, wholesale_price2, cost_online,
+                                           current_image_url, category_id_db)
+                conn.commit()
+                flash('แก้ไขข้อมูลอะไหล่สำเร็จ!', 'success')
+                cache.delete_memoized(get_cached_spare_parts)
+                cache.delete_memoized(get_cached_spare_part_brands)
+                return redirect(url_for('spare_part_detail', spare_part_id=spare_part_id))
+            except ValueError:
+                flash('ข้อมูลตัวเลขไม่ถูกต้อง กรุณาตรวจสอบ', 'danger')
+            except (sqlite3.IntegrityError, Exception) as e:
+                conn.rollback()
+                if "UNIQUE constraint failed" in str(e) or "duplicate key value violates unique constraint" in str(e):
+                    flash(f'เกิดข้อผิดพลาด: รหัสอะไหล่หรือชื่อซ้ำซ้อนในระบบ. รายละเอียด: {e}', 'warning')
+                else:
+                    flash(f'เกิดข้อผิดพลาดในการแก้ไขข้อมูลอะไหล่: {e}', 'danger')
+
+    # Ensure to pass updated spare_part_barcodes and current_user to the template on GET or error
+    return render_template('edit_spare_part.html', spare_part=spare_part,
+                           all_spare_part_categories=all_spare_part_categories,
+                           spare_part_barcodes=spare_part_barcodes, current_user=current_user)
+
+@app.route('/delete_spare_part/<int:spare_part_id>', methods=('POST',))
+@login_required
+def delete_spare_part(spare_part_id):
+    if not current_user.is_admin():
+        flash('คุณไม่มีสิทธิ์ในการลบอะไหล่', 'danger')
+        return redirect(url_for('index'))
+
+    conn = get_db()
+    spare_part = database.get_spare_part(conn, spare_part_id)
+
+    if spare_part is None:
+        flash('ไม่พบอะไหล่ที่ระบุ', 'danger')
+    elif spare_part['quantity'] > 0:
+        flash('ไม่สามารถลบอะไหล่ได้เนื่องจากยังมีสต็อกเหลืออยู่. กรุณาปรับสต็อกให้เป็น 0 ก่อน.', 'danger')
+        return redirect(url_for('index', tab='spare_parts'))
+    else:
+        try:
+            database.delete_spare_part(conn, spare_part_id)
+            flash('ลบอะไหล่สำเร็จ!', 'success')
+            cache.delete_memoized(get_cached_spare_parts)
+            cache.delete_memoized(get_cached_spare_part_brands) # In case any brand summary is cached
+        except Exception as e:
+            flash(f'เกิดข้อผิดพลาดในการลบ: {e}', 'danger')
+
+    return redirect(url_for('index', tab='spare_parts'))
+
+# --- API for managing Spare Part Barcodes ---
+@app.route('/api/spare_part/<int:spare_part_id>/barcodes', methods=['GET', 'POST', 'DELETE'])
+@login_required
+def api_manage_spare_part_barcodes(spare_part_id):
+    if not current_user.can_edit():
+        return jsonify({"success": False, "message": "คุณไม่มีสิทธิ์ในการจัดการ Barcode ID"}), 403
+
+    conn = get_db()
+
+    if request.method == 'GET':
+        try:
+            barcodes = database.get_barcodes_for_spare_part(conn, spare_part_id)
+            return jsonify({"success": True, "barcodes": barcodes})
+        except Exception as e:
+            return jsonify({"success": False, "message": f"เกิดข้อผิดพลาดในการดึงข้อมูลบาร์โค้ด: {str(e)}"}), 500
+
+    data = request.get_json()
+    barcode_string = data.get('barcode_string', '').strip()
+
+    if not barcode_string:
+        return jsonify({"success": False, "message": "ไม่พบบาร์โค้ด"}), 400
+
+    try:
+        if request.method == 'POST':
+            # ตรวจสอบว่า Barcode นี้ถูกใช้กับสินค้าอื่นอยู่แล้วหรือไม่ (ทั้งยาง, ล้อ, อะไหล่)
+            existing_tire_id_by_barcode = database.get_tire_id_by_barcode(conn, barcode_string)
+            existing_wheel_id_by_barcode = database.get_wheel_id_by_barcode(conn, barcode_string)
+            existing_spare_part_id_by_barcode = database.get_spare_part_id_by_barcode(conn, barcode_string)
+
+            if existing_spare_part_id_by_barcode:
+                if existing_spare_part_id_by_barcode != spare_part_id:
+                    conn.rollback()
+                    return jsonify({"success": False, "message": f"บาร์โค้ด '{barcode_string}' ถูกเชื่อมโยงกับอะไหล่อื่น (ID: {existing_spare_part_id_by_barcode}) แล้ว"}), 409
+                else:
+                    return jsonify({"success": True, "message": f"บาร์โค้ด '{barcode_string}' ถูกเชื่อมโยงกับอะไหล่นี้อยู่แล้ว"}), 200
+
+            if existing_tire_id_by_barcode:
+                conn.rollback()
+                return jsonify({"success": False, "message": f"บาร์โค้ด '{barcode_string}' ถูกเชื่อมโยงกับยาง (ID: {existing_tire_id_by_barcode}) แล้ว"}), 409
+
+            if existing_wheel_id_by_barcode:
+                conn.rollback()
+                return jsonify({"success": False, "message": f"บาร์โค้ด '{barcode_string}' ถูกเชื่อมโยงกับล้อแม็ก (ID: {existing_wheel_id_by_barcode}) แล้ว"}), 409
+
+            database.add_spare_part_barcode(conn, spare_part_id, barcode_string, is_primary=False)
+            conn.commit()
+            return jsonify({"success": True, "message": "เพิ่ม Barcode สำเร็จ!"}), 201
+
+        elif request.method == 'DELETE':
+            database.delete_spare_part_barcode(conn, barcode_string)
+            conn.commit()
+            return jsonify({"success": True, "message": "ลบ Barcode สำเร็จ!"}), 200
+
+    except Exception as e:
+        conn.rollback()
+        if "UNIQUE constraint failed" in str(e) or "duplicate key value violates unique constraint" in str(e):
+             return jsonify({"success": False, "message": f"บาร์โค้ด '{barcode_string}' มีอยู่ในระบบแล้ว"}), 409
+        return jsonify({"success": False, "message": f"เกิดข้อผิดพลาดในการจัดการ Barcode ID: {str(e)}"}), 500
+
 @cache.memoize(timeout=600) # Cache 10 นาที เพราะข้อมูลเปลี่ยนเมื่อมีการเพิ่ม/ลบสินค้า
 def get_all_tires_list_cached():
     print("--- CACHE MISS (All Tires List) --- Fetching complete tire list from DB")
@@ -1265,12 +1726,13 @@ def stock_movement():
 
     tires = get_all_tires_list_cached()
     wheels = get_all_wheels_list_cached()
-    
+    spare_parts = database.get_all_spare_parts(conn) # NEW: Get all spare parts for dropdown
+
     sales_channels = get_all_sales_channels_cached()
     online_platforms = get_all_online_platforms_cached()
     wholesale_customers = get_all_wholesale_customers_cached()
 
-    active_tab = request.args.get('tab', 'tire_movements') 
+    active_tab = request.args.get('tab', 'tire_movements')
 
     # --- สำหรับ Tire Movements History (โค้ดเดิม) ---
     tire_movements_query = """
@@ -1337,26 +1799,63 @@ def stock_movement():
         processed_wheel_movements_history.append(movement_data)
     wheel_movements_history = processed_wheel_movements_history
 
+    # NEW: สำหรับ Spare Part Movements History
+    spare_part_movements_query = """
+        SELECT spm.id, spm.timestamp, spm.type, spm.quantity_change, spm.remaining_quantity, spm.image_filename, spm.notes,
+               sp.id AS spare_part_main_id, sp.name AS spare_part_name, sp.part_number, sp.brand AS spare_part_brand,
+               u.username AS user_username,
+               sc.name AS channel_name,
+               op.name AS online_platform_name,
+               wc.name AS wholesale_customer_name,
+               spm.return_customer_type, spm.channel_id, spm.online_platform_id, spm.wholesale_customer_id
+        FROM spare_part_movements spm
+        JOIN spare_parts sp ON spm.spare_part_id = sp.id
+        LEFT JOIN users u ON spm.user_id = u.id
+        LEFT JOIN sales_channels sc ON spm.channel_id = sc.id
+        LEFT JOIN online_platforms op ON spm.online_platform_id = op.id
+        LEFT JOIN wholesale_customers wc ON spm.wholesale_customer_id = wc.id
+        ORDER BY spm.timestamp DESC LIMIT 50
+    """
+    if "psycopg2" in str(type(conn)):
+        cursor_spare_part = conn.cursor()
+        cursor_spare_part.execute(spare_part_movements_query)
+        spare_part_movements_history_raw = cursor_spare_part.fetchall()
+        cursor_spare_part.close()
+    else:
+        spare_part_movements_history_raw = conn.execute(spare_part_movements_query).fetchall()
+
+    processed_spare_part_movements_history = []
+    for movement in spare_part_movements_history_raw:
+        movement_data = dict(movement)
+        movement_data['timestamp'] = database.convert_to_bkk_time(movement_data['timestamp'])
+        processed_spare_part_movements_history.append(movement_data)
+    spare_part_movements_history = processed_spare_part_movements_history
+
+
     if request.method == 'POST':
         submit_type = request.form.get('submit_type')
-        active_tab_on_error = 'tire_movements' if submit_type == 'tire_movement' else 'wheel_movements'
+        active_tab_on_error = 'tire_movements' # Default to tire tab on error
 
-        item_id_key = ''
-        quantity_form_key = ''
         if submit_type == 'tire_movement':
             item_id_key = 'tire_id'
             quantity_form_key = 'quantity'
+            active_tab_on_error = 'tire_movements'
         elif submit_type == 'wheel_movement':
             item_id_key = 'wheel_id'
             quantity_form_key = 'quantity'
+            active_tab_on_error = 'wheel_movements'
+        elif submit_type == 'spare_part_movement': # NEW
+            item_id_key = 'spare_part_id'
+            quantity_form_key = 'quantity'
+            active_tab_on_error = 'spare_part_movements'
         else:
             flash('ประเภทการส่งฟอร์มไม่ถูกต้อง', 'danger')
             return redirect(url_for('stock_movement'))
-        
+
         if quantity_form_key not in request.form or not request.form[quantity_form_key].strip():
             flash('กรุณากรอกจำนวนที่เปลี่ยนแปลงให้ถูกต้อง', 'danger')
             return redirect(url_for('stock_movement', tab=active_tab_on_error))
-        
+
         try:
             item_id = request.form[item_id_key]
             move_type = request.form['type']
@@ -1365,13 +1864,13 @@ def stock_movement():
             bill_image_file = request.files.get('bill_image')
 
             bill_image_url_to_db = None
-            
+
             if bill_image_file and bill_image_file.filename != '':
                 if allowed_image_file(bill_image_file.filename):
                     try:
                         upload_result = cloudinary.uploader.upload(bill_image_file)
                         bill_image_url_to_db = upload_result['secure_url']
-                        
+
                     except Exception as e:
                         flash(f'เกิดข้อผิดพลาดในการอัปโหลดรูปภาพบิลไปยัง Cloudinary: {e}', 'danger')
                         return redirect(url_for('stock_movement', tab=active_tab_on_error))
@@ -1382,26 +1881,26 @@ def stock_movement():
             if quantity_change <= 0:
                 flash('จำนวนที่เปลี่ยนแปลงต้องมากกว่า 0', 'danger')
                 return redirect(url_for('stock_movement', tab=active_tab_on_error))
-            
+
             current_user_id = current_user.id if current_user.is_authenticated else None
 
             # MODIFIED: Get channel-specific data from form
             channel_id_str = request.form.get('channel_id')
             online_platform_id_str = request.form.get('online_platform_id') # สำหรับ OUT ช่องทาง 'ออนไลน์'
             wholesale_customer_id_str = request.form.get('wholesale_customer_id') # สำหรับ OUT ช่องทาง 'ค้าส่ง'
-            return_customer_type = request.form.get('return_customer_type') 
-            
+            return_customer_type = request.form.get('return_customer_type')
+
             # NEW: รับค่าสำหรับ 'ชื่อร้านยางที่คืน'
-            return_wholesale_customer_id_str = request.form.get('return_wholesale_customer_id') 
+            return_wholesale_customer_id_str = request.form.get('return_wholesale_customer_id')
             # NEW: รับค่าสำหรับ 'แพลตฟอร์มออนไลน์ที่คืน'
-            return_online_platform_id_str = request.form.get('return_online_platform_id') 
+            return_online_platform_id_str = request.form.get('return_online_platform_id')
 
             final_channel_id = int(channel_id_str) if channel_id_str else None
-            
+
             # NEW: กำหนดค่าเริ่มต้นของ final_online_platform_id และ final_wholesale_customer_id เป็น None ก่อน
-            final_online_platform_id = None 
-            final_wholesale_customer_id = None 
-            
+            final_online_platform_id = None
+            final_wholesale_customer_id = None
+
             # Logic validation: Ensure correct channel is selected for specific types
             channel_name = database.get_sales_channel_name(conn, final_channel_id)
 
@@ -1416,11 +1915,11 @@ def stock_movement():
                 if channel_name != 'รับคืน':
                     flash('สำหรับประเภท "รับคืน/ตีคืน" ช่องทางการเคลื่อนไหวต้องเป็น "รับคืน" เท่านั้น', 'danger')
                     return redirect(url_for('stock_movement', tab=active_tab_on_error))
-                
+
                 if not return_customer_type:
                     flash('กรุณาระบุ "คืนจาก" สำหรับประเภท "รับคืน/ตีคืน"', 'danger')
                     return redirect(url_for('stock_movement', tab=active_tab_on_error))
-                
+
                 # Logic for "ออนไลน์" return
                 if return_customer_type == 'ออนไลน์':
                     if not return_online_platform_id_str: # ใช้ return_online_platform_id_str ที่รับมาใหม่
@@ -1446,12 +1945,12 @@ def stock_movement():
                         return redirect(url_for('stock_movement', tab=active_tab_on_error))
                 # หากเป็น 'หน้าร้านลูกค้าทั่วไป' ก็ไม่จำเป็นต้องมี final_wholesale_customer_id
                 # final_wholesale_customer_id จะถูกเก็บเป็น None ตั้งแต่ต้นอยู่แล้ว ถ้าไม่เข้าเงื่อนไขนี้
-            
+
             elif move_type == 'OUT':
                 if channel_name == 'ซื้อเข้า' or channel_name == 'รับคืน':
                     flash(f'สำหรับประเภท "จ่ายออก" ช่องทางการเคลื่อนไหวไม่สามารถเป็น "{channel_name}" ได้', 'danger')
                     return redirect(url_for('stock_movement', tab=active_tab_on_error))
-                
+
                 if channel_name == 'ออนไลน์':
                     if not online_platform_id_str: # ใช้ online_platform_id_str เดิมสำหรับ OUT ช่องทางออนไลน์
                         flash('กรุณาระบุ "แพลตฟอร์มออนไลน์" สำหรับช่องทาง "ออนไลน์"', 'danger')
@@ -1463,7 +1962,7 @@ def stock_movement():
                         return redirect(url_for('stock_movement', tab=active_tab_on_error))
                 else:
                     final_online_platform_id = None # Clear if not online
-                
+
                 if channel_name == 'ค้าส่ง':
                     if not wholesale_customer_id_str: # ใช้ wholesale_customer_id_str เดิมสำหรับ OUT ค้าส่ง
                         flash('กรุณาระบุ "ชื่อลูกค้าค้าส่ง" สำหรับช่องทาง "ค้าส่ง"', 'danger')
@@ -1475,7 +1974,7 @@ def stock_movement():
                         return redirect(url_for('stock_movement', tab=active_tab_on_error))
                 else:
                     final_wholesale_customer_id = None # Make sure this is None for other OUT channels
-                
+
                 return_customer_type = None # Clear if not applicable
 
             # --- Process Tire Movement ---
@@ -1485,7 +1984,7 @@ def stock_movement():
                 if current_tire is None:
                     flash('ไม่พบยางที่ระบุ', 'danger')
                     return redirect(url_for('stock_movement', tab=active_tab_on_error))
-                
+
                 new_quantity = current_tire['quantity']
                 if move_type == 'IN' or move_type == 'RETURN':
                     new_quantity += quantity_change
@@ -1494,9 +1993,9 @@ def stock_movement():
                         flash(f'สต็อกยางไม่พอสำหรับการจ่ายออก. มีเพียง {new_quantity} เส้น.', 'danger')
                         return redirect(url_for('stock_movement', tab=active_tab_on_error))
                     new_quantity -= quantity_change
-                
+
                 database.update_tire_quantity(conn, tire_id, new_quantity)
-                database.add_tire_movement(conn, tire_id, move_type, quantity_change, new_quantity, notes, 
+                database.add_tire_movement(conn, tire_id, move_type, quantity_change, new_quantity, notes,
                                             bill_image_url_to_db, user_id=current_user_id,
                                             channel_id=final_channel_id,
                                             online_platform_id=final_online_platform_id,
@@ -1523,7 +2022,7 @@ def stock_movement():
                 if current_wheel is None:
                     flash('ไม่พบแม็กที่ระบุ', 'danger')
                     return redirect(url_for('stock_movement', tab=active_tab_on_error))
-                
+
                 new_quantity = current_wheel['quantity']
                 if move_type == 'IN' or move_type == 'RETURN':
                     new_quantity += quantity_change
@@ -1532,9 +2031,9 @@ def stock_movement():
                         flash(f'สต็อกแม็กไม่พอสำหรับการจ่ายออก. มีเพียง {new_quantity} วง.', 'danger')
                         return redirect(url_for('stock_movement', tab=active_tab_on_error))
                     new_quantity -= quantity_change
-                
+
                 database.update_wheel_quantity(conn, wheel_id, new_quantity)
-                database.add_wheel_movement(conn, wheel_id, move_type, quantity_change, new_quantity, notes, 
+                database.add_wheel_movement(conn, wheel_id, move_type, quantity_change, new_quantity, notes,
                                              bill_image_url_to_db, user_id=current_user_id,
                                              channel_id=final_channel_id,
                                              online_platform_id=final_online_platform_id,
@@ -1555,19 +2054,60 @@ def stock_movement():
 
                 return redirect(url_for('stock_movement', tab='wheel_movements'))
 
+            # NEW: Process Spare Part Movement
+            elif submit_type == 'spare_part_movement':
+                spare_part_id = int(item_id)
+                current_spare_part = database.get_spare_part(conn, spare_part_id)
+                if current_spare_part is None:
+                    flash('ไม่พบอะไหล่ที่ระบุ', 'danger')
+                    return redirect(url_for('stock_movement', tab=active_tab_on_error))
+
+                new_quantity = current_spare_part['quantity']
+                if move_type == 'IN' or move_type == 'RETURN':
+                    new_quantity += quantity_change
+                elif move_type == 'OUT':
+                    if new_quantity < quantity_change:
+                        flash(f'สต็อกอะไหล่ไม่พอสำหรับการจ่ายออก. มีเพียง {new_quantity} ชิ้น.', 'danger')
+                        return redirect(url_for('stock_movement', tab=active_tab_on_error))
+                    new_quantity -= quantity_change
+
+                database.update_spare_part_quantity(conn, spare_part_id, new_quantity)
+                database.add_spare_part_movement(conn, spare_part_id, move_type, quantity_change, new_quantity, notes,
+                                                  bill_image_url_to_db, user_id=current_user_id,
+                                                  channel_id=final_channel_id,
+                                                  online_platform_id=final_online_platform_id,
+                                                  wholesale_customer_id=final_wholesale_customer_id,
+                                                  return_customer_type=return_customer_type)
+                flash(f'บันทึกการเคลื่อนไหวสต็อกอะไหล่สำเร็จ! คงเหลือ: {new_quantity} ชิ้น', 'success')
+                cache.delete_memoized(get_cached_spare_parts)
+
+                spare_part_info = database.get_spare_part(conn, spare_part_id)
+                message = (
+                    f"สต็อกอะไหล่ [{move_type}]: {spare_part_info['name']} ({spare_part_info.get('brand', 'ไม่ระบุยี่ห้อ')}) "
+                    f"จำนวน {quantity_change} ชิ้น (คงเหลือ: {new_quantity}) "
+                    f"โดย {current_user.username}"
+                )
+                database.add_notification(conn, message, current_user.id)
+                conn.commit()
+
+                return redirect(url_for('stock_movement', tab='spare_part_movements'))
+
+
         except ValueError:
             flash('ข้อมูลตัวเลขไม่ถูกต้อง กรุณาตรวจสอบ', 'danger')
             return redirect(url_for('stock_movement', tab=active_tab_on_error))
         except Exception as e:
             flash(f'เกิดข้อผิดพลาดในการบันทึกการเคลื่อนไหวสต็อก: {e}', 'danger')
             return redirect(url_for('stock_movement', tab=active_tab_on_error))
-    
-    return render_template('stock_movement.html', 
-                           tires=tires, 
-                           wheels=wheels, 
+
+    return render_template('stock_movement.html',
+                           tires=tires,
+                           wheels=wheels,
+                           spare_parts=spare_parts, # NEW
                            active_tab=active_tab,
-                           tire_movements=tire_movements_history, 
+                           tire_movements=tire_movements_history,
                            wheel_movements=wheel_movements_history,
+                           spare_part_movements=spare_part_movements_history, # NEW
                            sales_channels=sales_channels,
                            online_platforms=online_platforms,
                            wholesale_customers=wholesale_customers,
@@ -1946,6 +2486,179 @@ def delete_wheel_movement_action(movement_id):
     
     return redirect(url_for('daily_stock_report'))
 
+@app.route('/edit_spare_part_movement/<int:movement_id>', methods=['GET', 'POST'])
+@login_required
+def edit_spare_part_movement(movement_id):
+    if not current_user.is_admin():
+        flash('คุณไม่มีสิทธิ์ในการแก้ไขข้อมูลการเคลื่อนไหวสต็อกอะไหล่', 'danger')
+        return redirect(url_for('daily_stock_report'))
+
+    conn = get_db()
+    movement = database.get_spare_part_movement(conn, movement_id)
+
+    if movement is None:
+        flash('ไม่พบข้อมูลการเคลื่อนไหวที่ระบุ', 'danger')
+        return redirect(url_for('daily_stock_report'))
+
+    movement_data = dict(movement)
+    movement_data['timestamp'] = database.convert_to_bkk_time(movement_data['timestamp'])
+
+    sales_channels = database.get_all_sales_channels(conn)
+    online_platforms = database.get_all_online_platforms(conn)
+    wholesale_customers = database.get_all_wholesale_customers(conn)
+
+    if request.method == 'POST':
+        new_notes = request.form.get('notes', '').strip()
+        new_type = request.form['type']
+        new_quantity_change = int(request.form['quantity_change'])
+        bill_image_file = request.files.get('bill_image')
+        delete_existing_image = request.form.get('delete_existing_image') == 'on'
+
+        current_image_url = movement_data['image_filename']
+        bill_image_url_to_db = current_image_url
+
+        if delete_existing_image:
+            if current_image_url and "res.cloudinary.com" in current_image_url:
+                public_id_match = re.search(r'v\d+/([^/.]+)', current_image_url)
+                if public_id_match:
+                    public_id = public_id_match.group(1)
+                    try:
+                        cloudinary.uploader.destroy(public_id)
+                    except Exception as e:
+                        print(f"Error deleting old spare part movement image from Cloudinary: {e}")
+            bill_image_url_to_db = None
+
+        if bill_image_file and bill_image_file.filename != '':
+            if allowed_image_file(bill_image_file.filename):
+                try:
+                    upload_result = cloudinary.uploader.upload(bill_image_file)
+                    new_image_url = upload_result['secure_url']
+                    bill_image_url_to_db = new_image_url
+                except Exception as e:
+                    flash(f'เกิดข้อผิดพลาดในการอัปโหลดรูปภาพบิลไปยัง Cloudinary: {e}', 'danger')
+                    return render_template('edit_spare_part_movement.html', movement=movement_data, current_user=current_user, sales_channels=sales_channels, online_platforms=online_platforms, wholesale_customers=wholesale_customers)
+            else:
+                flash('ชนิดไฟล์รูปภาพบิลไม่ถูกต้อง อนุญาตเฉพาะ .png, .jpg, .jpeg, .gif เท่านั้น', 'danger')
+                return render_template('edit_spare_part_movement.html', movement=movement_data, current_user=current_user, sales_channels=sales_channels, online_platforms=online_platforms, wholesale_customers=wholesale_customers)
+
+        new_channel_id_str = request.form.get('channel_id')
+        new_online_platform_id_str = request.form.get('online_platform_id')
+        new_wholesale_customer_id_str = request.form.get('wholesale_customer_id')
+        new_return_customer_type = request.form.get('return_customer_type')
+        new_return_wholesale_customer_id_str = request.form.get('return_wholesale_customer_id')
+        new_return_online_platform_id_str = request.form.get('return_online_platform_id')
+
+        final_new_channel_id = int(new_channel_id_str) if new_channel_id_str else None
+        final_new_online_platform_id = None
+        final_new_wholesale_customer_id = None
+
+        channel_name = database.get_sales_channel_name(conn, final_new_channel_id)
+
+        if new_type == 'IN':
+            if channel_name != 'ซื้อเข้า':
+                flash('สำหรับประเภท "รับเข้า" ช่องทางการเคลื่อนไหวต้องเป็น "ซื้อเข้า" เท่านั้น', 'danger')
+                return render_template('edit_spare_part_movement.html', movement=movement_data, current_user=current_user, sales_channels=sales_channels, online_platforms=online_platforms, wholesale_customers=wholesale_customers)
+            new_return_customer_type = None
+        elif new_type == 'RETURN':
+            if channel_name != 'รับคืน':
+                flash('สำหรับประเภท "รับคืน/ตีคืน" ช่องทางการเคลื่อนไหวต้องเป็น "รับคืน" เท่านั้น', 'danger')
+                return render_template('edit_spare_part_movement.html', movement=movement_data, current_user=current_user, sales_channels=sales_channels, online_platforms=online_platforms, wholesale_customers=wholesale_customers)
+            if not new_return_customer_type:
+                flash('กรุณาระบุ "คืนจาก" สำหรับประเภท "รับคืน/ตีคืน"', 'danger')
+                return render_template('edit_spare_part_movement.html', movement=movement_data, current_user=current_user, sales_channels=sales_channels, online_platforms=online_platforms, wholesale_customers=wholesale_customers)
+
+            if new_return_customer_type == 'ออนไลน์':
+                if not new_return_online_platform_id_str:
+                    flash('กรุณาระบุ "แพลตฟอร์มออนไลน์ที่คืน" สำหรับการคืนจาก "ออนไลน์"', 'danger')
+                    return render_template('edit_spare_part_movement.html', movement=movement_data, current_user=current_user, sales_channels=sales_channels, online_platforms=online_platforms, wholesale_customers=wholesale_customers)
+                try:
+                    final_new_online_platform_id = int(new_return_online_platform_id_str)
+                except ValueError:
+                    flash('ข้อมูลแพลตฟอร์มออนไลน์ที่คืนไม่ถูกต้อง', 'danger')
+                    return render_template('edit_spare_part_movement.html', movement=movement_data, current_user=current_user, sales_channels=sales_channels, online_platforms=online_platforms, wholesale_customers=wholesale_customers)
+            else:
+                final_new_online_platform_id = None
+
+            if new_return_customer_type == 'หน้าร้านร้านยาง':
+                if not new_return_wholesale_customer_id_str:
+                    flash('กรุณาระบุ "ชื่อร้านยาง" สำหรับการคืนจาก "หน้าร้าน (ร้านยาง)"', 'danger')
+                    return render_template('edit_spare_part_movement.html', movement=movement_data, current_user=current_user, sales_channels=sales_channels, online_platforms=online_platforms, wholesale_customers=wholesale_customers)
+                try:
+                    final_new_wholesale_customer_id = int(new_return_wholesale_customer_id_str)
+                except ValueError:
+                    flash('ข้อมูลชื่อร้านยางไม่ถูกต้อง', 'danger')
+                    return render_template('edit_spare_part_movement.html', movement=movement_data, current_user=current_user, sales_channels=sales_channels, online_platforms=online_platforms, wholesale_customers=wholesale_customers)
+
+        elif new_type == 'OUT':
+            if channel_name == 'ซื้อเข้า' or channel_name == 'รับคืน':
+                flash(f'สำหรับประเภท "จ่ายออก" ช่องทางการเคลื่อนไหวไม่สามารถเป็น "{channel_name}" ได้', 'danger')
+                return render_template('edit_spare_part_movement.html', movement=movement_data, current_user=current_user, sales_channels=sales_channels, online_platforms=online_platforms, wholesale_customers=wholesale_customers)
+            if channel_name == 'ออนไลน์':
+                if not new_online_platform_id_str:
+                    flash('กรุณาระบุ "แพลตฟอร์มออนไลน์" สำหรับช่องทาง "ออนไลน์"', 'danger')
+                    return render_template('edit_spare_part_movement.html', movement=movement_data, current_user=current_user, sales_channels=sales_channels, online_platforms=online_platforms, wholesale_customers=wholesale_customers)
+                try:
+                    final_new_online_platform_id = int(new_online_platform_id_str)
+                except ValueError:
+                    flash('ข้อมูลแพลตฟอร์มออนไลน์ไม่ถูกต้อง', 'danger')
+                    return render_template('edit_spare_part_movement.html', movement=movement_data, current_user=current_user, sales_channels=sales_channels, online_platforms=online_platforms, wholesale_customers=wholesale_customers)
+            else:
+                final_new_online_platform_id = None
+
+            if channel_name == 'ค้าส่ง':
+                if not new_wholesale_customer_id_str:
+                    flash('กรุณาระบุ "ชื่อลูกค้าค้าส่ง" สำหรับช่องทาง "ค้าส่ง"', 'danger')
+                    return render_template('edit_spare_part_movement.html', movement=movement_data, current_user=current_user, sales_channels=sales_channels, online_platforms=online_platforms, wholesale_customers=wholesale_customers)
+                try:
+                    final_new_wholesale_customer_id = int(new_wholesale_customer_id_str)
+                except ValueError:
+                    flash('ข้อมูลชื่อลูกค้าค้าส่งไม่ถูกต้อง', 'danger')
+                    return render_template('edit_spare_part_movement.html', movement=movement_data, current_user=current_user, sales_channels=sales_channels, online_platforms=online_platforms, wholesale_customers=wholesale_customers)
+            else:
+                final_new_wholesale_customer_id = None
+
+            new_return_customer_type = None
+
+        try:
+            database.update_spare_part_movement(conn, movement_id, new_notes, bill_image_url_to_db,
+                                            new_type, new_quantity_change,
+                                            final_new_channel_id, final_new_online_platform_id,
+                                            final_new_wholesale_customer_id, new_return_customer_type)
+            flash('แก้ไขข้อมูลการเคลื่อนไหวสต็อกอะไหล่สำเร็จ!', 'success')
+            cache.delete_memoized(get_cached_spare_parts)
+            return redirect(url_for('daily_stock_report', tab='spare_part_movements_history')) # Redirect to spare parts history on daily report
+        except ValueError as e:
+            flash(f'ข้อมูลไม่ถูกต้อง: {e}', 'danger')
+        except Exception as e:
+            flash(f'เกิดข้อผิดพลาดในการแก้ไขข้อมูล: {e}', 'danger')
+
+    return render_template('edit_spare_part_movement.html',
+                           movement=movement_data,
+                           current_user=current_user,
+                           sales_channels=sales_channels,
+                           online_platforms=online_platforms,
+                           wholesale_customers=wholesale_customers)
+
+
+@app.route('/delete_spare_part_movement/<int:movement_id>', methods=['POST'])
+@login_required
+def delete_spare_part_movement_action(movement_id):
+    if not current_user.is_admin():
+        flash('คุณไม่มีสิทธิ์ในการลบข้อมูลการเคลื่อนไหวสต็อกอะไหล่', 'danger')
+        return redirect(url_for('daily_stock_report'))
+
+    conn = get_db()
+    try:
+        database.delete_spare_part_movement(conn, movement_id)
+        flash('ลบข้อมูลการเคลื่อนไหวสต็อกอะไหล่สำเร็จ และปรับยอดคงเหลือแล้ว!', 'success')
+        cache.delete_memoized(get_cached_spare_parts)
+    except ValueError as e:
+        flash(f'ไม่สามารถลบข้อมูลการเคลื่อนไหวสต็อกอะไหล่ได้: {e}', 'danger')
+    except Exception as e:
+        flash(f'เกิดข้อผิดพลาดในการลบข้อมูลการเคลื่อนไหวสต็อกอะไหล่: {e}', 'danger')
+
+    return redirect(url_for('daily_stock_report', tab='spare_part_movements_history'))
+
 @app.route('/summary_details')
 @login_required
 def summary_details():
@@ -2090,11 +2803,11 @@ def daily_stock_report():
     if not (current_user.is_admin() or current_user.is_editor() or current_user.is_wholesale_sales()):
         flash('คุณไม่มีสิทธิ์เข้าถึงหน้ารายงานสต็อกประจำวัน', 'danger')
         return redirect(url_for('index'))
-        
+
     conn = get_db()
-    
+
     report_date_str = request.args.get('date')
-    
+
     report_datetime_obj = None
 
     if report_date_str:
@@ -2108,14 +2821,14 @@ def daily_stock_report():
     else:
         report_datetime_obj = get_bkk_time().replace(hour=0, minute=0, second=0, microsecond=0)
         display_date_str = report_datetime_obj.strftime('%d %b %Y')
-    
-    start_of_report_day_iso = report_datetime_obj.isoformat()    
+
+    start_of_report_day_iso = report_datetime_obj.isoformat()
 
     report_date = report_datetime_obj.date()
     sql_date_filter = report_date.strftime('%Y-%m-%d')
     sql_date_filter_end_of_day = report_datetime_obj.replace(hour=23, minute=59, second=59, microsecond=999999).isoformat()
 
-    is_psycopg2_conn = "psycopg2" in str(type(conn)) 
+    is_psycopg2_conn = "psycopg2" in str(type(conn))
     timestamp_cast = "::timestamptz" if is_psycopg2_conn else ""
     # กำหนด placeholder โดยตรงตามประเภทฐานข้อมูล
     placeholder = "%s" if is_psycopg2_conn else "?"
@@ -2138,9 +2851,9 @@ def daily_stock_report():
         LEFT JOIN wholesale_customers wc ON tm.wholesale_customer_id = wc.id
         WHERE {database.get_sql_date_format_for_query('tm.timestamp')} = {placeholder}
         ORDER BY tm.timestamp DESC
-    """ 
+    """
     if is_psycopg2_conn:
-        cursor = conn.cursor() 
+        cursor = conn.cursor()
         cursor.execute(tire_movements_query_today, (sql_date_filter,))
         tire_movements_raw_today = cursor.fetchall()
         cursor.close()
@@ -2149,7 +2862,7 @@ def daily_stock_report():
 
     processed_tire_movements_raw_today = []
     for movement in tire_movements_raw_today:
-        movement_data = dict(movement) 
+        movement_data = dict(movement)
         movement_data['timestamp'] = convert_to_bkk_time(movement_data['timestamp'])
         processed_tire_movements_raw_today.append(movement_data)
     tire_movements_raw = processed_tire_movements_raw_today
@@ -2171,11 +2884,11 @@ def daily_stock_report():
     if is_psycopg2_conn:
         cursor = conn.cursor() # New cursor for this query
         cursor.execute(distinct_tire_ids_query_all_history, (sql_date_filter_end_of_day,))
-        rows = cursor.fetchall() 
+        rows = cursor.fetchall()
         cursor.close()
     else:
         rows = conn.execute(distinct_tire_ids_query_all_history, (sql_date_filter_end_of_day,)).fetchall()
-    
+
     for row in rows:
         tire_ids_involved.add(row['tire_id'])
 
@@ -2193,20 +2906,20 @@ def daily_stock_report():
         WHERE tire_id IN ({placeholders_for_in}) AND timestamp < {placeholder}{timestamp_cast}
         GROUP BY tire_id
         """
-    params = ids_list + [day_before_report_iso]
-    
-    if is_psycopg2_conn:
-        cursor = conn.cursor()
-        cursor.execute(query_initial_quantities, tuple(params))
-        initial_quantities_rows = cursor.fetchall()
-        cursor.close()
-    else:
-        # For SQLite, remove the ::timestamptz cast if it exists in the placeholder string
-        query_sqlite = query_initial_quantities.replace(timestamp_cast, "")
-        initial_quantities_rows = conn.execute(query_sqlite, tuple(params)).fetchall()
+        params = ids_list + [day_before_report_iso]
 
-    for row in initial_quantities_rows:
-        tire_quantities_before_report[row['tire_id']] = row['initial_quantity']
+        if is_psycopg2_conn:
+            cursor = conn.cursor()
+            cursor.execute(query_initial_quantities, tuple(params))
+            initial_quantities_rows = cursor.fetchall()
+            cursor.close()
+        else:
+            # For SQLite, remove the ::timestamptz cast if it exists in the placeholder string
+            query_sqlite = query_initial_quantities.replace(timestamp_cast, "")
+            initial_quantities_rows = conn.execute(query_sqlite, tuple(params)).fetchall()
+
+        for row in initial_quantities_rows:
+            tire_quantities_before_report[row['tire_id']] = row['initial_quantity']
 
     sorted_detailed_tire_report = []
     # Add channel_name, online_platform_name, wholesale_customer_name, return_customer_type to detailed_tire_report
@@ -2232,7 +2945,7 @@ def daily_stock_report():
         elif movement['type'] == 'RETURN': #
             detailed_tire_report[key]['RETURN'] += movement['quantity_change'] # สะสมยอดรับคืน
             detailed_tire_report[key]['remaining_quantity'] += movement['quantity_change'] # รับคืนเพิ่มสต็อก
-        
+
         # เพิ่มรายละเอียด movement เข้าไปในลิสต์
         detailed_tire_report[key]['movements'].append({
             'id': movement['id'],
@@ -2247,7 +2960,7 @@ def daily_stock_report():
             'wholesale_customer_name': movement['wholesale_customer_name'],
             'return_customer_type': movement['return_customer_type']
         })
-    
+
     for tire_id, qty in tire_quantities_before_report.items():
         if not any(item['tire_main_id'] == tire_id for item in tire_movements_raw):
             tire_info = database.get_tire(conn, tire_id)
@@ -2276,7 +2989,7 @@ def daily_stock_report():
                 'RETURN': summary_data['RETURN'], #
                 'remaining_quantity': summary_data['current_quantity_sum']
             })
-        
+
         sorted_detailed_tire_report.append({
             'is_summary': False,
             'brand': brand,
@@ -2294,7 +3007,7 @@ def daily_stock_report():
         tire_brand_summaries[brand]['RETURN'] += data['RETURN'] #
         tire_brand_summaries[brand]['current_quantity_sum'] += data['remaining_quantity']
         last_brand = brand
-    
+
     if last_brand is not None:
         summary_data = tire_brand_summaries[last_brand]
         sorted_detailed_tire_report.append({
@@ -2325,9 +3038,9 @@ def daily_stock_report():
         LEFT JOIN wholesale_customers wc ON wm.wholesale_customer_id = wc.id
         WHERE {database.get_sql_date_format_for_query('wm.timestamp')} = {placeholder}
         ORDER BY wm.timestamp DESC
-    """ 
+    """
     if is_psycopg2_conn:
-        cursor_wheel = conn.cursor() 
+        cursor_wheel = conn.cursor()
         cursor_wheel.execute(wheel_movements_query_today, (sql_date_filter,))
         wheel_movements_raw_today = cursor_wheel.fetchall()
         cursor_wheel.close()
@@ -2336,7 +3049,7 @@ def daily_stock_report():
 
     processed_wheel_movements_raw_today = []
     for movement in wheel_movements_raw_today:
-        movement_data = dict(movement) 
+        movement_data = dict(movement)
         movement_data['timestamp'] = convert_to_bkk_time(movement_data['timestamp'])
         processed_wheel_movements_raw_today.append(movement_data)
     wheel_movements_raw = processed_wheel_movements_raw_today
@@ -2356,42 +3069,42 @@ def daily_stock_report():
     WHERE timestamp <= {placeholder}{timestamp_cast}
     """
     if is_psycopg2_conn:
-        cursor_wheel = conn.cursor() 
+        cursor_wheel = conn.cursor()
         cursor_wheel.execute(distinct_wheel_ids_query_all_history, (sql_date_filter_end_of_day,))
-        rows = cursor_wheel.fetchall() 
+        rows = cursor_wheel.fetchall()
         cursor_wheel.close()
     else:
         rows = conn.execute(distinct_wheel_ids_query_all_history, (sql_date_filter_end_of_day,)).fetchall()
 
-        for row in rows:
-            wheel_ids_involved.add(row['wheel_id'])
+    for row in rows:
+        wheel_ids_involved.add(row['wheel_id'])
 
 
-        if wheel_ids_involved:
-            ids_list = list(wheel_ids_involved)
-            placeholders_for_in = ', '.join([placeholder] * len(ids_list))
+    if wheel_ids_involved:
+        ids_list = list(wheel_ids_involved)
+        placeholders_for_in = ', '.join([placeholder] * len(ids_list))
 
-    query_initial_quantities = f"""
-        SELECT
-            wheel_id,
-            COALESCE(SUM(CASE WHEN type = 'IN' OR type = 'RETURN' THEN quantity_change ELSE -quantity_change END), 0) as initial_quantity
-        FROM wheel_movements
-        WHERE wheel_id IN ({placeholders_for_in}) AND timestamp < {placeholder}{timestamp_cast}
-        GROUP BY wheel_id
-    """
-    params = ids_list + [day_before_report_iso]
+        query_initial_quantities = f"""
+            SELECT
+                wheel_id,
+                COALESCE(SUM(CASE WHEN type = 'IN' OR type = 'RETURN' THEN quantity_change ELSE -quantity_change END), 0) as initial_quantity
+            FROM wheel_movements
+            WHERE wheel_id IN ({placeholders_for_in}) AND timestamp < {placeholder}{timestamp_cast}
+            GROUP BY wheel_id
+        """
+        params = ids_list + [day_before_report_iso]
 
-    if is_psycopg2_conn:
-        cursor = conn.cursor()
-        cursor.execute(query_initial_quantities, tuple(params))
-        initial_quantities_rows = cursor.fetchall()
-        cursor.close()
-    else:
-        query_sqlite = query_initial_quantities.replace(timestamp_cast, "")
-        initial_quantities_rows = conn.execute(query_sqlite, tuple(params)).fetchall()
+        if is_psycopg2_conn:
+            cursor = conn.cursor()
+            cursor.execute(query_initial_quantities, tuple(params))
+            initial_quantities_rows = cursor.fetchall()
+            cursor.close()
+        else:
+            query_sqlite = query_initial_quantities.replace(timestamp_cast, "")
+            initial_quantities_rows = conn.execute(query_sqlite, tuple(params)).fetchall()
 
-    for row in initial_quantities_rows:
-        wheel_quantities_before_report[row['wheel_id']] = row['initial_quantity']
+        for row in initial_quantities_rows:
+            wheel_quantities_before_report[row['wheel_id']] = row['initial_quantity']
 
 
     sorted_detailed_wheel_report = []
@@ -2420,7 +3133,7 @@ def daily_stock_report():
         elif movement['type'] == 'RETURN': #
             detailed_wheel_report[key]['RETURN'] += movement['quantity_change'] # สะสมยอดรับคืน
             detailed_wheel_report[key]['remaining_quantity'] += movement['quantity_change'] # รับคืนเพิ่มสต็อก
-        
+
         # เพิ่มรายละเอียด movement เข้าไปในลิสต์
         detailed_wheel_report[key]['movements'].append({
             'id': movement['id'],
@@ -2435,7 +3148,7 @@ def daily_stock_report():
             'wholesale_customer_name': movement['wholesale_customer_name'],
             'return_customer_type': movement['return_customer_type']
         })
-    
+
     for wheel_id, qty in wheel_quantities_before_report.items():
         if not any(item['wheel_main_id'] == wheel_id for item in wheel_movements_raw):
             wheel_info = database.get_wheel(conn, wheel_id)
@@ -2466,7 +3179,7 @@ def daily_stock_report():
                 'RETURN': summary_data['RETURN'], #
                 'remaining_quantity': summary_data['current_quantity_sum']
             })
-        
+
         sorted_detailed_wheel_report.append({
             'is_summary': False,
             'brand': brand,
@@ -2486,7 +3199,7 @@ def daily_stock_report():
         wheel_brand_summaries[brand]['RETURN'] += data['RETURN'] #
         wheel_brand_summaries[brand]['current_quantity_sum'] += data['remaining_quantity']
         last_brand = brand
-    
+
     if last_brand is not None:
         summary_data = wheel_brand_summaries[last_brand]
         sorted_detailed_wheel_report.append({
@@ -2498,10 +3211,201 @@ def daily_stock_report():
             'remaining_quantity': summary_data['current_quantity_sum']
         })
 
+    # --- NEW: Spare Part Report Data ---
+    spare_part_movements_query_today = f"""
+        SELECT
+            spm.id, spm.timestamp, spm.type, spm.quantity_change, spm.remaining_quantity, spm.image_filename, spm.notes,
+            sp.id AS spare_part_main_id, sp.name AS spare_part_name, sp.part_number, sp.brand AS spare_part_brand,
+            spc.name AS category_name,
+            u.username AS user_username,
+            sc.name AS channel_name,
+            op.name AS online_platform_name,
+            wc.name AS wholesale_customer_name,
+            spm.return_customer_type
+        FROM spare_part_movements spm
+        JOIN spare_parts sp ON spm.spare_part_id = sp.id
+        LEFT JOIN spare_part_categories spc ON sp.category_id = spc.id
+        LEFT JOIN users u ON spm.user_id = u.id
+        LEFT JOIN sales_channels sc ON spm.channel_id = sc.id
+        LEFT JOIN online_platforms op ON spm.online_platform_id = op.id
+        LEFT JOIN wholesale_customers wc ON spm.wholesale_customer_id = wc.id
+        WHERE {database.get_sql_date_format_for_query('spm.timestamp')} = {placeholder}
+        ORDER BY spm.timestamp DESC
+    """
+    if is_psycopg2_conn:
+        cursor_spare_part = conn.cursor()
+        cursor_spare_part.execute(spare_part_movements_query_today, (sql_date_filter,))
+        spare_part_movements_raw_today = cursor_spare_part.fetchall()
+        cursor_spare_part.close()
+    else:
+        spare_part_movements_raw_today = conn.execute(spare_part_movements_query_today, (sql_date_filter,)).fetchall()
+
+    processed_spare_part_movements_raw_today = []
+    for movement in spare_part_movements_raw_today:
+        movement_data = dict(movement)
+        movement_data['timestamp'] = convert_to_bkk_time(movement_data['timestamp'])
+        processed_spare_part_movements_raw_today.append(movement_data)
+    spare_part_movements_raw = processed_spare_part_movements_raw_today
+
+
+    spare_part_quantities_before_report = defaultdict(int)
+    spare_part_ids_involved = set()
+    for movement in spare_part_movements_raw:
+        spare_part_ids_involved.add(movement['spare_part_main_id'])
+
+    day_before_report = report_datetime_obj.replace(hour=0, minute=0, second=0) - timedelta(microseconds=1)
+    day_before_report_iso = day_before_report.isoformat()
+
+    distinct_spare_part_ids_query_all_history = f"""
+    SELECT DISTINCT spare_part_id
+    FROM spare_part_movements
+    WHERE timestamp <= {placeholder}{timestamp_cast}
+    """
+    if is_psycopg2_conn:
+        cursor_spare_part = conn.cursor()
+        cursor_spare_part.execute(distinct_spare_part_ids_query_all_history, (sql_date_filter_end_of_day,))
+        rows = cursor_spare_part.fetchall()
+        cursor_spare_part.close()
+    else:
+        rows = conn.execute(distinct_spare_part_ids_query_all_history, (sql_date_filter_end_of_day,)).fetchall()
+
+    for row in rows:
+        spare_part_ids_involved.add(row['spare_part_id'])
+
+
+    if spare_part_ids_involved:
+        ids_list = list(spare_part_ids_involved)
+        placeholders_for_in = ', '.join([placeholder] * len(ids_list))
+
+        query_initial_quantities = f"""
+            SELECT
+                spare_part_id,
+                COALESCE(SUM(CASE WHEN type = 'IN' OR type = 'RETURN' THEN quantity_change ELSE -quantity_change END), 0) as initial_quantity
+            FROM spare_part_movements
+            WHERE spare_part_id IN ({placeholders_for_in}) AND timestamp < {placeholder}{timestamp_cast}
+            GROUP BY spare_part_id
+        """
+        params = ids_list + [day_before_report_iso]
+
+        if is_psycopg2_conn:
+            cursor = conn.cursor()
+            cursor.execute(query_initial_quantities, tuple(params))
+            initial_quantities_rows = cursor.fetchall()
+            cursor.close()
+        else:
+            query_sqlite = query_initial_quantities.replace(timestamp_cast, "")
+            initial_quantities_rows = conn.execute(query_sqlite, tuple(params)).fetchall()
+
+        for row in initial_quantities_rows:
+            spare_part_quantities_before_report[row['spare_part_id']] = row['initial_quantity']
+
+    sorted_detailed_spare_part_report = []
+    detailed_spare_part_report = defaultdict(lambda: {'IN': 0, 'OUT': 0, 'RETURN': 0, 'remaining_quantity': 0, 'spare_part_main_id': None, 'name': '', 'brand': '', 'part_number': '', 'category_name': '', 'movements': []})
+
+    for movement in spare_part_movements_raw:
+        key = (movement['spare_part_name'], movement['spare_part_brand'], movement['part_number'])
+        spare_part_id = movement['spare_part_main_id']
+
+        if key not in detailed_spare_part_report:
+            detailed_spare_part_report[key]['spare_part_main_id'] = spare_part_id
+            detailed_spare_part_report[key]['name'] = movement['spare_part_name']
+            detailed_spare_part_report[key]['brand'] = movement['spare_part_brand']
+            detailed_spare_part_report[key]['part_number'] = movement['part_number']
+            detailed_spare_part_report[key]['category_name'] = movement['category_name']
+            detailed_spare_part_report[key]['remaining_quantity'] = spare_part_quantities_before_report[spare_part_id]
+
+        if movement['type'] == 'IN':
+            detailed_spare_part_report[key]['IN'] += movement['quantity_change']
+            detailed_spare_part_report[key]['remaining_quantity'] += movement['quantity_change']
+        elif movement['type'] == 'OUT':
+            detailed_spare_part_report[key]['OUT'] += movement['quantity_change']
+            detailed_spare_part_report[key]['remaining_quantity'] -= movement['quantity_change']
+        elif movement['type'] == 'RETURN':
+            detailed_spare_part_report[key]['RETURN'] += movement['quantity_change']
+            detailed_spare_part_report[key]['remaining_quantity'] += movement['quantity_change']
+
+        detailed_spare_part_report[key]['movements'].append({
+            'id': movement['id'],
+            'timestamp': movement['timestamp'],
+            'type': movement['type'],
+            'quantity_change': movement['quantity_change'],
+            'notes': movement['notes'],
+            'image_filename': movement['image_filename'],
+            'user_username': movement['user_username'],
+            'channel_name': movement['channel_name'],
+            'online_platform_name': movement['online_platform_name'],
+            'wholesale_customer_name': movement['wholesale_customer_name'],
+            'return_customer_type': movement['return_customer_type']
+        })
+
+    for spare_part_id, qty in spare_part_quantities_before_report.items():
+        if not any(item['spare_part_main_id'] == spare_part_id for item in spare_part_movements_raw):
+            spare_part_info = database.get_spare_part(conn, spare_part_id)
+            if spare_part_info and not spare_part_info['is_deleted']:
+                key = (spare_part_info['name'], spare_part_info['brand'], spare_part_info['part_number'])
+                if key not in detailed_spare_part_report:
+                    detailed_spare_part_report[key]['spare_part_main_id'] = spare_part_id
+                    detailed_spare_part_report[key]['name'] = spare_part_info['name']
+                    detailed_spare_part_report[key]['brand'] = spare_part_info['brand']
+                    detailed_spare_part_report[key]['part_number'] = spare_part_info['part_number']
+                    detailed_spare_part_report[key]['category_name'] = spare_part_info['category_name']
+                    detailed_spare_part_report[key]['remaining_quantity'] = qty
+
+    spare_part_category_summaries = defaultdict(lambda: {'IN': 0, 'OUT': 0, 'RETURN': 0, 'current_quantity_sum': 0})
+    sorted_unique_spare_part_items = sorted(detailed_spare_part_report.items(), key=lambda x: (x[1]['category_name'] or '', x[0]))
+
+    last_category = None
+    for (name, brand, part_number), data in sorted_unique_spare_part_items:
+        current_category = data['category_name'] or 'ไม่ระบุหมวดหมู่'
+        if last_category is not None and current_category != last_category:
+            summary_data = spare_part_category_summaries[last_category]
+            sorted_detailed_spare_part_report.append({
+                'is_summary': True,
+                'type': 'category_summary',
+                'category_name': last_category,
+                'IN': summary_data['IN'],
+                'OUT': summary_data['OUT'],
+                'RETURN': summary_data['RETURN'],
+                'remaining_quantity': summary_data['current_quantity_sum']
+            })
+
+        sorted_detailed_spare_part_report.append({
+            'is_summary': False,
+            'name': name,
+            'brand': brand,
+            'part_number': part_number,
+            'category_name': current_category,
+            'IN': data['IN'],
+            'OUT': data['OUT'],
+            'RETURN': data['RETURN'],
+            'remaining_quantity': data['remaining_quantity'],
+            'movements': data['movements']
+        })
+
+        spare_part_category_summaries[current_category]['IN'] += data['IN']
+        spare_part_category_summaries[current_category]['OUT'] += data['OUT']
+        spare_part_category_summaries[current_category]['RETURN'] += data['RETURN']
+        spare_part_category_summaries[current_category]['current_quantity_sum'] += data['remaining_quantity']
+        last_category = current_category
+
+    if last_category is not None:
+        summary_data = spare_part_category_summaries[last_category]
+        sorted_detailed_spare_part_report.append({
+            'is_summary': True,
+            'type': 'category_summary',
+            'category_name': last_category,
+            'IN': summary_data['IN'],
+            'OUT': summary_data['OUT'],
+            'RETURN': summary_data['RETURN'],
+            'remaining_quantity': summary_data['current_quantity_sum']
+        })
+
+
+    # Calculate totals for summary section at the bottom of the report
     tire_total_in = sum(item['IN'] for item in sorted_detailed_tire_report if not item['is_summary'])
     tire_total_out = sum(item['OUT'] for item in sorted_detailed_tire_report if not item['is_summary'])
     tire_total_return = sum(item['RETURN'] for item in sorted_detailed_tire_report if not item['is_summary']) #
-    
+
     tire_total_remaining_for_report_date = 0
     query_total_before_tires = f"""
         SELECT COALESCE(SUM(CASE WHEN type = 'IN' OR type = 'RETURN' THEN quantity_change ELSE -quantity_change END), 0)
@@ -2509,13 +3413,13 @@ def daily_stock_report():
         WHERE timestamp < {placeholder}{timestamp_cast}
     """
     if is_psycopg2_conn:
-        cursor = conn.cursor() 
+        cursor = conn.cursor()
         cursor.execute(query_total_before_tires, (start_of_report_day_iso,))
-        initial_total_tires = cursor.fetchone()[0] or 0 
+        initial_total_tires = cursor.fetchone()[0] or 0
         cursor.close()
     else:
-        initial_total_tires = conn.execute(query_total_before_tires, (start_of_report_day_iso,)).fetchone()[0] or 0 
-    
+        initial_total_tires = conn.execute(query_total_before_tires, (start_of_report_day_iso,)).fetchone()[0] or 0
+
     tire_total_remaining_for_report_date = initial_total_tires + tire_total_in + tire_total_return - tire_total_out #
 
 
@@ -2530,41 +3434,68 @@ def daily_stock_report():
         WHERE timestamp < {placeholder}{timestamp_cast};
     """
     if is_psycopg2_conn:
-        cursor = conn.cursor() 
+        cursor = conn.cursor()
         cursor.execute(query_total_before_wheels, (start_of_report_day_iso,))
-        initial_total_wheels = cursor.fetchone()[0] or 0 
+        initial_total_wheels = cursor.fetchone()[0] or 0
         cursor.close()
     else:
-        initial_total_wheels = conn.execute(query_total_before_wheels, (start_of_report_day_iso,)).fetchone()[0] or 0 
-    
+        initial_total_wheels = conn.execute(query_total_before_wheels, (start_of_report_day_iso,)).fetchone()[0] or 0
+
     wheel_total_remaining_for_report_date = initial_total_wheels + wheel_total_in + wheel_total_return - wheel_total_out #
+
+    # NEW: Spare Part Totals
+    spare_part_total_in = sum(item['IN'] for item in sorted_detailed_spare_part_report if not item['is_summary'])
+    spare_part_total_out = sum(item['OUT'] for item in sorted_detailed_spare_part_report if not item['is_summary'])
+    spare_part_total_return = sum(item['RETURN'] for item in sorted_detailed_spare_part_report if not item['is_summary'])
+
+    spare_part_total_remaining_for_report_date = 0
+    query_total_before_spare_parts = f"""
+        SELECT COALESCE(SUM(CASE WHEN type = 'IN' OR type = 'RETURN' THEN quantity_change ELSE -quantity_change END), 0)
+        FROM spare_part_movements
+        WHERE timestamp < {placeholder}{timestamp_cast};
+    """
+    if is_psycopg2_conn:
+        cursor = conn.cursor()
+        cursor.execute(query_total_before_spare_parts, (start_of_report_day_iso,))
+        initial_total_spare_parts = cursor.fetchone()[0] or 0
+        cursor.close()
+    else:
+        initial_total_spare_parts = conn.execute(query_total_before_spare_parts, (start_of_report_day_iso,)).fetchone()[0] or 0
+
+    spare_part_total_remaining_for_report_date = initial_total_spare_parts + spare_part_total_in + spare_part_total_return - spare_part_total_out
 
 
     # Calculate yesterday and tomorrow dates using the datetime object
     yesterday_date_calc = report_datetime_obj - timedelta(days=1)
     tomorrow_date_calc = report_datetime_obj + timedelta(days=1)
-    
+
     return render_template('daily_stock_report.html',
                            display_date_str=display_date_str,
                            report_date_obj=report_date,
                            report_date_param=report_date.strftime('%Y-%m-%d'),
                            yesterday_date_param=yesterday_date_calc.strftime('%Y-%m-%d'),
                            tomorrow_date_param=tomorrow_date_calc.strftime('%Y-%m-%d'),
-                           
+
                            tire_report=sorted_detailed_tire_report,
                            wheel_report=sorted_detailed_wheel_report,
+                           spare_part_report=sorted_detailed_spare_part_report, # NEW
                            tire_total_in=tire_total_in,
                            tire_total_out=tire_total_out,
                            tire_total_return=tire_total_return, #
-                           tire_total_remaining=tire_total_remaining_for_report_date, 
+                           tire_total_remaining=tire_total_remaining_for_report_date,
                            wheel_total_in=wheel_total_in,
                            wheel_total_out=wheel_total_out,
                            wheel_total_return=wheel_total_return, #
-                           wheel_total_remaining=wheel_total_remaining_for_report_date, 
-                           
+                           wheel_total_remaining=wheel_total_remaining_for_report_date,
+                           spare_part_total_in=spare_part_total_in, # NEW
+                           spare_part_total_out=spare_part_total_out, # NEW
+                           spare_part_total_return=spare_part_total_return, # NEW
+                           spare_part_total_remaining=spare_part_total_remaining_for_report_date, # NEW
+
                            tire_movements_raw=tire_movements_raw, # Pass raw movements for detailed view per day
                            wheel_movements_raw=wheel_movements_raw, # Pass raw movements for detailed view per day
-                           current_user=current_user 
+                           spare_part_movements_raw=spare_part_movements_raw, # NEW
+                           current_user=current_user
                           )
 
 
@@ -2578,7 +3509,7 @@ def summary_stock_report():
         return redirect(url_for('index'))
 
     conn = get_db()
-    
+
     start_date_str = request.args.get('start_date')
     end_date_str = request.args.get('end_date')
 
@@ -2595,7 +3526,7 @@ def summary_stock_report():
         try:
             start_date_obj = bkk_tz.localize(datetime.strptime(start_date_str, '%Y-%m-%d')).replace(hour=0, minute=0, second=0, microsecond=0)
             end_date_obj = bkk_tz.localize(datetime.strptime(end_date_str, '%Y-%m-%d')).replace(hour=23, minute=59, second=59, microsecond=999999)
-            
+
             if start_date_obj > end_date_obj:
                 flash("วันที่เริ่มต้นต้องไม่เกินวันที่สิ้นสุด", "danger")
                 today = database.get_bkk_time().date()
@@ -2619,20 +3550,28 @@ def summary_stock_report():
 
     start_of_period_iso = start_date_obj.isoformat()
     end_of_period_iso = end_date_obj.isoformat()
-    
+
     # Initialize all final output variables outside try-except to ensure they are always defined
     sorted_tire_movements_by_channel = OrderedDict()
     sorted_wheel_movements_by_channel = OrderedDict()
+    sorted_spare_part_movements_by_channel = OrderedDict() # NEW
+
     tires_by_brand_for_summary_report = OrderedDict()
     wheels_by_brand_for_summary_report = OrderedDict()
+    spare_parts_by_category_and_brand_for_summary_report = OrderedDict() # NEW
+
     tire_brand_totals_for_summary_report = OrderedDict()
     wheel_brand_totals_for_summary_report = OrderedDict()
+    spare_part_category_totals_for_summary_report = OrderedDict() # NEW
+
 
     # Initialize defaultdicts here for each run
     # MODIFIED: 'RETURN' now holds a list of return details
     tire_movements_by_channel_data = defaultdict(lambda: {'IN': 0, 'OUT': 0, 'RETURN': [], 'online_platforms': defaultdict(lambda: {'IN': 0, 'OUT': 0, 'RETURN': 0}), 'wholesale_customers': defaultdict(lambda: {'IN': 0, 'OUT': 0, 'RETURN': 0})})
     wheel_movements_by_channel_data = defaultdict(lambda: {'IN': 0, 'OUT': 0, 'RETURN': [], 'online_platforms': defaultdict(lambda: {'IN': 0, 'OUT': 0, 'RETURN': 0}), 'wholesale_customers': defaultdict(lambda: {'IN': 0, 'OUT': 0, 'RETURN': 0})})
-    
+    spare_part_movements_by_channel_data = defaultdict(lambda: {'IN': 0, 'OUT': 0, 'RETURN': [], 'online_platforms': defaultdict(lambda: {'IN': 0, 'OUT': 0, 'RETURN': 0}), 'wholesale_customers': defaultdict(lambda: {'IN': 0, 'OUT': 0, 'RETURN': 0})}) # NEW
+
+
     # --- Tire Movements by Channel, Platform, Customer (Summary by Channel) ---
     tire_movements_raw_detailed = []
     tire_channel_summary_query = f"""
@@ -2640,7 +3579,7 @@ def summary_stock_report():
             sc.id AS channel_id,
             op.id AS online_platform_id,
             wc.id AS wholesale_customer_id,
-            COALESCE(sc.name, 'ไม่ระบุช่องทาง') AS channel_name, 
+            COALESCE(sc.name, 'ไม่ระบุช่องทาง') AS channel_name,
             COALESCE(op.name, 'ไม่ระบุแพลตฟอร์ม') AS online_platform_name,
             COALESCE(wc.name, 'ไม่ระบุลูกค้า') AS wholesale_customer_name,
             tm.type,
@@ -2655,7 +3594,7 @@ def summary_stock_report():
         ORDER BY sc.name, op.name, wc.name, tm.type;
     """
     tire_channel_summary_params = (start_of_period_iso, end_of_period_iso)
-    
+
     try:
         if is_psycopg2_conn:
             cursor = conn.cursor()
@@ -2665,28 +3604,28 @@ def summary_stock_report():
         else:
             query_for_sqlite = tire_channel_summary_query.replace(f"{timestamp_cast}", "").replace(placeholder, '?')
             tire_movements_raw_detailed = conn.execute(query_for_sqlite, tire_channel_summary_params).fetchall()
-        
+
         for movement_row in tire_movements_raw_detailed:
             # โค้ดทั้งหมดนี้ต้องอยู่ "ข้างใน" for loop
             row_data = dict(movement_row)
             channel_name_from_db = row_data['channel_name']
-            
+
             channel_id_from_db = row_data['channel_id']
             online_platform_id_from_db = row_data['online_platform_id']
             wholesale_customer_id_from_db = row_data['wholesale_customer_id']
-            
+
             online_platform_name = row_data['online_platform_name']
             wholesale_customer_name = row_data['wholesale_customer_name']
             move_type = row_data['type']
             total_qty = int(row_data['total_quantity'])
             return_customer_type = row_data['return_customer_type']
-    
+
             main_channel_key = channel_name_from_db
-    
+
             if 'channel_id' not in tire_movements_by_channel_data[main_channel_key]:
                 tire_movements_by_channel_data[main_channel_key]['channel_id'] = channel_id_from_db
-    
-            if move_type == 'RETURN': 
+
+            if move_type == 'RETURN':
                 tire_movements_by_channel_data[main_channel_key]['RETURN'].append({
                     'quantity': total_qty,
                     'type': return_customer_type,
@@ -2695,32 +3634,32 @@ def summary_stock_report():
                     'online_platform_id': online_platform_id_from_db,
                     'wholesale_customer_id': wholesale_customer_id_from_db
                 })
-            else: 
+            else:
                 tire_movements_by_channel_data[main_channel_key][move_type] += total_qty
-            
+
             if main_channel_key == 'ออนไลน์':
                 if online_platform_name and online_platform_name != 'ไม่ระบุแพลตฟอร์ม':
                     if online_platform_name not in tire_movements_by_channel_data[main_channel_key]['online_platforms']:
                          tire_movements_by_channel_data[main_channel_key]['online_platforms'][online_platform_name] = {'IN': 0, 'OUT': 0, 'RETURN': 0}
                     tire_movements_by_channel_data[main_channel_key]['online_platforms'][online_platform_name][move_type] += total_qty
                     tire_movements_by_channel_data[main_channel_key]['online_platforms'][online_platform_name]['id'] = online_platform_id_from_db
-    
+
             elif main_channel_key == 'ค้าส่ง':
                 if wholesale_customer_name and wholesale_customer_name != 'ไม่ระบุลูกค้า':
                     if wholesale_customer_name not in tire_movements_by_channel_data[main_channel_key]['wholesale_customers']:
                         tire_movements_by_channel_data[main_channel_key]['wholesale_customers'][wholesale_customer_name] = {'IN': 0, 'OUT': 0, 'RETURN': 0}
                     tire_movements_by_channel_data[main_channel_key]['wholesale_customers'][wholesale_customer_name][move_type] += total_qty
                     tire_movements_by_channel_data[main_channel_key]['wholesale_customers'][wholesale_customer_name]['id'] = wholesale_customer_id_from_db
-        
+
         # โค้ด 2 บรรทัดนี้ต้องอยู่ "นอก" for loop แต่ยังอยู่ "ใน" try
         sorted_tire_movements_by_channel = OrderedDict(sorted(tire_movements_by_channel_data.items()))
-        
+
         for channel_name_sort, data_sort in sorted_tire_movements_by_channel.items():
             if 'online_platforms' in data_sort:
                 data_sort['online_platforms'] = OrderedDict(sorted(data_sort['online_platforms'].items()))
             if 'wholesale_customers' in data_sort:
                 data_sort['wholesale_customers'] = OrderedDict(sorted(data_sort['wholesale_customers'].items()))
-        
+
     except Exception as e:
         print(f"ERROR: Failed to fetch detailed tire movements for summary (Channel): {e}")
         flash(f"เกิดข้อผิดพลาดในการดึงข้อมูลสรุปยางตามช่องทาง: {e}", "danger")
@@ -2748,7 +3687,7 @@ def summary_stock_report():
         ORDER BY sc.name, op.name, wc.name, wm.type;
     """
     wheel_channel_summary_params = (start_of_period_iso, end_of_period_iso)
-    
+
     try:
         if is_psycopg2_conn:
             cursor = conn.cursor()
@@ -2758,7 +3697,7 @@ def summary_stock_report():
         else:
             query_for_sqlite = wheel_channel_summary_query.replace(f"{timestamp_cast}", "").replace(placeholder, '?')
             wheel_movements_raw_detailed = conn.execute(query_for_sqlite, wheel_channel_summary_params).fetchall()
-        
+
         # flash(f"DEBUG (Wheel Raw Detailed for Channel Summary): {wheel_movements_raw_detailed}", "info") # DEBUGGING LINE
 
         for movement_row in wheel_movements_raw_detailed:
@@ -2790,30 +3729,104 @@ def summary_stock_report():
             elif main_channel_key == 'ค้าส่ง':
                 if wholesale_customer_name and wholesale_customer_name != 'ไม่ระบุลูกค้า':
                     wheel_movements_by_channel_data[main_channel_key]['wholesale_customers'][wholesale_customer_name][move_type] += total_qty
-        
+
         sorted_wheel_movements_by_channel = OrderedDict(sorted(wheel_movements_by_channel_data.items()))
         for channel_name_sort, data_sort in sorted_wheel_movements_by_channel.items():
             if 'online_platforms' in data_sort:
                 data_sort['online_platforms'] = OrderedDict(sorted(data_sort['online_platforms'].items()))
             if 'wholesale_customers' in data_sort:
                 data_sort['wholesale_customers'] = OrderedDict(sorted(data_sort['wholesale_customers'].items()))
-        
+
         # flash(f"DEBUG (Sorted Wheel by Channel for Template): {sorted_wheel_movements_by_channel}", "info") # DEBUGGING LINE
 
     except Exception as e:
         print(f"ERROR: Failed to fetch detailed wheel movements for summary (Channel): {e}")
         flash(f"เกิดข้อผิดพลาดในการดึงข้อมูลสรุปแม็กตามช่องทาง: {e}", "danger")
 
+    # --- NEW: Spare Part Movements by Channel, Platform, Customer (Summary by Channel) ---
+    spare_part_movements_raw_detailed = []
+    spare_part_channel_summary_query = f"""
+        SELECT
+            sc.id AS channel_id,
+            op.id AS online_platform_id,
+            wc.id AS wholesale_customer_id,
+            COALESCE(sc.name, 'ไม่ระบุช่องทาง') AS channel_name,
+            COALESCE(op.name, 'ไม่ระบุแพลตฟอร์ม') AS online_platform_name,
+            COALESCE(wc.name, 'ไม่ระบุลูกค้า') AS wholesale_customer_name,
+            spm.type,
+            SUM(spm.quantity_change) AS total_quantity,
+            COALESCE(spm.return_customer_type, 'ไม่ระบุประเภทคืน') AS return_customer_type
+        FROM spare_part_movements spm
+        LEFT JOIN sales_channels sc ON spm.channel_id = sc.id
+        LEFT JOIN online_platforms op ON spm.online_platform_id = op.id
+        LEFT JOIN wholesale_customers wc ON spm.wholesale_customer_id = wc.id
+        WHERE spm.timestamp BETWEEN {placeholder}{timestamp_cast} AND {placeholder}{timestamp_cast}
+        GROUP BY sc.id, op.id, wc.id, sc.name, op.name, wc.name, spm.type, spm.return_customer_type
+        ORDER BY sc.name, op.name, wc.name, spm.type;
+    """
+    spare_part_channel_summary_params = (start_of_period_iso, end_of_period_iso)
+
+    try:
+        if is_psycopg2_conn:
+            cursor = conn.cursor()
+            cursor.execute(spare_part_channel_summary_query, spare_part_channel_summary_params)
+            spare_part_movements_raw_detailed = cursor.fetchall()
+            cursor.close()
+        else:
+            query_for_sqlite = spare_part_channel_summary_query.replace(f"{timestamp_cast}", "").replace(placeholder, '?')
+            spare_part_movements_raw_detailed = conn.execute(query_for_sqlite, spare_part_channel_summary_params).fetchall()
+
+        for movement_row in spare_part_movements_raw_detailed:
+            row_data = dict(movement_row)
+            channel_name_from_db = row_data['channel_name']
+            online_platform_name = row_data['online_platform_name']
+            wholesale_customer_name = row_data['wholesale_customer_name']
+            move_type = row_data['type']
+            total_qty = int(row_data['total_quantity'])
+            return_customer_type = row_data['return_customer_type']
+
+            main_channel_key = channel_name_from_db
+
+            if move_type == 'RETURN':
+                spare_part_movements_by_channel_data[main_channel_key]['RETURN'].append({
+                    'quantity': total_qty,
+                    'type': return_customer_type,
+                    'online_platform_name': online_platform_name,
+                    'wholesale_customer_name': wholesale_customer_name
+                })
+            else:
+                spare_part_movements_by_channel_data[main_channel_key][move_type] += total_qty
+
+            if main_channel_key == 'ออนไลน์':
+                if online_platform_name and online_platform_name != 'ไม่ระบุแพลตฟอร์ม':
+                    spare_part_movements_by_channel_data[main_channel_key]['online_platforms'][online_platform_name][move_type] += total_qty
+            elif main_channel_key == 'ค้าส่ง':
+                if wholesale_customer_name and wholesale_customer_name != 'ไม่ระบุลูกค้า':
+                    spare_part_movements_by_channel_data[main_channel_key]['wholesale_customers'][wholesale_customer_name][move_type] += total_qty
+
+        sorted_spare_part_movements_by_channel = OrderedDict(sorted(spare_part_movements_by_channel_data.items()))
+        for channel_name_sort, data_sort in sorted_spare_part_movements_by_channel.items():
+            if 'online_platforms' in data_sort:
+                data_sort['online_platforms'] = OrderedDict(sorted(data_sort['online_platforms'].items()))
+            if 'wholesale_customers' in data_sort:
+                data_sort['wholesale_customers'] = OrderedDict(sorted(data_sort['wholesale_customers'].items()))
+
+    except Exception as e:
+        print(f"ERROR: Failed to fetch detailed spare part movements for summary (Channel): {e}")
+        flash(f"เกิดข้อผิดพลาดในการดึงข้อมูลสรุปอะไหล่ตามช่องทาง: {e}", "danger")
+
+
     # Calculate overall totals for the summary section
-    overall_tire_initial = 0 
-    overall_wheel_initial = 0 
+    overall_tire_initial = 0
+    overall_wheel_initial = 0
+    overall_spare_part_initial = 0 # NEW
 
     # MODIFIED: Correctly sum the 'quantity' from the list of RETURN details
     overall_tire_in_period = int(sum(data.get('IN', 0) for data in tire_movements_by_channel_data.values()))
     overall_tire_out_period = int(sum(data.get('OUT', 0) for data in tire_movements_by_channel_data.values()))
     # Correct sum for RETURN: iterate through the list of dictionaries and sum 'quantity'
     overall_tire_return_period = int(sum(
-        item['quantity'] for data in tire_movements_by_channel_data.values() 
+        item['quantity'] for data in tire_movements_by_channel_data.values()
         for item in data.get('RETURN', []) # Get the list, default to empty list if not present
     ))
 
@@ -2821,8 +3834,16 @@ def summary_stock_report():
     overall_wheel_out_period = int(sum(data.get('OUT', 0) for data in wheel_movements_by_channel_data.values()))
     # Correct sum for RETURN: iterate through the list of dictionaries and sum 'quantity'
     overall_wheel_return_period = int(sum(
-        item['quantity'] for data in wheel_movements_by_channel_data.values() 
+        item['quantity'] for data in wheel_movements_by_channel_data.values()
         for item in data.get('RETURN', []) # Get the list, default to empty list if not present
+    ))
+
+    # NEW: Spare Part overall totals
+    overall_spare_part_in_period = int(sum(data.get('IN', 0) for data in spare_part_movements_by_channel_data.values()))
+    overall_spare_part_out_period = int(sum(data.get('OUT', 0) for data in spare_part_movements_by_channel_data.values()))
+    overall_spare_part_return_period = int(sum(
+        item['quantity'] for data in spare_part_movements_by_channel_data.values()
+        for item in data.get('RETURN', [])
     ))
 
     try:
@@ -2840,7 +3861,7 @@ def summary_stock_report():
         else:
             query_for_sqlite = query_overall_initial_tires.replace(f"{timestamp_cast}", "").replace(placeholder, '?')
             overall_tire_initial = int(conn.execute(query_for_sqlite, (start_of_period_iso,)).fetchone()[0] or 0)
-        # flash(f"DEBUG (Overall Tire Initial): {overall_tire_initial}", "info") 
+        # flash(f"DEBUG (Overall Tire Initial): {overall_tire_initial}", "info")
     except Exception as e:
         print(f"ERROR: Failed to fetch overall initial tire stock: {e}")
         flash(f"เกิดข้อผิดพลาดในการคำนวณสต็อกยางเริ่มต้น: {e}", "danger")
@@ -2860,47 +3881,69 @@ def summary_stock_report():
         else:
             query_for_sqlite = query_overall_initial_wheels.replace(f"{timestamp_cast}", "").replace(placeholder, '?')
             overall_wheel_initial = int(conn.execute(query_for_sqlite, (start_of_period_iso,)).fetchone()[0] or 0)
-        # flash(f"DEBUG (Overall Wheel Initial): {overall_wheel_initial}", "info") 
+        # flash(f"DEBUG (Overall Wheel Initial): {overall_wheel_initial}", "info")
     except Exception as e:
         print(f"ERROR: Failed to fetch overall initial wheel stock: {e}")
         flash(f"เกิดข้อผิดพลาดในการคำนวณสต็อกแม็กเริ่มต้น: {e}", "danger")
         overall_wheel_initial = 0
 
+    # NEW: Query for overall initial spare part stock
+    try:
+        query_overall_initial_spare_parts = f"""
+            SELECT COALESCE(SUM(CASE WHEN type = 'IN' OR type = 'RETURN' THEN quantity_change ELSE -quantity_change END), 0)
+            FROM spare_part_movements
+            WHERE timestamp < {placeholder}{timestamp_cast};
+        """
+        if is_psycopg2_conn:
+            cursor = conn.cursor()
+            cursor.execute(query_overall_initial_spare_parts, (start_of_period_iso,))
+            overall_spare_part_initial = int(cursor.fetchone()[0] or 0)
+            cursor.close()
+        else:
+            query_for_sqlite = query_overall_initial_spare_parts.replace(f"{timestamp_cast}", "").replace(placeholder, '?')
+            overall_spare_part_initial = int(conn.execute(query_for_sqlite, (start_of_period_iso,)).fetchone()[0] or 0)
+    except Exception as e:
+        print(f"ERROR: Failed to fetch overall initial spare part stock: {e}")
+        flash(f"เกิดข้อผิดพลาดในการคำนวณสต็อกอะไหล่เริ่มต้น: {e}", "danger")
+        overall_spare_part_initial = 0
+
+
     # Total final stock (initial + movements within period)
     overall_tire_final = overall_tire_initial + overall_tire_in_period + overall_tire_return_period - overall_tire_out_period
     overall_wheel_final = overall_wheel_initial + overall_wheel_in_period + overall_wheel_return_period - overall_wheel_out_period
+    overall_spare_part_final = overall_spare_part_initial + overall_spare_part_in_period + overall_spare_part_return_period - overall_spare_part_out_period # NEW
 
-    try: 
+    try:
         # --- สำหรับรายงานการเคลื่อนไหวสต็อกยางตามยี่ห้อและขนาด (tires_by_brand_for_summary_report) ---
         tire_detailed_item_query = f"""
             SELECT
                 t.id AS tire_id,
                 t.brand,
-                t.model, 
+                t.model,
                 t.size,
-                COALESCE(SUM(CASE WHEN tm.type = 'IN' AND tm.timestamp BETWEEN {placeholder}{timestamp_cast} AND {placeholder}{timestamp_cast} THEN tm.quantity_change{"::NUMERIC" if is_psycopg2_conn else ""} ELSE 0 END), 0) AS IN_qty,  
-                COALESCE(SUM(CASE WHEN tm.type = 'OUT' AND tm.timestamp BETWEEN {placeholder}{timestamp_cast} AND {placeholder}{timestamp_cast} THEN tm.quantity_change{"::NUMERIC" if is_psycopg2_conn else ""} ELSE 0 END), 0) AS OUT_qty, 
-                COALESCE(SUM(CASE WHEN tm.type = 'RETURN' AND tm.timestamp BETWEEN {placeholder}{timestamp_cast} AND {placeholder}{timestamp_cast} THEN tm.quantity_change{"::NUMERIC" if is_psycopg2_conn else ""} ELSE 0 END), 0) AS RETURN_qty, 
-                COALESCE((  
+                COALESCE(SUM(CASE WHEN tm.type = 'IN' AND tm.timestamp BETWEEN {placeholder}{timestamp_cast} AND {placeholder}{timestamp_cast} THEN tm.quantity_change{"::NUMERIC" if is_psycopg2_conn else ""} ELSE 0 END), 0) AS IN_qty,
+                COALESCE(SUM(CASE WHEN tm.type = 'OUT' AND tm.timestamp BETWEEN {placeholder}{timestamp_cast} AND {placeholder}{timestamp_cast} THEN tm.quantity_change{"::NUMERIC" if is_psycopg2_conn else ""} ELSE 0 END), 0) AS OUT_qty,
+                COALESCE(SUM(CASE WHEN tm.type = 'RETURN' AND tm.timestamp BETWEEN {placeholder}{timestamp_cast} AND {placeholder}{timestamp_cast} THEN tm.quantity_change{"::NUMERIC" if is_psycopg2_conn else ""} ELSE 0 END), 0) AS RETURN_qty,
+                COALESCE((
                     SELECT SUM(CASE WHEN prev_tm.type = 'IN' OR prev_tm.type = 'RETURN' THEN prev_tm.quantity_change{"::NUMERIC" if is_psycopg2_conn else ""} ELSE -prev_tm.quantity_change{"::NUMERIC" if is_psycopg2_conn else ""} END)
                     FROM tire_movements prev_tm
                     WHERE prev_tm.tire_id = t.id AND prev_tm.timestamp < {placeholder}{timestamp_cast}
                 ), 0) AS initial_qty_before_period
-            FROM tires t  
+            FROM tires t
             LEFT JOIN tire_movements tm ON tm.tire_id = t.id
-            WHERE t.is_deleted = FALSE 
-            GROUP BY t.id, t.brand, t.model, t.size  
+            WHERE t.is_deleted = FALSE
+            GROUP BY t.id, t.brand, t.model, t.size
             HAVING (
                 -- Has any movement in the period (IN, OUT, RETURN)
-                COALESCE(SUM(CASE WHEN tm.timestamp BETWEEN {placeholder}{timestamp_cast} AND {placeholder}{timestamp_cast} THEN 1 ELSE 0 END), 0) > 0 
+                COALESCE(SUM(CASE WHEN tm.timestamp BETWEEN {placeholder}{timestamp_cast} AND {placeholder}{timestamp_cast} THEN 1 ELSE 0 END), 0) > 0
                 -- OR had initial stock before the period (sum of movements before period)
                 OR COALESCE((SELECT SUM(CASE WHEN prev_tm.type = 'IN' OR prev_tm.type = 'RETURN' THEN prev_tm.quantity_change ELSE -prev_tm.quantity_change END) FROM tire_movements prev_tm WHERE prev_tm.tire_id = t.id AND prev_tm.timestamp < {placeholder}{timestamp_cast}), 0) <> 0
                 -- OR has current quantity (current_quantity is from the 'tires' table itself)
-                OR COALESCE(t.quantity, 0) > 0 
+                OR COALESCE(t.quantity, 0) > 0
             )
             ORDER BY t.brand, t.model, t.size;
         """
-        
+
         tire_item_params = (
             start_of_period_iso, end_of_period_iso, # IN_qty sum (param 1,2)
             start_of_period_iso, end_of_period_iso, # OUT_qty sum (param 3,4)
@@ -2919,24 +3962,24 @@ def summary_stock_report():
         else:
             query_for_sqlite = tire_detailed_item_query.replace(f"{timestamp_cast}", "").replace(placeholder, '?')
             tires_detailed_movements_raw = conn.execute(query_for_sqlite, tire_item_params).fetchall()
-        
-        # flash(f"DEBUG (Tire Item Raw Detailed): {tires_detailed_movements_raw}", "info") 
+
+        # flash(f"DEBUG (Tire Item Raw Detailed): {tires_detailed_movements_raw}", "info")
 
         # tires_by_brand_for_summary_report ถูกกำหนดค่าเริ่มต้นแล้ว ไม่ต้องกำหนดซ้ำ
-        for row_data_raw in tires_detailed_movements_raw: 
-            row = dict(row_data_raw) 
+        for row_data_raw in tires_detailed_movements_raw:
+            row = dict(row_data_raw)
             normalized_row = {k.lower(): v for k, v in row.items()}
 
             brand = normalized_row['brand']
             if brand not in tires_by_brand_for_summary_report:
                 tires_by_brand_for_summary_report[brand] = []
-            
-            initial_qty = int(normalized_row.get('initial_qty_before_period', 0)) 
-            in_qty = int(normalized_row.get('in_qty', 0)) 
-            out_qty = int(normalized_row.get('out_qty', 0)) 
-            return_qty = int(normalized_row.get('return_qty', 0)) 
-            
-            final_qty = initial_qty + in_qty + return_qty - out_qty 
+
+            initial_qty = int(normalized_row.get('initial_qty_before_period', 0))
+            in_qty = int(normalized_row.get('in_qty', 0))
+            out_qty = int(normalized_row.get('out_qty', 0))
+            return_qty = int(normalized_row.get('return_qty', 0))
+
+            final_qty = initial_qty + in_qty + return_qty - out_qty
 
             tires_by_brand_for_summary_report[brand].append({
                 'model': normalized_row['model'],
@@ -2947,41 +3990,41 @@ def summary_stock_report():
                 'RETURN': return_qty,
                 'final_quantity': final_qty,
             })
-        
-        # flash(f"DEBUG (Sorted Tire Item by Brand): {tires_by_brand_for_summary_report}", "info") 
+
+        # flash(f"DEBUG (Sorted Tire Item by Brand): {tires_by_brand_for_summary_report}", "info")
 
     except Exception as e:
         print(f"ERROR: Failed to fetch detailed tire movements (Item): {e}")
         flash(f"เกิดข้อผิดพลาดในการดึงข้อมูลสรุปยางรายรุ่น: {e}", "danger")
         # tires_by_brand_for_summary_report ถูกกำหนดค่าเริ่มต้นแล้ว ไม่ต้องกำหนดซ้ำ
-    
+
     try:
         # --- สำหรับรายงานการเคลื่อนไหวสต็อกล้อแม็กตามยี่ห้อและขนาด (wheels_by_brand_for_summary_report) ---
         wheel_detailed_item_query = f"""
             SELECT
                 w.id AS wheel_id,
                 w.brand, w.model, w.diameter, w.pcd, w.width,
-                w.et, 
-                w.color, 
-                COALESCE(SUM(CASE WHEN wm.type = 'IN' AND wm.timestamp BETWEEN {placeholder}{timestamp_cast} AND {placeholder}{timestamp_cast} THEN wm.quantity_change{"::NUMERIC" if is_psycopg2_conn else ""} ELSE 0 END), 0) AS IN_qty,  
-                COALESCE(SUM(CASE WHEN wm.type = 'OUT' AND wm.timestamp BETWEEN {placeholder}{timestamp_cast} AND {placeholder}{timestamp_cast} THEN wm.quantity_change{"::NUMERIC" if is_psycopg2_conn else ""} ELSE 0 END), 0) AS OUT_qty, 
-                COALESCE(SUM(CASE WHEN wm.type = 'RETURN' AND wm.timestamp BETWEEN {placeholder}{timestamp_cast} AND {placeholder}{timestamp_cast} THEN wm.quantity_change{"::NUMERIC" if is_psycopg2_conn else ""} ELSE 0 END), 0) AS RETURN_qty, 
-                COALESCE((  
+                w.et,
+                w.color,
+                COALESCE(SUM(CASE WHEN wm.type = 'IN' AND wm.timestamp BETWEEN {placeholder}{timestamp_cast} AND {placeholder}{timestamp_cast} THEN wm.quantity_change{"::NUMERIC" if is_psycopg2_conn else ""} ELSE 0 END), 0) AS IN_qty,
+                COALESCE(SUM(CASE WHEN wm.type = 'OUT' AND wm.timestamp BETWEEN {placeholder}{timestamp_cast} AND {placeholder}{timestamp_cast} THEN wm.quantity_change{"::NUMERIC" if is_psycopg2_conn else ""} ELSE 0 END), 0) AS OUT_qty,
+                COALESCE(SUM(CASE WHEN wm.type = 'RETURN' AND wm.timestamp BETWEEN {placeholder}{timestamp_cast} AND {placeholder}{timestamp_cast} THEN wm.quantity_change{"::NUMERIC" if is_psycopg2_conn else ""} ELSE 0 END), 0) AS RETURN_qty,
+                COALESCE((
                     SELECT SUM(CASE WHEN prev_wm.type = 'IN' OR prev_wm.type = 'RETURN' THEN prev_wm.quantity_change{"::NUMERIC" if is_psycopg2_conn else ""} ELSE -prev_wm.quantity_change{"::NUMERIC" if is_psycopg2_conn else ""} END)
                     FROM wheel_movements prev_wm
                     WHERE prev_wm.wheel_id = w.id AND prev_wm.timestamp < {placeholder}{timestamp_cast}
                 ), 0) AS initial_qty_before_period
-            FROM wheels w  
+            FROM wheels w
             LEFT JOIN wheel_movements wm ON wm.wheel_id = w.id
-            WHERE w.is_deleted = FALSE 
-            GROUP BY w.id, w.brand, w.model, w.diameter, w.pcd, w.width, w.et, w.color 
+            WHERE w.is_deleted = FALSE
+            GROUP BY w.id, w.brand, w.model, w.diameter, w.pcd, w.width, w.et, w.color
             HAVING (
                 -- Has any movement in the period (IN, OUT, RETURN)
-                COALESCE(SUM(CASE WHEN wm.timestamp BETWEEN {placeholder}{timestamp_cast} AND {placeholder}{timestamp_cast} THEN 1 ELSE 0 END), 0) > 0 
+                COALESCE(SUM(CASE WHEN wm.timestamp BETWEEN {placeholder}{timestamp_cast} AND {placeholder}{timestamp_cast} THEN 1 ELSE 0 END), 0) > 0
                 -- OR had initial stock before the period (sum of movements before period)
                 OR COALESCE((SELECT SUM(CASE WHEN prev_wm.type = 'IN' OR prev_wm.type = 'RETURN' THEN prev_wm.quantity_change ELSE -prev_wm.quantity_change END) FROM wheel_movements prev_wm WHERE prev_wm.wheel_id = w.id AND prev_wm.timestamp < {placeholder}{timestamp_cast}), 0) <> 0
                 -- OR has current quantity (current_quantity is from the 'wheels' table itself)
-                OR COALESCE(w.quantity, 0) > 0 
+                OR COALESCE(w.quantity, 0) > 0
             )
             ORDER BY w.brand, w.model, w.diameter;
         """
@@ -3002,31 +4045,31 @@ def summary_stock_report():
             cursor.close()
         else:
             query_for_sqlite = wheel_detailed_item_query.replace(f"{timestamp_cast}", "").replace(placeholder, '?')
-            wheels_detailed_movements_raw = conn.execute(query_for_sqlite, wheel_item_params).fetchall() 
+            wheels_detailed_movements_raw = conn.execute(query_for_sqlite, wheel_item_params).fetchall()
 
         # wheels_by_brand_for_summary_report ถูกกำหนดค่าเริ่มต้นแล้ว ไม่ต้องกำหนดซ้ำ
-        for row_data_raw in wheels_detailed_movements_raw: 
-            row = dict(row_data_raw) 
+        for row_data_raw in wheels_detailed_movements_raw:
+            row = dict(row_data_raw)
             normalized_row = {k.lower(): v for k, v in row.items()}
 
             brand = normalized_row['brand']
             if brand not in wheels_by_brand_for_summary_report:
                 wheels_by_brand_for_summary_report[brand] = []
-            
-            initial_qty = int(normalized_row.get('initial_qty_before_period', 0)) 
-            in_qty = int(normalized_row.get('in_qty', 0)) 
-            out_qty = int(normalized_row.get('out_qty', 0)) 
-            return_qty = int(normalized_row.get('return_qty', 0)) 
-            
-            final_qty = initial_qty + in_qty + return_qty - out_qty 
+
+            initial_qty = int(normalized_row.get('initial_qty_before_period', 0))
+            in_qty = int(normalized_row.get('in_qty', 0))
+            out_qty = int(normalized_row.get('out_qty', 0))
+            return_qty = int(normalized_row.get('return_qty', 0))
+
+            final_qty = initial_qty + in_qty + return_qty - out_qty
 
             wheels_by_brand_for_summary_report[brand].append({
                 'model': normalized_row['model'],
                 'diameter': normalized_row['diameter'],
                 'pcd': normalized_row['pcd'],
                 'width': normalized_row['width'],
-                'et': normalized_row['et'],       
-                'color': normalized_row['color'], 
+                'et': normalized_row['et'],
+                'color': normalized_row['color'],
                 'initial_quantity': initial_qty,
                 'IN': in_qty,
                 'OUT': out_qty,
@@ -3038,6 +4081,90 @@ def summary_stock_report():
         print(f"ERROR: Failed to fetch detailed wheel movements (Item): {e}")
         flash(f"เกิดข้อผิดพลาดในการดึงข้อมูลสรุปแม็กรายรุ่น: {e}", "danger")
         # wheels_by_brand_for_summary_report ถูกกำหนดค่าเริ่มต้นแล้ว ไม่ต้องกำหนดซ้ำ
+
+    # NEW: For Spare Part movements summary by item (spare_parts_by_category_and_brand_for_summary_report)
+    try:
+        spare_part_detailed_item_query = f"""
+            SELECT
+                sp.id AS spare_part_id,
+                sp.name, sp.part_number, sp.brand,
+                spc.name AS category_name,
+                COALESCE(SUM(CASE WHEN spm.type = 'IN' AND spm.timestamp BETWEEN {placeholder}{timestamp_cast} AND {placeholder}{timestamp_cast} THEN spm.quantity_change{"::NUMERIC" if is_psycopg2_conn else ""} ELSE 0 END), 0) AS IN_qty,
+                COALESCE(SUM(CASE WHEN spm.type = 'OUT' AND spm.timestamp BETWEEN {placeholder}{timestamp_cast} AND {placeholder}{timestamp_cast} THEN spm.quantity_change{"::NUMERIC" if is_psycopg2_conn else ""} ELSE 0 END), 0) AS OUT_qty,
+                COALESCE(SUM(CASE WHEN spm.type = 'RETURN' AND spm.timestamp BETWEEN {placeholder}{timestamp_cast} AND {placeholder}{timestamp_cast} THEN spm.quantity_change{"::NUMERIC" if is_psycopg2_conn else ""} ELSE 0 END), 0) AS RETURN_qty,
+                COALESCE((
+                    SELECT SUM(CASE WHEN prev_spm.type = 'IN' OR prev_spm.type = 'RETURN' THEN prev_spm.quantity_change{"::NUMERIC" if is_psycopg2_conn else ""} ELSE -prev_spm.quantity_change{"::NUMERIC" if is_psycopg2_conn else ""} END)
+                    FROM spare_part_movements prev_spm
+                    WHERE prev_spm.spare_part_id = sp.id AND prev_spm.timestamp < {placeholder}{timestamp_cast}
+                ), 0) AS initial_qty_before_period
+            FROM spare_parts sp
+            LEFT JOIN spare_part_movements spm ON spm.spare_part_id = sp.id
+            LEFT JOIN spare_part_categories spc ON sp.category_id = spc.id
+            WHERE sp.is_deleted = FALSE
+            GROUP BY sp.id, sp.name, sp.part_number, sp.brand, spc.name
+            HAVING (
+                COALESCE(SUM(CASE WHEN spm.timestamp BETWEEN {placeholder}{timestamp_cast} AND {placeholder}{timestamp_cast} THEN 1 ELSE 0 END), 0) > 0
+                OR COALESCE((SELECT SUM(CASE WHEN prev_spm.type = 'IN' OR prev_spm.type = 'RETURN' THEN prev_spm.quantity_change ELSE -prev_spm.quantity_change END) FROM spare_part_movements prev_spm WHERE prev_spm.spare_part_id = sp.id AND prev_spm.timestamp < {placeholder}{timestamp_cast}), 0) <> 0
+                OR COALESCE(sp.quantity, 0) > 0
+            )
+            ORDER BY spc.name, sp.brand, sp.name;
+        """
+        spare_part_item_params = (
+            start_of_period_iso, end_of_period_iso,
+            start_of_period_iso, end_of_period_iso,
+            start_of_period_iso, end_of_period_iso,
+            start_of_period_iso,
+            start_of_period_iso, end_of_period_iso,
+            start_of_period_iso
+        )
+
+        if is_psycopg2_conn:
+            cursor = conn.cursor()
+            cursor.execute(spare_part_detailed_item_query, spare_part_item_params)
+            spare_parts_detailed_movements_raw = cursor.fetchall()
+            cursor.close()
+        else:
+            query_for_sqlite = spare_part_detailed_item_query.replace(f"{timestamp_cast}", "").replace(placeholder, '?')
+            spare_parts_detailed_movements_raw = conn.execute(query_for_sqlite, spare_part_item_params).fetchall()
+
+        # Process results
+        for row_data_raw in spare_parts_detailed_movements_raw:
+            row = dict(row_data_raw)
+            normalized_row = {k.lower(): v for k, v in row.items()}
+
+            category_name = normalized_row['category_name'] or 'ไม่ระบุหมวดหมู่'
+            brand = normalized_row['brand'] or 'ไม่ระบุยี่ห้อ' # Group by brand under category
+
+            if category_name not in spare_parts_by_category_and_brand_for_summary_report:
+                spare_parts_by_category_and_brand_for_summary_report[category_name] = OrderedDict()
+            if brand not in spare_parts_by_category_and_brand_for_summary_report[category_name]:
+                 spare_parts_by_category_and_brand_for_summary_report[category_name][brand] = []
+
+            initial_qty = int(normalized_row.get('initial_qty_before_period', 0))
+            in_qty = int(normalized_row.get('in_qty', 0))
+            out_qty = int(normalized_row.get('out_qty', 0))
+            return_qty = int(normalized_row.get('return_qty', 0))
+
+            final_qty = initial_qty + in_qty + return_qty - out_qty
+
+            spare_parts_by_category_and_brand_for_summary_report[category_name][brand].append({
+                'name': normalized_row['name'],
+                'part_number': normalized_row['part_number'],
+                'initial_quantity': initial_qty,
+                'IN': in_qty,
+                'OUT': out_qty,
+                'RETURN': return_qty,
+                'final_quantity': final_qty,
+            })
+
+        # Sort brands within each category
+        for cat_name, brands_dict in spare_parts_by_category_and_brand_for_summary_report.items():
+            spare_parts_by_category_and_brand_for_summary_report[cat_name] = OrderedDict(sorted(brands_dict.items()))
+
+
+    except Exception as e:
+        print(f"ERROR: Failed to fetch detailed spare part movements (Item): {e}")
+        flash(f"เกิดข้อผิดพลาดในการดึงข้อมูลสรุปอะไหล่รายรุ่น: {e}", "danger")
 
 
     # --- For summary totals by tire brand (tire_brand_totals_for_summary_report) ---
@@ -3078,7 +4205,7 @@ def summary_stock_report():
                     total_in_brand += item['IN']
                     total_out_brand += item['OUT']
                     total_return_brand += item['RETURN']
-            
+
             # Only include brands with initial stock, or any movement in the period
             if brand_initial_qty == 0 and total_in_brand == 0 and total_out_brand == 0 and total_return_brand == 0:
                 continue
@@ -3091,7 +4218,7 @@ def summary_stock_report():
                 'RETURN': total_return_brand,
                 'final_quantity_sum': final_qty_brand,
             }
-         
+
     except Exception as e:
         print(f"ERROR: Failed to calculate tire brand totals: {e}")
         flash(f"เกิดข้อผิดพลาดในการคำนวณสรุปยางตามยี่ห้อ: {e}", "danger")
@@ -3124,7 +4251,7 @@ def summary_stock_report():
                 cursor.close()
             else:
                 query_for_sqlite = query_brand_initial_wheel.replace(f"{timestamp_cast}", "").replace(placeholder, '?')
-                brand_initial_qty = int(conn.execute(query_brand_initial_wheel, (brand, start_of_period_iso)).fetchone()[0] or 0)
+                brand_initial_qty = int(conn.execute(query_for_sqlite, (brand, start_of_period_iso)).fetchone()[0] or 0)
 
             total_in_brand = 0
             total_out_brand = 0
@@ -3139,9 +4266,9 @@ def summary_stock_report():
 
             if brand_initial_qty == 0 and total_in_brand == 0 and total_out_brand == 0 and total_return_brand == 0:
                 continue
-            
+
             final_qty_brand = brand_initial_qty + total_in_brand + total_return_brand - total_out_brand
-            
+
             wheel_brand_totals_for_summary_report[brand] = {
                 'IN': total_in_brand,
                 'OUT': total_out_brand,
@@ -3152,6 +4279,63 @@ def summary_stock_report():
         print(f"ERROR: Failed to calculate wheel brand totals: {e}")
         flash(f"เกิดข้อผิดพลาดในการคำนวณสรุปแม็กตามยี่ห้อ: {e}", "danger")
         # wheel_brand_totals_for_summary_report ถูกกำหนดค่าเริ่มต้นแล้ว ไม่ต้องกำหนดซ้ำ
+
+    # NEW: For summary totals by spare part category (spare_part_category_totals_for_summary_report)
+    try:
+        categories_query = """SELECT id, name FROM spare_part_categories ORDER BY name"""
+        if is_psycopg2_conn:
+            cursor = conn.cursor()
+            cursor.execute(categories_query)
+            all_spare_part_categories_db = [dict(row) for row in cursor.fetchall()]
+            cursor.close()
+        else:
+            all_spare_part_categories_db = [dict(row) for row in conn.execute(categories_query).fetchall()]
+
+        for category_info in all_spare_part_categories_db:
+            cat_id = category_info['id']
+            cat_name = category_info['name']
+
+            query_category_initial_spare_part = f"""
+                SELECT COALESCE(SUM(CASE WHEN spm.type = 'IN' OR spm.type = 'RETURN' THEN spm.quantity_change ELSE -spm.quantity_change END), 0)
+                FROM spare_part_movements spm
+                JOIN spare_parts sp ON spm.spare_part_id = sp.id
+                WHERE sp.category_id = {placeholder} AND spm.timestamp < {placeholder}{timestamp_cast};
+            """
+            if is_psycopg2_conn:
+                cursor = conn.cursor()
+                cursor.execute(query_category_initial_spare_part, (cat_id, start_of_period_iso))
+                category_initial_qty = int(cursor.fetchone()[0] or 0)
+                cursor.close()
+            else:
+                query_for_sqlite = query_category_initial_spare_part.replace(f"{timestamp_cast}", "").replace(placeholder, '?')
+                category_initial_qty = int(conn.execute(query_for_sqlite, (cat_id, start_of_period_iso)).fetchone()[0] or 0)
+
+            total_in_category = 0
+            total_out_category = 0
+            total_return_category = 0
+
+            if cat_name in spare_parts_by_category_and_brand_for_summary_report:
+                for brand_name, items_list in spare_parts_by_category_and_brand_for_summary_report[cat_name].items():
+                    for item in items_list:
+                        total_in_category += item['IN']
+                        total_out_category += item['OUT']
+                        total_return_category += item['RETURN']
+
+            if category_initial_qty == 0 and total_in_category == 0 and total_out_category == 0 and total_return_category == 0:
+                continue
+
+            final_qty_category = category_initial_qty + total_in_category + total_return_category - total_out_category
+
+            spare_part_category_totals_for_summary_report[cat_name] = {
+                'IN': total_in_category,
+                'OUT': total_out_category,
+                'RETURN': total_return_category,
+                'final_quantity_sum': final_qty_category,
+            }
+    except Exception as e:
+        print(f"ERROR: Failed to calculate spare part category totals: {e}")
+        flash(f"เกิดข้อผิดพลาดในการคำนวณสรุปอะไหล่ตามหมวดหมู่: {e}", "danger")
+
 
     tires_with_movement = {}
     for brand, items in tires_by_brand_for_summary_report.items():
@@ -3167,14 +4351,27 @@ def summary_stock_report():
         if moved_items:
             wheels_with_movement[brand] = moved_items
 
+    spare_parts_with_movement = {} # NEW
+    for category_name, brands_dict in spare_parts_by_category_and_brand_for_summary_report.items():
+        category_has_movement = False
+        brands_with_movement_in_category = OrderedDict()
+        for brand_name, items_list in brands_dict.items():
+            moved_items = [item for item in items_list if item['IN'] > 0 or item['OUT'] > 0 or item['RETURN'] > 0]
+            if moved_items:
+                brands_with_movement_in_category[brand_name] = moved_items
+                category_has_movement = True
+        if category_has_movement:
+            spare_parts_with_movement[category_name] = brands_with_movement_in_category
+
 
     return render_template('summary_stock_report.html',
                            start_date_param=start_date_obj.strftime('%Y-%m-%d'),
                            end_date_param=end_date_obj.strftime('%Y-%m-%d'),
                            display_range_str=display_range_str,
-                           
+
                            tire_movements_by_channel=sorted_tire_movements_by_channel,
                            wheel_movements_by_channel=sorted_wheel_movements_by_channel,
+                           spare_part_movements_by_channel=sorted_spare_part_movements_by_channel, # NEW
 
                            overall_tire_initial=overall_tire_initial,
                            overall_tire_in=overall_tire_in_period,
@@ -3187,11 +4384,19 @@ def summary_stock_report():
                            overall_wheel_out=overall_wheel_out_period,
                            overall_wheel_return=overall_wheel_return_period,
                            overall_wheel_final=overall_wheel_final,
-                        
+
+                           overall_spare_part_initial=overall_spare_part_initial, # NEW
+                           overall_spare_part_in=overall_spare_part_in_period, # NEW
+                           overall_spare_part_out=overall_spare_part_out_period, # NEW
+                           overall_spare_part_return=overall_spare_part_return_period, # NEW
+                           overall_spare_part_final=overall_spare_part_final, # NEW
+
                            tires_by_brand_for_summary_report=tires_with_movement,
                            wheels_by_brand_for_summary_report=wheels_with_movement,
+                           spare_parts_by_category_and_brand_for_summary_report=spare_parts_with_movement, # NEW
                            tire_brand_totals_for_summary_report=tire_brand_totals_for_summary_report,
                            wheel_brand_totals_for_summary_report=wheel_brand_totals_for_summary_report,
+                           spare_part_category_totals_for_summary_report=spare_part_category_totals_for_summary_report, # NEW
                            current_user=current_user)
 
 # --- Import/Export Routes (assuming these are already in your app.py) ---
@@ -3202,7 +4407,7 @@ def export_import():
     if not current_user.is_admin(): # Only Admin can import/export
         flash('คุณไม่มีสิทธิ์ในการนำเข้า/ส่งออกข้อมูล', 'danger')
         return redirect(url_for('index'))
-        
+
     conn = get_db()
     active_tab = request.args.get('tab', 'tires_excel')
     return render_template('export_import.html', active_tab=active_tab, current_user=current_user)
@@ -3427,8 +4632,6 @@ def import_tires_action():
                 flash('ไม่พบชีทชื่อ "Tires Data" ในไฟล์. โปรดตรวจสอบว่าคุณใช้ไฟล์แม่แบบที่ถูกต้อง', 'danger')
                 return redirect(url_for('export_import', tab='tires_excel'))
             
-            # Use original 'Barcode ID (ระบบ)' for parsing dtype (as it's the internal name)
-            # If the header in Excel is 'Barcode ID (ระบบ)', pandas will read it with that name.
             df = xls.parse('Tires Data', dtype={'Barcode ID (ระบบ)': str})
             
             conn = get_db()
@@ -3436,40 +4639,30 @@ def import_tires_action():
             updated_count = 0
             error_rows = []
 
-            # UPDATED: Expected column names now match the export format
             expected_tire_cols = [
                 'ยี่ห้อ', 'รุ่นยาง', 'เบอร์ยาง', 'ปีผลิต', 'สต็อก',
                 'ทุน', 'ทุนล็อต', 'ราคาส่ง 1', 'ราคาส่งหน้าร้าน', 'ราคาขาย' 
             ]
             
-            # Check if all required columns are present
             if not all(col in df.columns for col in expected_tire_cols):
                 missing_cols = [col for col in expected_tire_cols if col not in df.columns]
                 flash(f'ไฟล์ Excel ขาดคอลัมน์ที่จำเป็น: {", ".join(missing_cols)}. โปรดดาวน์โหลดไฟล์ตัวอย่างเพื่อดูรูปแบบที่ถูกต้อง.', 'danger')
                 return redirect(url_for('export_import', tab='tires_excel'))
 
             for index, row in df.iterrows():
-                # --- NEW: Skip blank rows ---
-                # Check if essential columns are NaN or empty strings
-                if pd.isna(row.get('ยี่ห้อ')) and \
-                   pd.isna(row.get('รุ่นยาง')) and \
-                   pd.isna(row.get('เบอร์ยาง')) and \
-                   pd.isna(row.get('สต็อก')):
+                if pd.isna(row.get('ยี่ห้อ')) and pd.isna(row.get('รุ่นยาง')) and pd.isna(row.get('เบอร์ยาง')) and pd.isna(row.get('สต็อก')):
                     error_rows.append(f"แถวที่ {index + 2}: ข้อมูลหลัก (ยี่ห้อ, รุ่นยาง, เบอร์ยาง, สต็อก) ว่างเปล่า. แถวถูกข้าม.")
-                    continue # Skip this row
+                    continue
 
                 try:
-                    # Retrieve optional/system columns with their new names
                     tire_id_from_excel = int(row.get('ID (ห้ามแก้ไข)')) if pd.notna(row.get('ID (ห้ามแก้ไข)')) else None
                     barcode_id_from_excel = str(row.get('Barcode ID (ระบบ)', '')).strip()
                     promotion_id_from_excel_raw = row.get('ID โปรโมชัน (ระบบ)')
 
-                    # Clean barcode string
                     barcode_id_to_save = None
                     if barcode_id_from_excel and barcode_id_from_excel.lower() not in ['none', 'nan']:
                         barcode_id_to_save = barcode_id_from_excel
 
-                    # Required fields (using their new names from export)
                     brand = str(row.get('ยี่ห้อ', '')).strip().lower()
                     model = str(row.get('รุ่นยาง', '')).strip().lower()
                     size = str(row.get('เบอร์ยาง', '')).strip()
@@ -3482,13 +4675,11 @@ def import_tires_action():
                     wholesale_price2_raw = row.get('ราคาส่งหน้าร้าน')
                     price_per_item_raw = row.get('ราคาขาย')
 
-                    # Validation for required fields for new/update
                     if not brand or not model or not size:
                         raise ValueError("ข้อมูล 'ยี่ห้อ', 'รุ่นยาง', หรือ 'เบอร์ยาง' ไม่สามารถเว้นว่างได้")
                     if pd.isna(price_per_item_raw):
                          raise ValueError("ข้อมูล 'ราคาขาย' ไม่สามารถเว้นว่างได้")
 
-                    # Type conversions
                     try:
                         price_per_item = float(price_per_item_raw)
                         cost_sc = float(cost_sc_raw) if pd.notna(cost_sc_raw) else None
@@ -3511,12 +4702,10 @@ def import_tires_action():
                     promotion_id_db = int(promotion_id_from_excel_raw) if pd.notna(promotion_id_from_excel_raw) else None
                     
                     cursor = conn.cursor()
-
                     existing_tire = None
                     if tire_id_from_excel:
                         existing_tire = database.get_tire(conn, tire_id_from_excel)
 
-                    # If not found by ID or no ID provided, try to find by Barcode ID
                     if not existing_tire and barcode_id_to_save:
                         existing_tire_id_by_barcode = database.get_tire_id_by_barcode(conn, barcode_id_to_save)
                         if existing_tire_id_by_barcode:
@@ -3528,12 +4717,11 @@ def import_tires_action():
                         if existing_wheel_id_by_barcode:
                             raise ValueError(f"Barcode ID '{barcode_id_to_save}' ซ้ำกับล้อแม็ก ID {existing_wheel_id_by_barcode}. Barcode ID ต้องไม่ซ้ำกันข้ามประเภทสินค้า.")
 
-                    # If still not found by ID or Barcode, try to find by Brand/Model/Size
                     if not existing_tire:
                         if "psycopg2" in str(type(conn)):
-                            cursor.execute("SELECT id, brand, model, size, quantity FROM tires WHERE brand = %s AND model = %s AND size = %s", (brand, model, size))
+                            cursor.execute("SELECT id, brand, model, size, quantity, cost_sc FROM tires WHERE brand = %s AND model = %s AND size = %s", (brand, model, size))
                         else:
-                            cursor.execute("SELECT id, brand, model, size, quantity FROM tires WHERE brand = ? AND model = ? AND size = ?", (brand, model, size))
+                            cursor.execute("SELECT id, brand, model, size, quantity, cost_sc FROM tires WHERE brand = ? AND model = ? AND size = ?", (brand, model, size))
                         
                         found_tire_data = cursor.fetchone()
                         if found_tire_data:
@@ -3541,13 +4729,25 @@ def import_tires_action():
                             if existing_tire and existing_tire['id'] != tire_id_from_excel and tire_id_from_excel is not None:
                                 raise ValueError(f"ID ({tire_id_from_excel}) ใน Excel ไม่ตรงกับสินค้าที่มีอยู่แล้วด้วย ยี่ห้อ/รุ่น/เบอร์ ({existing_tire['id']}). กรุณาแก้ไข ID ใน Excel หรือลบออก.")
 
-
                     if existing_tire:
                         tire_id = existing_tire['id']
                         
-                        # Add or update barcode if provided and not already linked
+                        # --- START: ส่วนที่เพิ่มเข้ามาเพื่อบันทึกประวัติ ---
+                        old_cost_sc = existing_tire.get('cost_sc')
+                        
+                        if old_cost_sc != cost_sc:
+                            database.add_tire_cost_history(
+                                conn=conn,
+                                tire_id=tire_id,
+                                old_cost=old_cost_sc,
+                                new_cost=cost_sc,
+                                user_id=current_user.id,
+                                notes="แก้ไขผ่านการนำเข้า Excel"
+                            )
+                        # --- END: ส่วนที่เพิ่มเข้ามา ---
+                        
                         if barcode_id_to_save and not database.get_tire_id_by_barcode(conn, barcode_id_to_save):
-                             database.add_tire_barcode(conn, tire_id, barcode_id_to_save, is_primary=False) # is_primary=False for added barcodes
+                             database.add_tire_barcode(conn, tire_id, barcode_id_to_save, is_primary=False)
                         
                         database.update_tire_import(conn, tire_id, brand, model, size, quantity, cost_sc, cost_dunlop, cost_online, wholesale_price1, wholesale_price2, price_per_item,
                                                     promotion_id_db, year_of_manufacture)
@@ -3563,19 +4763,17 @@ def import_tires_action():
                         new_tire_id = database.add_tire_import(conn, brand, model, size, quantity, cost_sc, cost_dunlop, cost_online, wholesale_price1, wholesale_price2, price_per_item,
                                                                 promotion_id_db, year_of_manufacture)
                         if barcode_id_to_save:
-                            database.add_tire_barcode(conn, new_tire_id, barcode_id_to_save, is_primary=True) # First barcode for new item is primary
+                            database.add_tire_barcode(conn, new_tire_id, barcode_id_to_save, is_primary=True)
                         database.add_tire_movement(conn, new_tire_id, 'IN', quantity, quantity, "Import from Excel (initial stock)", None, user_id=current_user.id)
                         imported_count += 1
                 
                 except Exception as row_e:
-                    error_rows.append(f"แถวที่ {index + 2}: {row_e} - {row.to_dict()}") # Excel row index is 1-based, +1 for header
+                    error_rows.append(f"แถวที่ {index + 2}: {row_e} - {row.to_dict()}")
             
             conn.commit()
             cache.delete_memoized(get_cached_tires)
             cache.delete_memoized(get_all_tires_list_cached)
             cache.delete_memoized(get_cached_tire_brands)
-            # Potentially clear wholesale_summary_cache and unread_notification_count if stock movements from import add notifications or affect wholesale
-            # (Assuming add_tire_movement adds notifications, and wholesale_summary is tied to movements)
             cache.delete_memoized(get_cached_wholesale_summary)
             cache.delete_memoized(get_cached_unread_notification_count)
 
@@ -3967,6 +5165,378 @@ def import_wheels_action():
         flash('ชนิดไฟล์ไม่ถูกต้อง อนุญาตเฉพาะ .xlsx และ .xls เท่านั้น', 'danger')
         return redirect(url_for('export_import', tab='wheels_excel'))
 
+@app.route('/export_spare_parts_action')
+@login_required
+def export_spare_parts_action():
+    if not current_user.can_edit():
+        flash('คุณไม่มีสิทธิ์ในการส่งออกข้อมูลอะไหล่', 'danger')
+        return redirect(url_for('export_import', tab='spare_parts_excel'))
+
+    conn = get_db()
+    spare_parts = database.get_all_spare_parts(conn)
+
+    if not spare_parts:
+        flash('ไม่มีข้อมูลอะไหล่ให้ส่งออก', 'warning')
+        return redirect(url_for('export_import', tab='spare_parts_excel'))
+
+    data = []
+    for part in spare_parts:
+        primary_barcode = ""
+        barcodes = database.get_barcodes_for_spare_part(conn, part['id'])
+        for bc in barcodes:
+            if bc['is_primary_barcode']:
+                primary_barcode = bc['barcode_string']
+                break
+        if not primary_barcode and barcodes: # Fallback to first barcode if no primary is set
+            primary_barcode = barcodes[0]['barcode_string']
+
+        data.append({
+            'ชื่ออะไหล่': part['name'],
+            'Part Number': part['part_number'],
+            'ยี่ห้อ': part['brand'],
+            'หมวดหมู่': part['category_name'], # NEW: Export category name
+            'คำอธิบาย': part['description'],
+            'สต็อก': part['quantity'],
+            'ทุน': part['cost'],
+            'ราคาขายปลีก': part['retail_price'],
+            'ราคาส่ง 1': part['wholesale_price1'],
+            'ราคาส่ง 2': part['wholesale_price2'],
+            'ทุน Online': part['cost_online'],
+            'Barcode ID (ระบบ)': primary_barcode,
+            'ID (ห้ามแก้ไข)': part['id'],
+            'ID หมวดหมู่ (ระบบ)': part['category_id'], # NEW: Export category_id
+            'ไฟล์รูปภาพ (URL ระบบ)': part['image_filename'],
+        })
+
+    df = pd.DataFrame(data)
+
+    # Sort DataFrame before writing to Excel
+    df['หมวดหมู่_sort'] = df['หมวดหมู่'].str.lower()
+    df['ยี่ห้อ_sort'] = df['ยี่ห้อ'].str.lower()
+    df['ชื่ออะไหล่_sort'] = df['ชื่ออะไหล่'].str.lower()
+    df = df.sort_values(by=['หมวดหมู่_sort', 'ยี่ห้อ_sort', 'ชื่ออะไหล่_sort', 'ID (ห้ามแก้ไข)'], ascending=True)
+    df = df.drop(columns=['หมวดหมู่_sort', 'ยี่ห้อ_sort', 'ชื่ออะไหล่_sort'])
+
+    # Define column order for the main data sheet
+    main_sheet_cols = [
+        'ชื่ออะไหล่', 'Part Number', 'ยี่ห้อ', 'หมวดหมู่', 'คำอธิบาย', 'สต็อก',
+        'ทุน', 'ราคาขายปลีก', 'ราคาส่ง 1', 'ราคาส่ง 2', 'ทุน Online',
+        'Barcode ID (ระบบ)', 'ID (ห้ามแก้ไข)', 'ID หมวดหมู่ (ระบบ)', 'ไฟล์รูปภาพ (URL ระบบ)',
+    ]
+    df = df[main_sheet_cols]
+
+    output = BytesIO()
+    writer = pd.ExcelWriter(output, engine='xlsxwriter')
+    workbook = writer.book
+
+    # --- Add an Instructions Sheet ---
+    instructions_sheet_name = 'คำแนะนำการใช้งาน'
+    instructions_ws = workbook.add_worksheet(instructions_sheet_name)
+    instructions_ws.write('A1', 'คำแนะนำการใช้งานไฟล์นำเข้า/ส่งออกข้อมูลอะไหล่', workbook.add_format({'bold': True, 'font_size': 14}))
+    instructions_ws.write('A3', 'วัตถุประสงค์:', workbook.add_format({'bold': True}))
+    instructions_ws.write('A4', 'ไฟล์นี้ใช้สำหรับ Export ข้อมูลสต็อกอะไหล่ปัจจุบัน และสามารถใช้เป็นแม่แบบเพื่อนำเข้าข้อมูลใหม่หรือแก้ไขข้อมูลที่มีอยู่ได้', workbook.add_format({'text_wrap': True}))
+    instructions_ws.write('A6', 'ข้อควรระวัง:', workbook.add_format({'bold': True, 'font_color': 'red'}))
+    instructions_ws.write('A7', '1. ห้าม! เปลี่ยนชื่อชีท "Spare Parts Data" และห้าม! ลบ/ย้าย/เปลี่ยนชื่อคอลัมน์ในชีท "Spare Parts Data"', workbook.add_format({'font_color': 'red', 'text_wrap': True}))
+    instructions_ws.write('A8', '2. ข้อมูลในคอลัมน์ที่มีคำว่า "(ห้ามแก้ไข)" หรือ "(ระบบ)" เป็นข้อมูลที่สร้าง/คำนวณโดยระบบ ไม่ควรแก้ไข', workbook.add_format({'font_color': 'red', 'text_wrap': True}))
+    instructions_ws.write('A9', '3. การแก้ไขค่าในคอลัมน์ "สต็อก" จะถูกบันทึกเป็นการเคลื่อนไหว (รับเข้า/จ่ายออก)', workbook.add_format({'font_color': 'red', 'text_wrap': True}))
+    instructions_ws.write('A10', '4. หากต้องการเพิ่มสินค้าใหม่ ไม่ต้องกรอก "ID (ห้ามแก้ไข)"', workbook.add_format({'font_color': 'red', 'text_wrap': True}))
+    instructions_ws.write('A11', '5. "ไฟล์รูปภาพ (URL ระบบ)" คือ URL รูปภาพที่ระบบใช้ ไม่ควรแก้ไขโดยตรง หากต้องการเปลี่ยนรูป ให้ใช้ฟังก์ชันอัปโหลดในระบบ', workbook.add_format({'font_color': 'red', 'text_wrap': True}))
+    instructions_ws.write('A12', '6. "หมวดหมู่" ต้องตรงกับหมวดหมู่ที่มีอยู่ในระบบ (สร้าง/จัดการได้ที่หน้าจัดการหมวดหมู่)', workbook.add_format({'font_color': 'red', 'text_wrap': True}))
+    instructions_ws.write('A13', '7. ตรวจสอบประเภทข้อมูลให้ถูกต้อง (ตัวเลข, ข้อความ)', workbook.add_format({'font_color': 'red', 'text_wrap': True}))
+    instructions_ws.set_column('A:A', 80)
+
+    # Write data to the main sheet
+    data_sheet_name = 'Spare Parts Data'
+    worksheet = workbook.add_worksheet(data_sheet_name)
+
+    # Define formats
+    header_format = workbook.add_format({
+        'bold': True, 'text_wrap': True, 'valign': 'vcenter',
+        'fg_color': '#D7E4BC', 'border': 1, 'align': 'center'
+    })
+    read_only_header_format = workbook.add_format({
+        'bold': True, 'text_wrap': True, 'valign': 'vcenter',
+        'fg_color': '#D9D9D9', 'border': 1, 'font_color': '#5C5C5C', 'align': 'center'
+    })
+    read_only_cell_format = workbook.add_format({
+        'font_color': '#808080', 'italic': True, 'align': 'center', 'valign': 'vcenter'
+    })
+    integer_format = workbook.add_format({'num_format': '#,##0', 'align': 'center'})
+    decimal_format = workbook.add_format({'num_format': '#,##0.00', 'align': 'right'})
+    text_center_format = workbook.add_format({'align': 'center'})
+    text_left_format = workbook.add_format({'align': 'left'})
+
+    # Write headers to the main sheet
+    for col_num, value in enumerate(df.columns.values):
+        is_read_only_col = '(ห้ามแก้ไข)' in value or '(ระบบ)' in value or '(URL ระบบ)' in value
+        current_header_format = read_only_header_format if is_read_only_col else header_format
+        worksheet.write(0, col_num, value, current_header_format)
+
+        # Set initial column widths
+        max_len = max(df[value].astype(str).apply(len).max(), len(value)) + 2
+
+        if value == 'ชื่ออะไหล่':
+            worksheet.set_column(col_num, col_num, max(max_len, 25), text_left_format)
+        elif value == 'Part Number':
+            worksheet.set_column(col_num, col_num, max(max_len, 15), text_center_format)
+        elif value == 'ยี่ห้อ':
+            worksheet.set_column(col_num, col_num, max(max_len, 15), text_left_format)
+        elif value == 'หมวดหมู่':
+            worksheet.set_column(col_num, col_num, max(max_len, 20), text_left_format)
+        elif value == 'คำอธิบาย':
+            worksheet.set_column(col_num, col_num, max(max_len, 30), text_left_format)
+        elif value == 'สต็อก':
+            worksheet.set_column(col_num, col_num, max(max_len, 10), integer_format)
+        elif value in ['ทุน', 'ราคาขายปลีก', 'ราคาส่ง 1', 'ราคาส่ง 2', 'ทุน Online']:
+            worksheet.set_column(col_num, col_num, max(max_len, 12), decimal_format)
+        elif is_read_only_col:
+            worksheet.set_column(col_num, col_num, max(max_len, 25), read_only_cell_format)
+            if value in ['ID (ห้ามแก้ไข)', 'Barcode ID (ระบบ)', 'ID หมวดหมู่ (ระบบ)', 'ไฟล์รูปภาพ (URL ระบบ)']:
+                worksheet.set_column(col_num, col_num, None, None, {'hidden': True})
+        else:
+            worksheet.set_column(col_num, col_num, max_len)
+
+    # Write data rows with blank rows between categories for Spare Parts
+    current_row = 1
+    last_category = None
+
+    for index, row_data in df.iterrows():
+        current_category = row_data['หมวดหมู่']
+        if last_category is not None and current_category != last_category:
+            current_row += 1 # Add a blank row between categories
+
+        for col_num, col_name in enumerate(df.columns.values):
+            cell_value = row_data[col_name]
+            cell_format = None
+
+            is_read_only_col = '(ห้ามแก้ไข)' in col_name or '(ระบบ)' in col_name or '(URL ระบบ)' in col_name
+
+            if is_read_only_col:
+                cell_format = read_only_cell_format
+            elif col_name == 'สต็อก':
+                cell_format = integer_format
+            elif col_name in ['ทุน', 'ราคาขายปลีก', 'ราคาส่ง 1', 'ราคาส่ง 2', 'ทุน Online']:
+                cell_format = decimal_format
+            elif col_name in ['ชื่ออะไหล่', 'คำอธิบาย', 'ยี่ห้อ', 'หมวดหมู่']:
+                cell_format = text_left_format
+            elif col_name == 'Part Number':
+                cell_format = text_center_format
+
+
+            # Handle NaN values by writing None instead of np.nan
+            if pd.isna(cell_value):
+                worksheet.write(current_row, col_num, None, cell_format) # Write None to produce a blank cell
+            else:
+                worksheet.write(current_row, col_num, cell_value, cell_format)
+        current_row += 1
+        last_category = current_category
+
+    # --- Add Freeze Panes ---
+    worksheet.freeze_panes(1, 0) # Freeze the first row (headers)
+
+    writer.close()
+    output.seek(0)
+
+    return send_file(output, download_name='spare_parts_stock_template.xlsx', as_attachment=True, mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+
+
+@app.route('/import_spare_parts_action', methods=['POST'])
+@login_required
+def import_spare_parts_action():
+    if not current_user.can_edit():
+        flash('คุณไม่มีสิทธิ์ในการนำเข้าข้อมูลอะไหล่', 'danger')
+        return redirect(url_for('export_import', tab='spare_parts_excel'))
+
+    if 'file' not in request.files:
+        flash('ไม่พบไฟล์ที่อัปโหลด', 'danger')
+        return redirect(url_for('export_import', tab='spare_parts_excel'))
+
+    file = request.files['file']
+
+    if file.filename == '':
+        flash('ไม่ได้เลือกไฟล์', 'danger')
+        return redirect(url_for('export_import', tab='spare_parts_excel'))
+
+    if file and allowed_excel_file(file.filename):
+        try:
+            xls = pd.ExcelFile(file)
+            if 'Spare Parts Data' not in xls.sheet_names:
+                flash('ไม่พบชีทชื่อ "Spare Parts Data" ในไฟล์. โปรดตรวจสอบว่าคุณใช้ไฟล์แม่แบบที่ถูกต้อง', 'danger')
+                return redirect(url_for('export_import', tab='spare_parts_excel'))
+
+            df = xls.parse('Spare Parts Data', dtype={'Barcode ID (ระบบ)': str})
+
+            conn = get_db()
+            imported_count = 0
+            updated_count = 0
+            error_rows = []
+
+            # Expected column names now match the export format
+            expected_spare_part_cols = [
+                'ชื่ออะไหล่', 'Part Number', 'ยี่ห้อ', 'หมวดหมู่', 'คำอธิบาย', 'สต็อก',
+                'ทุน', 'ราคาขายปลีก', 'ราคาส่ง 1', 'ราคาส่ง 2', 'ทุน Online'
+            ]
+
+            # Check if all required columns are present
+            if not all(col in df.columns for col in expected_spare_part_cols):
+                missing_cols = [col for col in expected_spare_part_cols if col not in df.columns]
+                flash(f'ไฟล์ Excel ขาดคอลัมน์ที่จำเป็น: {", ".join(missing_cols)}. โปรดดาวน์โหลดไฟล์ตัวอย่างเพื่อดูรูปแบบที่ถูกต้อง.', 'danger')
+                return redirect(url_for('export_import', tab='spare_parts_excel'))
+
+            # Cache categories for faster lookup
+            cached_categories = {cat['name'].lower(): cat['id'] for cat in database.get_all_spare_part_categories(conn)}
+            # Also need reverse lookup for id to name if category_id is provided directly but name is preferred for error messages
+            cached_category_names = {cat['id']: cat['name'] for cat in database.get_all_spare_part_categories(conn)}
+
+
+            for index, row in df.iterrows():
+                # Skip blank rows
+                if pd.isna(row.get('ชื่ออะไหล่')) and \
+                   pd.isna(row.get('สต็อก')) and \
+                   pd.isna(row.get('ราคาขายปลีก')):
+                    error_rows.append(f"แถวที่ {index + 2}: ข้อมูลหลัก (ชื่ออะไหล่, สต็อก, ราคาขายปลีก) ว่างเปล่า. แถวถูกข้าม.")
+                    continue
+
+                try:
+                    spare_part_id_from_excel = int(row.get('ID (ห้ามแก้ไข)')) if pd.notna(row.get('ID (ห้ามแก้ไข)')) else None
+                    barcode_id_from_excel = str(row.get('Barcode ID (ระบบ)', '')).strip()
+                    category_id_from_excel_raw = row.get('ID หมวดหมู่ (ระบบ)') # From system
+                    category_name_from_excel = str(row.get('หมวดหมู่', '')).strip().lower() # From user input
+
+                    barcode_id_to_save = None
+                    if barcode_id_from_excel and barcode_id_from_excel.lower() not in ['none', 'nan']:
+                        barcode_id_to_save = barcode_id_from_excel
+
+                    name = str(row.get('ชื่ออะไหล่', '')).strip()
+                    part_number = str(row.get('Part Number', '')).strip()
+                    brand = str(row.get('ยี่ห้อ', '')).strip().lower()
+                    description = str(row.get('คำอธิบาย', '')).strip()
+                    quantity = int(row['สต็อก']) if pd.notna(row['สต็อก']) else 0
+                    retail_price_raw = row.get('ราคาขายปลีก')
+                    cost_raw = row.get('ทุน')
+                    wholesale_price1_raw = row.get('ราคาส่ง 1')
+                    wholesale_price2_raw = row.get('ราคาส่ง 2')
+                    cost_online_raw = row.get('ทุน Online')
+
+                    if not name or pd.isna(retail_price_raw):
+                         raise ValueError("ข้อมูล 'ชื่ออะไหล่' หรือ 'ราคาขายปลีก' ไม่สามารถเว้นว่างได้")
+
+                    # Resolve category_id
+                    category_id_to_use = None
+                    if pd.notna(category_id_from_excel_raw):
+                        try:
+                            category_id_to_use = int(category_id_from_excel_raw)
+                            # Verify if ID matches name for consistency, or just use ID if provided by system
+                            if category_id_to_use not in cached_category_names:
+                                raise ValueError(f"ID หมวดหมู่ (ระบบ) '{category_id_to_use}' ไม่ถูกต้องหรือไม่มีในระบบ")
+                        except ValueError:
+                            raise ValueError(f"ID หมวดหมู่ (ระบบ) '{category_id_from_excel_raw}' ไม่ใช่ตัวเลขที่ถูกต้อง")
+                    elif category_name_from_excel:
+                        category_id_to_use = cached_categories.get(category_name_from_excel)
+                        if category_id_to_use is None:
+                            raise ValueError(f"หมวดหมู่ '{category_name_from_excel}' ไม่มีในระบบ. โปรดสร้างหมวดหมู่นี้ก่อน หรือใช้หมวดหมู่ที่มีอยู่แล้ว.")
+
+                    try:
+                        retail_price = float(retail_price_raw)
+                        cost = float(cost_raw) if pd.notna(cost_raw) else None
+                        wholesale_price1 = float(wholesale_price1_raw) if pd.notna(wholesale_price1_raw) else None
+                        wholesale_price2 = float(wholesale_price2_raw) if pd.notna(wholesale_price2_raw) else None
+                        cost_online = float(cost_online_raw) if pd.notna(cost_online_raw) else None
+                    except ValueError as ve:
+                        raise ValueError(f"ข้อมูลตัวเลขไม่ถูกต้องในคอลัมน์ราคาหรือทุน: {ve}")
+
+                    cursor = conn.cursor()
+                    is_postgres = "psycopg2" in str(type(conn))
+
+                    existing_spare_part = None
+                    if spare_part_id_from_excel:
+                        existing_spare_part = database.get_spare_part(conn, spare_part_id_from_excel)
+
+                    if not existing_spare_part and barcode_id_to_save:
+                        existing_spare_part_id_by_barcode = database.get_spare_part_id_by_barcode(conn, barcode_id_to_save)
+                        if existing_spare_part_id_by_barcode:
+                            existing_spare_part = database.get_spare_part(conn, existing_spare_part_id_by_barcode)
+                            if existing_spare_part and existing_spare_part['id'] != spare_part_id_from_excel and spare_part_id_from_excel is not None:
+                                raise ValueError(f"ID ({spare_part_id_from_excel}) ใน Excel ไม่ตรงกับ ID ที่พบจาก Barcode ({existing_spare_part_id_by_barcode}).")
+                        # Check against tires and wheels too
+                        if database.get_tire_id_by_barcode(conn, barcode_id_to_save):
+                            raise ValueError(f"Barcode ID '{barcode_id_to_save}' ซ้ำกับยาง. Barcode ID ต้องไม่ซ้ำกันข้ามประเภทสินค้า.")
+                        if database.get_wheel_id_by_barcode(conn, barcode_id_to_save):
+                            raise ValueError(f"Barcode ID '{barcode_id_to_save}' ซ้ำกับล้อแม็ก. Barcode ID ต้องไม่ซ้ำกันข้ามประเภทสินค้า.")
+
+
+                    # Try to find by name, part_number, and brand as last resort for existing item
+                    if not existing_spare_part:
+                        if part_number:
+                            if is_postgres:
+                                cursor.execute("SELECT id, quantity FROM spare_parts WHERE name = %s AND part_number = %s", (name, part_number))
+                            else:
+                                cursor.execute("SELECT id, quantity FROM spare_parts WHERE name = ? AND part_number = ?", (name, part_number))
+                        else: # Fallback to name and brand if no part number
+                            if is_postgres:
+                                cursor.execute("SELECT id, quantity FROM spare_parts WHERE name = %s AND brand = %s", (name, brand))
+                            else:
+                                cursor.execute("SELECT id, quantity FROM spare_parts WHERE name = ? AND brand = ?", (name, brand))
+
+                        found_spare_part_data = cursor.fetchone()
+                        if found_spare_part_data:
+                            existing_spare_part = dict(found_spare_part_data)
+                            if existing_spare_part and existing_spare_part['id'] != spare_part_id_from_excel and spare_part_id_from_excel is not None:
+                                raise ValueError(f"ID ({spare_part_id_from_excel}) ใน Excel ไม่ตรงกับสินค้าที่มีอยู่แล้วด้วย ชื่อ/Part Number/ยี่ห้อ ({existing_spare_part['id']}).")
+
+
+                    if existing_spare_part:
+                        spare_part_id = existing_spare_part['id']
+                        if barcode_id_to_save and not database.get_spare_part_id_by_barcode(conn, barcode_id_to_save):
+                            database.add_spare_part_barcode(conn, spare_part_id, barcode_id_to_save, is_primary=False)
+
+                        database.update_spare_part_import(conn, spare_part_id, name, part_number, brand, description,
+                                                           quantity, cost, retail_price, wholesale_price1, wholesale_price2,
+                                                           cost_online, row.get('ไฟล์รูปภาพ (URL ระบบ)'), category_id_to_use) # Use existing image URL from excel
+
+                        old_quantity = existing_spare_part['quantity']
+                        if quantity != old_quantity:
+                            movement_type = 'IN' if quantity > old_quantity else 'OUT'
+                            quantity_change_diff = abs(quantity - old_quantity)
+                            database.add_spare_part_movement(conn, spare_part_id, movement_type, quantity_change_diff, quantity, "Import from Excel (Qty Update)", None, user_id=current_user.id)
+                        updated_count += 1
+
+                    else: # New spare part
+                        new_spare_part_id = database.add_spare_part_import(conn, name, part_number, brand, description, quantity,
+                                                                            cost, retail_price, wholesale_price1, wholesale_price2,
+                                                                            cost_online, row.get('ไฟล์รูปภาพ (URL ระบบ)'), category_id_to_use)
+                        if barcode_id_to_save:
+                            database.add_spare_part_barcode(conn, new_spare_part_id, barcode_id_to_save, is_primary=True)
+                        database.add_spare_part_movement(conn, new_spare_part_id, 'IN', quantity, quantity, "Import from Excel (initial stock)", None, user_id=current_user.id)
+                        imported_count += 1
+
+                except Exception as row_e:
+                    error_rows.append(f"แถวที่ {index + 2}: {row_e} - {row.to_dict()}")
+
+            conn.commit()
+            cache.delete_memoized(get_cached_spare_parts)
+            cache.delete_memoized(get_cached_spare_part_brands)
+            cache.delete_memoized(get_cached_spare_part_categories_hierarchical) # New categories might be referenced
+            cache.delete_memoized(get_cached_unread_notification_count) # Notifications from movements
+
+            message = f'นำเข้าข้อมูลอะไหล่สำเร็จ: เพิ่มใหม่ {imported_count} รายการ, อัปเดต {updated_count} รายการ.'
+            if error_rows:
+                message += f' พบข้อผิดพลาดใน {len(error_rows)} แถว: {"; ".join(error_rows[:5])}{"..." if len(error_rows) > 5 else ""}'
+                flash(message, 'warning')
+            else:
+                flash(message, 'success')
+
+            return redirect(url_for('export_import', tab='spare_parts_excel'))
+
+        except Exception as e:
+            flash(f'เกิดข้อผิดพลาดร้ายแรงในการนำเข้าไฟล์ Excel ของอะไหล่: {e}', 'danger')
+            if 'db' in g and g.db is not None:
+                g.db.rollback()
+            return redirect(url_for('export_import', tab='spare_parts_excel'))
+    else:
+        flash('ชนิดไฟล์ไม่ถูกต้อง อนุญาตเฉพาะ .xlsx และ .xls เท่านั้น', 'danger')
+        return redirect(url_for('export_import', tab='spare_parts_excel'))
+
 
 # --- User management routes (assuming these are already in your app.py) ---
 @app.route('/manage_users')
@@ -4099,16 +5669,18 @@ def admin_deleted_items():
     if not current_user.is_admin(): # Only Admin
         flash('คุณไม่มีสิทธิ์เข้าถึงหน้ารายการสินค้าที่ถูกลบ', 'danger')
         return redirect(url_for('index'))
-    
+
     conn = get_db()
     deleted_tires = database.get_deleted_tires(conn)
     deleted_wheels = database.get_deleted_wheels(conn)
-    
+    deleted_spare_parts = database.get_deleted_spare_parts(conn) # NEW
+
     active_tab = request.args.get('tab', 'deleted_tires')
 
-    return render_template('admin_deleted_items.html', 
-                           deleted_tires=deleted_tires, 
+    return render_template('admin_deleted_items.html',
+                           deleted_tires=deleted_tires,
                            deleted_wheels=deleted_wheels,
+                           deleted_spare_parts=deleted_spare_parts, # NEW
                            active_tab=active_tab,
                            current_user=current_user)
 
@@ -4119,7 +5691,7 @@ def restore_tire_action(tire_id):
     if not current_user.is_admin(): # Only Admin
         flash('คุณไม่มีสิทธิ์ในการกู้คืนยาง', 'danger')
         return redirect(url_for('index'))
-        
+
     conn = get_db()
     try:
         database.restore_tire(conn, tire_id)
@@ -4138,7 +5710,7 @@ def restore_wheel_action(wheel_id):
     if not current_user.is_admin(): # Only Admin
         flash('คุณไม่มีสิทธิ์ในการกู้คืนแม็ก', 'danger')
         return redirect(url_for('index'))
-        
+
     conn = get_db()
     try:
         database.restore_wheel(conn, wheel_id)
@@ -4150,6 +5722,23 @@ def restore_wheel_action(wheel_id):
         flash(f'เกิดข้อผิดพลาดในการกู้คืนแม็ก: {e}', 'danger')
     return redirect(url_for('admin_deleted_items', tab='deleted_wheels'))
 
+@app.route('/restore_spare_part/<int:spare_part_id>', methods=['POST'])
+@login_required
+def restore_spare_part_action(spare_part_id):
+    if not current_user.is_admin():
+        flash('คุณไม่มีสิทธิ์ในการกู้คืนอะไหล่', 'danger')
+        return redirect(url_for('index'))
+
+    conn = get_db()
+    try:
+        database.restore_spare_part(conn, spare_part_id)
+        flash(f'กู้คืนอะไหล่ ID {spare_part_id} สำเร็จ!', 'success')
+        cache.delete_memoized(get_cached_spare_parts)
+        cache.delete_memoized(get_cached_spare_part_brands)
+    except Exception as e:
+        flash(f'เกิดข้อผิดพลาดในการกู้คืนอะไหล่: {e}', 'danger')
+    return redirect(url_for('admin_deleted_items', tab='deleted_spare_parts'))
+
 @app.route('/barcode_scanner_page') # Renamed to avoid conflict with barcode_scanner route
 @login_required
 def barcode_scanner_page():
@@ -4160,8 +5749,17 @@ def barcode_scanner_page():
         flash('คุณไม่มีสิทธิ์เข้าถึงหน้าสแกนบาร์โค้ด', 'danger')
         return redirect(url_for('index'))
 
-    return render_template('barcode_scanner.html', current_user=current_user)
-    
+    conn = get_db()
+    sales_channels = get_all_sales_channels_cached()
+    online_platforms = get_all_online_platforms_cached()
+    wholesale_customers = get_all_wholesale_customers_cached()
+
+    return render_template('barcode_scanner.html', 
+                           current_user=current_user,
+                           sales_channels=sales_channels,
+                           online_platforms=online_platforms,
+                           wholesale_customers=wholesale_customers)
+
 @app.route('/api/scan_item_lookup', methods=['GET'])
 @login_required
 def api_scan_item_lookup():
@@ -4171,25 +5769,39 @@ def api_scan_item_lookup():
 
     conn = get_db()
 
+    # Try to find in Tires
     tire_id = database.get_tire_id_by_barcode(conn, scanned_barcode_string)
     if tire_id:
         tire = database.get_tire(conn, tire_id)
-        if tire:
+        if tire and not tire['is_deleted']: # Only return active items
             if not isinstance(tire, dict):
                 tire = dict(tire)
             tire['type'] = 'tire'
             tire['current_quantity'] = tire['quantity']
             return jsonify({"success": True, "item": tire})
 
+    # Try to find in Wheels
     wheel_id = database.get_wheel_id_by_barcode(conn, scanned_barcode_string)
     if wheel_id:
         wheel = database.get_wheel(conn, wheel_id)
-        if wheel:
+        if wheel and not wheel['is_deleted']: # Only return active items
             if not isinstance(wheel, dict):
                 wheel = dict(wheel)
             wheel['type'] = 'wheel'
             wheel['current_quantity'] = wheel['quantity']
             return jsonify({"success": True, "item": wheel})
+
+    # NEW: Try to find in Spare Parts
+    spare_part_id = database.get_spare_part_id_by_barcode(conn, scanned_barcode_string)
+    if spare_part_id:
+        spare_part = database.get_spare_part(conn, spare_part_id)
+        if spare_part and not spare_part['is_deleted']: # Only return active items
+            if not isinstance(spare_part, dict):
+                spare_part = dict(spare_part)
+            spare_part['type'] = 'spare_part'
+            spare_part['current_quantity'] = spare_part['quantity']
+            return jsonify({"success": True, "item": spare_part})
+
 
     return jsonify({
         "success": False,
@@ -4197,84 +5809,152 @@ def api_scan_item_lookup():
         "action_required": "link_new_barcode",
         "scanned_barcode": scanned_barcode_string
     }), 404
-    
+
 @app.route('/api/process_stock_transaction', methods=['POST'])
 @login_required
 def api_process_stock_transaction():
-    data = request.get_json()
-    if not data:
-        return jsonify({"success": False, "message": "ไม่มีข้อมูลส่งมา"}), 400
-
-    transaction_type = data.get('type')
-    items_to_process = data.get('items', [])
-    notes = data.get('notes', '')
-    user_id = current_user.id if current_user.is_authenticated else None
-
-    if transaction_type not in ['IN', 'OUT']:
-        return jsonify({"success": False, "message": "ประเภทการทำรายการไม่ถูกต้อง (ต้องเป็น IN หรือ OUT)"}), 400
-    if not items_to_process:
-        return jsonify({"success": False, "message": "ไม่มีรายการสินค้าให้ทำรายการ"}), 400
-
-    # Permission check for 'OUT' transaction
-    if transaction_type == 'OUT' and not current_user.can_edit(): # Admin or Editor
-        return jsonify({"success": False, "message": "คุณไม่มีสิทธิ์ในการจ่ายสินค้าออกจากสต็อก"}), 403
-
     conn = get_db()
+    
     try:
+        # รับข้อมูลจาก FormData
+        transaction_type = request.form.get('type')
+        items_json = request.form.get('items_json')
+        notes = request.form.get('notes', '').strip()
+        user_id = current_user.id
+        
+        # แปลง JSON string ของรายการสินค้ากลับเป็น Python list
+        items_to_process = json.loads(items_json) if items_json else []
+
+        # ตรวจสอบข้อมูลพื้นฐาน
+        if transaction_type not in ['IN', 'OUT', 'RETURN']:
+            return jsonify({"success": False, "message": "ประเภทการทำรายการไม่ถูกต้อง"}), 400
+        if not items_to_process:
+            return jsonify({"success": False, "message": "ไม่มีรายการสินค้าให้ทำรายการ"}), 400
+
+        # ตรวจสอบสิทธิ์: 'OUT' ต้องเป็น Admin หรือ Editor
+        if transaction_type == 'OUT' and not current_user.can_edit():
+            return jsonify({"success": False, "message": "คุณไม่มีสิทธิ์ในการจ่ายสินค้าออกจากสต็อก"}), 403
+
+        # อัปโหลดรูปภาพ (ถ้ามี)
+        bill_image_url_to_db = None
+        if 'bill_image' in request.files:
+            bill_image_file = request.files['bill_image']
+            if bill_image_file and bill_image_file.filename != '':
+                if allowed_image_file(bill_image_file.filename):
+                    upload_result = cloudinary.uploader.upload(bill_image_file)
+                    bill_image_url_to_db = upload_result['secure_url']
+                else:
+                    return jsonify({"success": False, "message": "ชนิดไฟล์รูปภาพบิลไม่ถูกต้อง"}), 400
+        
+        # --- Channel Validation Logic ---
+        channel_id_str = request.form.get('channel_id')
+        online_platform_id_str = request.form.get('online_platform_id')
+        wholesale_customer_id_str = request.form.get('wholesale_customer_id')
+        return_customer_type = request.form.get('return_customer_type')
+        return_wholesale_customer_id_str = request.form.get('return_wholesale_customer_id')
+        return_online_platform_id_str = request.form.get('return_online_platform_id')
+
+        final_channel_id = int(channel_id_str) if channel_id_str else None
+        final_online_platform_id = None
+        final_wholesale_customer_id = None
+
+        channel_name = database.get_sales_channel_name(conn, final_channel_id)
+
+        if transaction_type == 'IN':
+            if channel_name != 'ซื้อเข้า':
+                return jsonify({"success": False, "message": 'สำหรับประเภท "รับเข้า" ช่องทางต้องเป็น "ซื้อเข้า" เท่านั้น'}), 400
+            return_customer_type = None
+
+        elif transaction_type == 'RETURN':
+            if channel_name != 'รับคืน':
+                return jsonify({"success": False, "message": 'สำหรับประเภท "รับคืน/ตีคืน" ช่องทางต้องเป็น "รับคืน" เท่านั้น'}), 400
+            if not return_customer_type:
+                return jsonify({"success": False, "message": 'กรุณาระบุ "คืนจาก" สำหรับประเภท "รับคืน/ตีคืน"'}), 400
+
+            if return_customer_type == 'ออนไลน์':
+                if not return_online_platform_id_str:
+                    return jsonify({"success": False, "message": 'กรุณาระบุ "แพลตฟอร์มออนไลน์ที่คืน"'}), 400
+                final_online_platform_id = int(return_online_platform_id_str)
+            elif return_customer_type == 'หน้าร้านร้านยาง':
+                if not return_wholesale_customer_id_str:
+                    return jsonify({"success": False, "message": 'กรุณาระบุ "ชื่อร้านยางที่คืน"'}), 400
+                final_wholesale_customer_id = int(return_wholesale_customer_id_str)
+
+        elif transaction_type == 'OUT':
+            if channel_name in ['ซื้อเข้า', 'รับคืน']:
+                return jsonify({"success": False, "message": f'สำหรับ "จ่ายออก" ช่องทางไม่สามารถเป็น "{channel_name}" ได้'}), 400
+            if channel_name == 'ออนไลน์':
+                if not online_platform_id_str:
+                    return jsonify({"success": False, "message": 'กรุณาระบุ "แพลตฟอร์มออนไลน์"'}), 400
+                final_online_platform_id = int(online_platform_id_str)
+            elif channel_name == 'ค้าส่ง':
+                if not wholesale_customer_id_str:
+                    return jsonify({"success": False, "message": 'กรุณาระบุ "ชื่อลูกค้าค้าส่ง"'}), 400
+                final_wholesale_customer_id = int(wholesale_customer_id_str)
+            return_customer_type = None
+        
+        # --- Process each item in the list ---
+        tires_moved, wheels_moved, spare_parts_moved = False, False, False
+
         for item_data in items_to_process:
             item_id = item_data.get('id')
             item_type = item_data.get('item_type')
             quantity_change = item_data.get('quantity')
 
-            if not item_id or not item_type or not quantity_change or not isinstance(quantity_change, int) or quantity_change <= 0:
-                conn.rollback() 
-                return jsonify({"success": False, "message": f"ข้อมูลสินค้าไม่สมบูรณ์สำหรับรายการ ID: {item_id}"}), 400
+            if not all([item_id, item_type, quantity_change, isinstance(quantity_change, int), quantity_change > 0]):
+                raise ValueError(f"ข้อมูลสินค้าไม่สมบูรณ์สำหรับรายการ ID: {item_id}")
 
-            current_qty = 0
-            db_item = None
             if item_type == 'tire':
                 db_item = database.get_tire(conn, item_id)
+                update_quantity_func = database.update_tire_quantity
+                add_movement_func = database.add_tire_movement
+                tires_moved = True
             elif item_type == 'wheel':
                 db_item = database.get_wheel(conn, item_id)
+                update_quantity_func = database.update_wheel_quantity
+                add_movement_func = database.add_wheel_movement
+                wheels_moved = True
+            elif item_type == 'spare_part':
+                db_item = database.get_spare_part(conn, item_id)
+                update_quantity_func = database.update_spare_part_quantity
+                add_movement_func = database.add_spare_part_movement
+                spare_parts_moved = True
             else:
-                conn.rollback()
-                return jsonify({"success": False, "message": f"ประเภทสินค้าไม่ถูกต้อง: {item_type}"}), 400
-            
+                raise ValueError(f"ประเภทสินค้าไม่ถูกต้อง: {item_type}")
+
             if not db_item:
-                conn.rollback()
-                return jsonify({"success": False, "message": f"ไม่พบสินค้า ID {item_id} ในฐานข้อมูล"}), 404
+                raise ValueError(f"ไม่พบสินค้า ID {item_id} ประเภท {item_type} ในฐานข้อมูล")
             
             current_qty = db_item['quantity']
-
             new_qty = current_qty
-            if transaction_type == 'IN':
+            if transaction_type in ['IN', 'RETURN']:
                 new_qty += quantity_change
             elif transaction_type == 'OUT':
                 if current_qty < quantity_change:
-                    conn.rollback()
-                    return jsonify({"success": False, "message": f"สต็อกไม่พอสำหรับ {db_item['brand'].title()} {db_item['model'].title()} (มีอยู่: {current_qty}, ต้องการ: {quantity_change})"}), 400
+                    item_name = db_item.get('name') or f"{db_item.get('brand')} {db_item.get('model')}"
+                    raise ValueError(f"สต็อกไม่พอสำหรับ {item_name} (มีอยู่: {current_qty}, ต้องการ: {quantity_change})")
                 new_qty -= quantity_change
-            
-            if item_type == 'tire':
-                database.update_tire_quantity(conn, item_id, new_qty)
-            elif item_type == 'wheel':
-                database.update_wheel_quantity(conn, item_id, new_qty)
-            
-            if item_type == 'tire':
-                database.add_tire_movement(conn, item_id, transaction_type, quantity_change, new_qty, notes, None, user_id)
-            elif item_type == 'wheel':
-                database.add_wheel_movement(conn, item_id, transaction_type, quantity_change, new_qty, notes, None, user_id)
+
+            update_quantity_func(conn, item_id, new_qty)
+            add_movement_func(conn, item_id, transaction_type, quantity_change, new_qty, notes, 
+                              bill_image_url_to_db, user_id, final_channel_id,
+                              final_online_platform_id, final_wholesale_customer_id, return_customer_type)
 
         conn.commit()
-        cache.delete_memoized(get_cached_tires)
-        cache.delete_memoized(get_cached_wheels)
-        return jsonify({"success": True, "message": f"ทำรายการ {transaction_type} สำเร็จสำหรับ {len(items_to_process)} รายการ"}), 200
+        if tires_moved: cache.delete_memoized(get_cached_tires); cache.delete_memoized(get_all_tires_list_cached)
+        if wheels_moved: cache.delete_memoized(get_cached_wheels); cache.delete_memoized(get_all_wheels_list_cached)
+        if spare_parts_moved: cache.delete_memoized(get_cached_spare_parts)
         
+        return jsonify({"success": True, "message": f"ทำรายการ {transaction_type} สำเร็จสำหรับ {len(items_to_process)} ประเภทสินค้า"}), 200
 
+    except ValueError as e:
+        conn.rollback()
+        return jsonify({"success": False, "message": str(e)}), 400
     except Exception as e:
         conn.rollback()
-        return jsonify({"success": False, "message": f"เกิดข้อผิดพลาดในการทำรายการ ระบบทำการย้อนกลับข้อมูล: {str(e)}"}), 500
-        
+        current_app.logger.error(f"Stock transaction failed: {e}", exc_info=True)
+        return jsonify({"success": False, "message": f"เกิดข้อผิดพลาดในการทำรายการ: {str(e)}"}), 500
+
 @app.route('/api/search_items_for_link', methods=['GET'])
 @login_required
 def api_search_items_for_link():
@@ -4284,13 +5964,11 @@ def api_search_items_for_link():
 
     conn = get_db()
 
-    # Create a cursor for psycopg2
-    cursor = None
-    if "psycopg2" in str(type(conn)):
-        cursor = conn.cursor()
+    cursor = conn.cursor() # Use cursor for all DB types for consistency with psycopg2.DictCursor
 
     items = []
 
+    # Search in Tires
     tire_search_query = f"""
         SELECT id, brand, model, size, quantity AS current_quantity
         FROM tires
@@ -4300,46 +5978,74 @@ def api_search_items_for_link():
             LOWER(size) LIKE %s
         )
         ORDER BY brand, model, size
-        LIMIT 50
+        LIMIT 20
     """
     if "psycopg2" in str(type(conn)):
         cursor.execute(tire_search_query, (f"%{query}%", f"%{query}%", f"%{query}%"))
-        tire_results = cursor.fetchall()
     else:
-        tire_results = conn.execute(tire_search_query.replace('%s', '?'), (f"%{query}%", f"%{query}%", f"%{query}%")).fetchall()
-    
-    for row in tire_results:
+        tire_search_query_sqlite = tire_search_query.replace('%s', '?').replace('ILIKE', 'LIKE')
+        cursor.execute(tire_search_query_sqlite, (f"%{query}%", f"%{query}%", f"%{query}%"))
+
+    for row in cursor.fetchall():
         item = dict(row)
         item['type'] = 'tire'
         items.append(item)
 
+    # Search in Wheels
+    wheel_size_search_col = "(w.diameter || 'x' || w.width || ' ' || w.pcd)"
+    if "psycopg2" in str(type(conn)):
+        wheel_size_search_col = "CONCAT(w.diameter, 'x', w.width, ' ', w.pcd)" # For PostgreSQL
+
     wheel_search_query = f"""
         SELECT id, brand, model, diameter, pcd, width, quantity AS current_quantity
-        FROM wheels
+        FROM wheels w
         WHERE is_deleted = FALSE AND (
             LOWER(brand) LIKE %s OR
             LOWER(model) LIKE %s OR
-            LOWER(pcd) LIKE %s
+            LOWER(pcd) LIKE %s OR
+            {wheel_size_search_col} LIKE %s
         )
         ORDER BY brand, model, diameter
-        LIMIT 50
+        LIMIT 20
     """
     if "psycopg2" in str(type(conn)):
-        cursor.execute(wheel_search_query, (f"%{query}%", f"%{query}%", f"%{query}%"))
-        wheel_results = cursor.fetchall()
+        cursor.execute(wheel_search_query, (f"%{query}%", f"%{query}%", f"%{query}%", f"%{query}%"))
     else:
-        wheel_results = conn.execute(wheel_search_query.replace('%s', '?'), (f"%{query}%", f"%{query}%", f"%{query}%")).fetchall()
-    
-    for row in wheel_results:
+        wheel_search_query_sqlite = wheel_search_query.replace('%s', '?').replace('ILIKE', 'LIKE')
+        cursor.execute(wheel_search_query_sqlite, (f"%{query}%", f"%{query}%", f"%{query}%", f"%{query}%"))
+
+    for row in cursor.fetchall():
         item = dict(row)
         item['type'] = 'wheel'
         items.append(item)
 
-    if cursor: # Close cursor if it was created
-        cursor.close()
+    # NEW: Search in Spare Parts
+    spare_part_search_query = f"""
+        SELECT sp.id, sp.name, sp.part_number, sp.brand, sp.quantity AS current_quantity
+        FROM spare_parts sp
+        WHERE is_deleted = FALSE AND (
+            LOWER(sp.name) LIKE %s OR
+            LOWER(sp.part_number) LIKE %s OR
+            LOWER(sp.brand) LIKE %s
+        )
+        ORDER BY sp.name, sp.brand
+        LIMIT 20
+    """
+    if "psycopg2" in str(type(conn)):
+        cursor.execute(spare_part_search_query, (f"%{query}%", f"%{query}%", f"%{query}%"))
+    else:
+        spare_part_search_query_sqlite = spare_part_search_query.replace('%s', '?').replace('ILIKE', 'LIKE')
+        cursor.execute(spare_part_search_query_sqlite, (f"%{query}%", f"%{query}%", f"%{query}%"))
+
+    for row in cursor.fetchall():
+        item = dict(row)
+        item['type'] = 'spare_part'
+        items.append(item)
+
+    cursor.close()
 
     return jsonify({"success": True, "items": items}), 200
-    
+
 @app.route('/api/link_barcode_to_item', methods=['POST'])
 @login_required
 def api_link_barcode_to_item():
@@ -4353,29 +6059,37 @@ def api_link_barcode_to_item():
 
     conn = get_db()
     try:
+        # Check if barcode exists for any item type
         existing_tire_barcode_id = database.get_tire_id_by_barcode(conn, scanned_barcode)
         existing_wheel_barcode_id = database.get_wheel_id_by_barcode(conn, scanned_barcode)
-        
-        if existing_tire_barcode_id or existing_wheel_barcode_id:
+        existing_spare_part_barcode_id = database.get_spare_part_id_by_barcode(conn, scanned_barcode) # NEW
+
+        if existing_tire_barcode_id or existing_wheel_barcode_id or existing_spare_part_barcode_id: # NEW
+            # If it exists and is already linked to *this* item, just return success
             if (item_type == 'tire' and existing_tire_barcode_id == item_id) or \
-               (item_type == 'wheel' and existing_wheel_barcode_id == item_id):
+               (item_type == 'wheel' and existing_wheel_barcode_id == item_id) or \
+               (item_type == 'spare_part' and existing_spare_part_barcode_id == item_id): # NEW
                 return jsonify({"success": True, "message": f"บาร์โค้ด '{scanned_barcode}' ถูกเชื่อมโยงกับสินค้านี้อยู่แล้ว"}), 200
             else:
+                # If it exists and is linked to a *different* item (or different type)
                 return jsonify({"success": False, "message": f"บาร์โค้ด '{scanned_barcode}' มีอยู่ในระบบแล้ว และถูกเชื่อมโยงกับสินค้าอื่น"}), 409
 
         if item_type == 'tire':
             database.add_tire_barcode(conn, item_id, scanned_barcode, is_primary=False)
         elif item_type == 'wheel':
             database.add_wheel_barcode(conn, item_id, scanned_barcode, is_primary=False)
+        elif item_type == 'spare_part': # NEW
+            database.add_spare_part_barcode(conn, item_id, scanned_barcode, is_primary=False)
         else:
             conn.rollback()
-            return jsonify({"success": False, "message": "ประเภทสินค้าไม่ถูกต้อง (ต้องเป็น tire หรือ wheel)"}), 400
+            return jsonify({"success": False, "message": "ประเภทสินค้าไม่ถูกต้อง (ต้องเป็น tire, wheel, หรือ spare_part)"}), 400
 
         conn.commit()
         return jsonify({"success": True, "message": f"เชื่อมโยงบาร์โค้ด '{scanned_barcode}' กับสินค้าสำเร็จ!"}), 200
 
     except Exception as e:
         conn.rollback()
+        current_app.logger.error(f"Error linking barcode: {e}", exc_info=True) # Log the full error
         return jsonify({"success": False, "message": f"เกิดข้อผิดพลาดในการเชื่อมโยงบาร์โค้ด: {str(e)}"}), 500
         
 
@@ -4541,7 +6255,7 @@ def bulk_stock_movement():
         return jsonify({"success": False, "message": "คุณไม่มีสิทธิ์ในการทำรายการสต็อก"}), 403
 
     conn = get_db()
-    
+
     try:
         # ดึงข้อมูลจากฟอร์ม
         item_type = request.form.get('item_type')
@@ -4549,7 +6263,7 @@ def bulk_stock_movement():
         items_json = request.form.get('items_json')
         notes = request.form.get('notes', '').strip()
         user_id = current_user.id
-        
+
         # ดึงข้อมูลช่องทาง
         channel_id = request.form.get('channel_id')
         online_platform_id = request.form.get('online_platform_id')
@@ -4557,7 +6271,7 @@ def bulk_stock_movement():
         return_customer_type = request.form.get('return_customer_type')
         return_wholesale_customer_id = request.form.get('return_wholesale_customer_id')
         return_online_platform_id = request.form.get('return_online_platform_id')
-        
+
         # แปลงค่า ID ให้เป็น integer หรือ None
         final_channel_id = int(channel_id) if channel_id else None
         final_online_platform_id = None
@@ -4586,13 +6300,14 @@ def bulk_stock_movement():
 
         tires_were_moved = False
         wheels_were_moved = False
+        spare_parts_were_moved = False # NEW
         items = json.loads(items_json)
 
         # --- เริ่ม Transaction ---
         for item_data in items:
             item_id = item_data['id']
             quantity_change = item_data['quantity']
-            
+
             item_name_for_notif = ""
             unit_for_notif = ""
 
@@ -4603,14 +6318,21 @@ def bulk_stock_movement():
                 add_movement_func = database.add_tire_movement
                 item_name_for_notif = f"ยาง: {current_item['brand'].title()} {current_item['model'].title()} ({current_item['size']})"
                 unit_for_notif = "เส้น"
-            else: # wheel
+            elif item_type == 'wheel':
                 wheels_were_moved = True
                 current_item = database.get_wheel(conn, item_id)
                 update_quantity_func = database.update_wheel_quantity
                 add_movement_func = database.add_wheel_movement
                 item_name_for_notif = f"แม็ก: {current_item['brand'].title()} {current_item['model'].title()}"
                 unit_for_notif = "วง"
-            
+            elif item_type == 'spare_part': # NEW
+                spare_parts_were_moved = True
+                current_item = database.get_spare_part(conn, item_id)
+                update_quantity_func = database.update_spare_part_quantity
+                add_movement_func = database.add_spare_part_movement
+                item_name_for_notif = f"อะไหล่: {current_item['name']} ({current_item.get('brand', 'ไม่ระบุยี่ห้อ')})"
+                unit_for_notif = "ชิ้น"
+
             if not current_item:
                 raise ValueError(f"ไม่พบสินค้า ID {item_id} ในระบบ")
 
@@ -4624,17 +6346,17 @@ def bulk_stock_movement():
                     item_name = f"{current_item['brand']} {current_item['model']}"
                     raise ValueError(f"สต็อกไม่พอสำหรับ {item_name} (มี: {current_quantity}, ต้องการ: {quantity_change})")
                 new_quantity -= quantity_change
-            
+
             # อัปเดตยอดสต็อกหลัก
             update_quantity_func(conn, item_id, new_quantity)
-            
+
             # บันทึกประวัติการเคลื่อนไหว
             add_movement_func(
                 conn, item_id, move_type, quantity_change, new_quantity, notes,
                 bill_image_url_to_db, user_id, final_channel_id,
                 final_online_platform_id, final_wholesale_customer_id, return_customer_type
             )
-            
+
             # ---- START: ส่วนที่เพิ่มเข้ามา ----
             message = (
                 f"สต็อก [{move_type}] {item_name_for_notif} "
@@ -4654,7 +6376,11 @@ def bulk_stock_movement():
             cache.delete_memoized(get_cached_wheels)
             cache.delete_memoized(get_all_wheels_list_cached)
             print("--- CACHE CLEARED for Wheels ---")
-            
+
+        if spare_parts_were_moved: # NEW
+            cache.delete_memoized(get_cached_spare_parts)
+            print("--- CACHE CLEARED for Spare Parts ---")
+
         conn.commit()
         return jsonify({"success": True, "message": f"บันทึกการทำรายการ {len(items)} รายการสำเร็จ!"})
 
@@ -4971,23 +6697,23 @@ def reconciliation():
         conn.rollback()
         flash(f"เกิดข้อผิดพลาดในการสร้างหรือดึงข้อมูลกระทบยอด: {e}", "danger")
         return redirect(url_for('index'))
-    
+
     # --- UPGRADED QUERIES ---
     is_psycopg2_conn = "psycopg2" in str(type(conn))
     sql_date_filter = report_date.strftime('%Y-%m-%d')
     placeholder = "%s" if is_psycopg2_conn else "?"
-    
+
     wheel_size_concat = "(w.diameter || 'x' || w.width || ' ' || w.pcd)"
     if is_psycopg2_conn:
         wheel_size_concat = "CONCAT(w.diameter, 'x', w.width, ' ', w.pcd)"
 
     # --- UPGRADED TIRE QUERY ---
     tire_movements_query = f"""
-        SELECT 'tire' as item_type, tm.id, tm.tire_id, tm.type, tm.quantity_change, 
+        SELECT 'tire' as item_type, tm.id, tm.tire_id, tm.type, tm.quantity_change,
                t.brand, t.model, t.size, u.username,
                sc.name as channel_name, op.name as online_platform_name, wc.name as wholesale_customer_name,
                tm.channel_id, tm.online_platform_id, tm.wholesale_customer_id, tm.return_customer_type
-        FROM tire_movements tm 
+        FROM tire_movements tm
         JOIN tires t ON tm.tire_id = t.id
         LEFT JOIN users u ON tm.user_id = u.id
         LEFT JOIN sales_channels sc ON tm.channel_id = sc.id
@@ -4996,14 +6722,14 @@ def reconciliation():
         WHERE {database.get_sql_date_format_for_query('tm.timestamp')} = {placeholder}
         ORDER BY tm.timestamp DESC
     """
-    
+
     # --- UPGRADED WHEEL QUERY ---
     wheel_movements_query = f"""
-        SELECT 'wheel' as item_type, wm.id, wm.wheel_id, wm.type, wm.quantity_change, 
+        SELECT 'wheel' as item_type, wm.id, wm.wheel_id, wm.type, wm.quantity_change,
                w.brand, w.model, {wheel_size_concat} as size, u.username,
                sc.name as channel_name, op.name as online_platform_name, wc.name as wholesale_customer_name,
                wm.channel_id, wm.online_platform_id, wm.wholesale_customer_id, wm.return_customer_type
-        FROM wheel_movements wm 
+        FROM wheel_movements wm
         JOIN wheels w ON wm.wheel_id = w.id
         LEFT JOIN users u ON wm.user_id = u.id
         LEFT JOIN sales_channels sc ON wm.channel_id = sc.id
@@ -5012,26 +6738,44 @@ def reconciliation():
         WHERE {database.get_sql_date_format_for_query('wm.timestamp')} = {placeholder}
         ORDER BY wm.timestamp DESC
     """
-    
+
+    # NEW: Spare Part Movements Query
+    spare_part_movements_query = f"""
+        SELECT 'spare_part' as item_type, spm.id, spm.spare_part_id, spm.type, spm.quantity_change,
+               sp.name AS brand, sp.part_number AS model, sp.brand AS size, u.username,
+               sc.name as channel_name, op.name as online_platform_name, wc.name as wholesale_customer_name,
+               spm.channel_id, spm.online_platform_id, spm.wholesale_customer_id, spm.return_customer_type
+        FROM spare_part_movements spm
+        JOIN spare_parts sp ON spm.spare_part_id = sp.id
+        LEFT JOIN users u ON spm.user_id = u.id
+        LEFT JOIN sales_channels sc ON spm.channel_id = sc.id
+        LEFT JOIN online_platforms op ON spm.online_platform_id = op.id
+        LEFT JOIN wholesale_customers wc ON spm.wholesale_customer_id = wc.id
+        WHERE {database.get_sql_date_format_for_query('spm.timestamp')} = {placeholder}
+        ORDER BY spm.timestamp DESC
+    """
+
     try:
         cursor = conn.cursor()
         cursor.execute(tire_movements_query, (sql_date_filter,))
         tire_movements = cursor.fetchall()
         cursor.execute(wheel_movements_query, (sql_date_filter,))
         wheel_movements = cursor.fetchall()
+        cursor.execute(spare_part_movements_query, (sql_date_filter,)) # NEW
+        spare_part_movements = cursor.fetchall() # NEW
         cursor.close()
     except Exception as e:
         flash(f"เกิดข้อผิดพลาดในการดึงข้อมูลเคลื่อนไหว: {e}", "danger")
-        tire_movements, wheel_movements = [], []
+        tire_movements, wheel_movements, spare_part_movements = [], [], [] # NEW
 
-    system_movements = [dict(m) for m in tire_movements] + [dict(m) for m in wheel_movements]
+    system_movements = [dict(m) for m in tire_movements] + [dict(m) for m in wheel_movements] + [dict(m) for m in spare_part_movements] # NEW
 
     # ดึงข้อมูล Master ทั้งหมดสำหรับใช้ใน Dropdown ของ Pop-up
     all_sales_channels = get_all_sales_channels_cached()
     all_online_platforms = get_all_online_platforms_cached()
     all_wholesale_customers = get_all_wholesale_customers_cached()
 
-    return render_template('reconciliation.html', 
+    return render_template('reconciliation.html',
                             report_date=report_date,
                             reconciliation_record=reconciliation_record,
                             system_movements=system_movements,
@@ -5046,7 +6790,7 @@ def reconciliation():
 def api_get_movement_details():
     if not current_user.can_edit():
         return jsonify({"success": False, "message": "Unauthorized"}), 403
-    
+
     item_type = request.args.get('item_type')
     movement_id = request.args.get('movement_id', type=int)
 
@@ -5059,7 +6803,9 @@ def api_get_movement_details():
         movement_details = database.get_tire_movement(conn, movement_id)
     elif item_type == 'wheel':
         movement_details = database.get_wheel_movement(conn, movement_id)
-    
+    elif item_type == 'spare_part': # NEW
+        movement_details = database.get_spare_part_movement(conn, movement_id)
+
     if movement_details:
         return jsonify({"success": True, "details": dict(movement_details)})
     else:
@@ -5091,6 +6837,18 @@ def api_correct_movement():
             )
         elif item_type == 'wheel':
              database.update_wheel_movement(
+                conn, movement_id,
+                new_notes=data.get('notes'),
+                new_image_filename=data.get('image_filename'),
+                new_type=data.get('type'),
+                new_quantity_change=int(data.get('quantity_change')),
+                new_channel_id=int(data.get('channel_id')) if data.get('channel_id') else None,
+                new_online_platform_id=int(data.get('online_platform_id')) if data.get('online_platform_id') else None,
+                new_wholesale_customer_id=int(data.get('wholesale_customer_id')) if data.get('wholesale_customer_id') else None,
+                new_return_customer_type=data.get('return_customer_type')
+            )
+        elif item_type == 'spare_part': # NEW
+             database.update_spare_part_movement(
                 conn, movement_id,
                 new_notes=data.get('notes'),
                 new_image_filename=data.get('image_filename'),
@@ -5159,69 +6917,160 @@ def complete_reconciliation_action(rec_id):
 @login_required
 def api_search_all_items():
     query = request.args.get('q', '').strip()
-    # อนุญาตให้ค้นหาได้แม้จะพิมพ์แค่ตัวเดียว
+    # current_app.logger.debug(f"API Search All Items - Received query: '{query}'") # DEBUG
     if not query:
+        # current_app.logger.debug("API Search All Items - Empty query, returning empty results.") # DEBUG
         return jsonify({'results': []})
 
     conn = get_db()
-    # ทำให้ search term เป็นตัวพิมพ์เล็กและใส่ wildcards
     search_term = f"%{query.lower()}%"
-    
+    # current_app.logger.debug(f"API Search All Items - Search term: '{search_term}'") # DEBUG
+
     is_postgres = "psycopg2" in str(type(conn))
     placeholder = "%s" if is_postgres else "?"
-    
-    # --- START: ส่วนที่แก้ไขให้ถูกต้อง 100% ---
-    
-    # สร้างส่วน Query สำหรับขนาดล้อที่ถูกต้องสำหรับทั้งสอง DB
-    # ใช้ COALESCE เพื่อจัดการกับค่า NULL ใน SQLite
-    wheel_size_search_col = f"LOWER(COALESCE(w.diameter, '') || 'x' || COALESCE(w.width, '') || ' ' || COALESCE(w.pcd, ''))"
-    if is_postgres:
-        wheel_size_search_col = f"LOWER(CONCAT(w.diameter, 'x', w.width, ' ', w.pcd))"
-
-    # ใช้ LIKE เสมอสำหรับ SQLite และ ILIKE สำหรับ Postgres
     like_op = "ILIKE" if is_postgres else "LIKE"
 
+    # For PostgreSQL, CONCAT is standard. For SQLite, use ||
+    # COALESCE handles NULL values, replacing them with empty strings for concatenation
+    wheel_size_search_col_sql = f"LOWER(COALESCE(w.diameter, '') || 'x' || COALESCE(w.width, '') || ' ' || COALESCE(w.pcd, '') || ' ET' || COALESCE(w.et, '') || ' ' || COALESCE(w.color, ''))"
+    if is_postgres:
+        wheel_size_search_col_sql = f"LOWER(CONCAT(w.diameter, 'x', w.width, ' ', COALESCE(w.pcd, ''), ' ET', COALESCE(w.et, ''), ' ', COALESCE(w.color, '')))"
+
+
     tire_query = f"""
-        SELECT t.id, t.brand, t.model, t.size, 'tire' as type 
-        FROM tires t 
-        WHERE t.is_deleted = { 'FALSE' if is_postgres else '0' } 
-        AND (LOWER(t.brand) {like_op} {placeholder} OR LOWER(t.model) {like_op} {placeholder} OR LOWER(t.size) {like_op} {placeholder}) 
-        LIMIT 50
+        SELECT t.id, t.brand, t.model, t.size, t.quantity AS current_quantity, 'tire' as item_type_str
+        FROM tires t
+        WHERE t.is_deleted = { 'FALSE' if is_postgres else '0' }
+        AND (LOWER(t.brand) {like_op} {placeholder} OR LOWER(t.model) {like_op} {placeholder} OR LOWER(t.size) {like_op} {placeholder})
+        LIMIT 10
     """
-    
+
+    # For wheels, explicitly select all relevant columns for formatting in Python
     wheel_query = f"""
-        SELECT w.id, w.brand, w.model, {wheel_size_search_col} as size, 'wheel' as type 
-        FROM wheels w 
-        WHERE w.is_deleted = { 'FALSE' if is_postgres else '0' } 
-        AND (LOWER(w.brand) {like_op} {placeholder} OR LOWER(w.model) {like_op} {placeholder} OR {wheel_size_search_col} {like_op} {placeholder})
-        LIMIT 30
+        SELECT w.id, w.brand, w.model, w.diameter, w.pcd, w.width, w.et, w.color, w.quantity AS current_quantity, 'wheel' as item_type_str
+        FROM wheels w
+        WHERE w.is_deleted = { 'FALSE' if is_postgres else '0' }
+        AND (LOWER(w.brand) {like_op} {placeholder} OR LOWER(w.model) {like_op} {placeholder} OR LOWER(w.pcd) {like_op} {placeholder} OR {wheel_size_search_col_sql} {like_op} {placeholder})
+        LIMIT 10
     """
-    
-    results = []
+
+    # For spare parts, select all relevant original column names
+    spare_part_query = f"""
+        SELECT sp.id, sp.name, sp.part_number, sp.brand, sp.quantity AS current_quantity, 'spare_part' as item_type_str
+        FROM spare_parts sp
+        WHERE sp.is_deleted = { 'FALSE' if is_postgres else '0' }
+        AND (LOWER(sp.name) {like_op} {placeholder} OR LOWER(sp.part_number) {like_op} {placeholder} OR LOWER(sp.brand) {like_op} {placeholder})
+        LIMIT 10
+    """
+
+    results_raw = []
     try:
         cursor = conn.cursor()
-        
-        # ยาง: มี 3 placeholders
+
         cursor.execute(tire_query, (search_term, search_term, search_term))
-        tire_results = cursor.fetchall()
-        
-        # แม็ก: มี 3 placeholders
-        cursor.execute(wheel_query, (search_term, search_term, search_term))
-        wheel_results = cursor.fetchall()
-        
+        results_raw.extend([dict(row) for row in cursor.fetchall()])
+        # current_app.logger.debug(f"API Search All Items - Tire results count: {len(results_raw) - len(results_raw_before_tire)}") # DEBUG
+
+        results_raw_before_wheel = len(results_raw)
+        cursor.execute(wheel_query, (search_term, search_term, search_term, search_term))
+        results_raw.extend([dict(row) for row in cursor.fetchall()])
+        # current_app.logger.debug(f"API Search All Items - Wheel results count: {len(results_raw) - results_raw_before_wheel}") # DEBUG
+
+        results_raw_before_spare_part = len(results_raw)
+        cursor.execute(spare_part_query, (search_term, search_term, search_term))
+        results_raw.extend([dict(row) for row in cursor.fetchall()])
+        # current_app.logger.debug(f"API Search All Items - Spare Part results count: {len(results_raw) - results_raw_before_spare_part}") # DEBUG
+
         cursor.close()
-        
-        results = [dict(row) for row in tire_results] + [dict(row) for row in wheel_results]
-    
+
+        formatted_results = []
+        for item in results_raw:
+            item_id_prefix = item['item_type_str']
+            display_text = ""
+
+            if item_id_prefix == 'tire':
+                display_text = f"[{item_id_prefix.upper()}] {item.get('brand', '').title()} {item.get('model', '').title()} - {item.get('size', '')}"
+            elif item_id_prefix == 'wheel':
+                # Safely get all relevant wheel properties
+                wheel_brand = item.get('brand', '').title()
+                wheel_model = item.get('model', '').title()
+                wheel_diameter = item.get('diameter')
+                wheel_width = item.get('width')
+                wheel_pcd = item.get('pcd')
+                wheel_et = item.get('et')
+                wheel_color = item.get('color')
+
+                wheel_spec_parts = []
+                if wheel_diameter is not None and wheel_width is not None:
+                    wheel_spec_parts.append(f"{float(wheel_diameter):.0f}x{float(wheel_width):.0f}") # Format as whole numbers if possible
+                if wheel_pcd:
+                    wheel_spec_parts.append(wheel_pcd)
+                if wheel_et is not None:
+                    wheel_spec_parts.append(f"ET{int(wheel_et)}") # Format as integer if possible
+                if wheel_color:
+                    wheel_spec_parts.append(f"สี:{wheel_color}")
+
+                wheel_spec = " ".join(wheel_spec_parts).strip()
+                if wheel_spec:
+                    display_text = f"[{item_id_prefix.upper()}] {wheel_brand} {wheel_model} - {wheel_spec}"
+                else:
+                    display_text = f"[{item_id_prefix.upper()}] {wheel_brand} {wheel_model}"
+
+            elif item_id_prefix == 'spare_part':
+                part_name = item.get('name', '')
+                part_number = item.get('part_number', '') # Use .get()
+                part_brand = item.get('brand', '') # Use .get()
+
+                part_display_parts = []
+                if part_name:
+                    part_display_parts.append(part_name)
+                if part_number:
+                    part_display_parts.append(f"(Part No: {part_number})")
+                if part_brand:
+                    part_display_parts.append(f"ยี่ห้อ: {part_brand.title()}")
+
+                display_text = f"[{item_id_prefix.upper()}] {' '.join(part_display_parts).strip()}"
+
+            formatted_results.append({
+                "id": f"{item_id_prefix}-{item['id']}",
+                "text": display_text,
+                "data": item # Pass the full item data for client-side reference if needed
+            })
+
+        # current_app.logger.debug(f"API Search All Items - Total formatted results: {len(formatted_results)}") # DEBUG
+        return jsonify({"results": formatted_results}) # Select2 v4.1+ expects { results: [...] }
+
     except Exception as e:
-        print(f"Error in api_search_all_items: {e}")
+        current_app.logger.error(f"Error in api_search_all_items: {e}", exc_info=True) # Log full traceback
         return jsonify({'results': []})
-    
+
     # --- END: ส่วนที่แก้ไข ---
-    
-    formatted_results = [{"id": f"{item['type']}-{item['id']}", "text": f"[{item['type'].upper()}] {item['brand'].title()} {item['model'].title()} - {item['size']}"} for item in results]
-    
-    return jsonify(formatted_results) # Select2 v4.1+ สามารถรับ array ได้โดยตรง
+
+    # Format results for Select2 (or similar dropdowns)
+    formatted_results = []
+    for item in results:
+        if item['type'] == 'tire':
+            formatted_results.append({
+                "id": f"tire-{item['id']}",
+                "text": f"[{item['type'].upper()}] {item['brand'].title()} {item['model'].title()} - {item['size']}"
+            })
+        elif item['type'] == 'wheel':
+            formatted_results.append({
+                "id": f"wheel-{item['id']}",
+                "text": f"[{item['type'].upper()}] {item['brand'].title()} {item['model'].title()} - {item['size']}"
+            })
+        elif item['type'] == 'spare_part': # NEW
+            display_name = item['name']
+            if item['part_number']:
+                display_name += f" (Part No: {item['part_number']})"
+            if item['brand']:
+                display_name += f" ยี่ห้อ: {item['brand'].title()}"
+            formatted_results.append({
+                "id": f"spare_part-{item['id']}",
+                "text": f"[{item['type'].upper()}] {display_name}"
+            })
+
+    return jsonify({"results": formatted_results}) # Select2 v4.1+ สามารถรับ array ได้โดยตรง
 
 @app.route('/api/process_data', methods=['POST'])
 def process_data():
@@ -5238,6 +7087,240 @@ def process_data():
     
     return jsonify(processed_data)
 
+# --- Spare Part Categories Management Routes (NEW SECTION) ---
+@app.route('/manage_spare_part_categories')
+@login_required
+def manage_spare_part_categories():
+    if not current_user.is_admin():
+        flash('คุณไม่มีสิทธิ์ในการจัดการหมวดหมู่อะไหล่', 'danger')
+        return redirect(url_for('index'))
+
+    conn = get_db()
+    categories = database.get_all_spare_part_categories_hierarchical(conn)
+    # Re-fetch non-hierarchical list for add/edit form dropdown, as hierarchical is for display
+    all_categories_flat = database.get_all_spare_part_categories(conn)
+
+    return render_template('manage_spare_part_categories.html',
+                           categories=categories,
+                           all_categories_flat=all_categories_flat,
+                           current_user=current_user)
+
+@app.route('/add_spare_part_category', methods=['POST'])
+@login_required
+def add_spare_part_category():
+    if not current_user.is_admin():
+        flash('คุณไม่มีสิทธิ์ในการเพิ่มหมวดหมู่อะไหล่', 'danger')
+        return redirect(url_for('manage_spare_part_categories'))
+
+    category_name = request.form.get('name', '').strip()
+    parent_id_str = request.form.get('parent_id')
+
+    if not category_name:
+        flash('กรุณากรอกชื่อหมวดหมู่', 'danger')
+        return redirect(url_for('manage_spare_part_categories'))
+
+    parent_id = int(parent_id_str) if parent_id_str and parent_id_str != 'none' else None
+
+    conn = get_db()
+    try:
+        database.add_spare_part_category(conn, category_name, parent_id)
+        conn.commit()
+        flash(f'เพิ่มหมวดหมู่ "{category_name}" สำเร็จ!', 'success')
+        cache.delete_memoized(get_cached_spare_part_categories_hierarchical)
+        # No need to clear spare_parts cache, as new category doesn't change existing parts
+    except ValueError as e:
+        conn.rollback()
+        flash(f'เกิดข้อผิดพลาด: {e}', 'danger')
+    except Exception as e:
+        conn.rollback()
+        flash(f'เกิดข้อผิดพลาดในการเพิ่มหมวดหมู่: {e}', 'danger')
+
+    return redirect(url_for('manage_spare_part_categories'))
+
+
+@app.route('/edit_spare_part_category/<int:category_id>', methods=['GET', 'POST'])
+@login_required
+def edit_spare_part_category(category_id):
+    if not current_user.is_admin():
+        flash('คุณไม่มีสิทธิ์ในการแก้ไขหมวดหมู่อะไหล่', 'danger')
+        return redirect(url_for('manage_spare_part_categories'))
+
+    conn = get_db()
+    category = database.get_spare_part_category(conn, category_id)
+    all_categories_flat = database.get_all_spare_part_categories(conn)
+
+    if category is None:
+        flash('ไม่พบหมวดหมู่ที่ระบุ', 'danger')
+        return redirect(url_for('manage_spare_part_categories'))
+
+    if request.method == 'POST':
+        new_name = request.form.get('name', '').strip()
+        new_parent_id_str = request.form.get('parent_id')
+
+        if not new_name:
+            flash('กรุณากรอกชื่อหมวดหมู่', 'danger')
+            return render_template('edit_spare_part_category.html', category=category, all_categories_flat=all_categories_flat, current_user=current_user)
+
+        new_parent_id = int(new_parent_id_str) if new_parent_id_str and new_parent_id_str != 'none' else None
+
+        try:
+            database.update_spare_part_category(conn, category_id, new_name, new_parent_id)
+            conn.commit()
+            flash(f'แก้ไขหมวดหมู่ "{new_name}" สำเร็จ!', 'success')
+            cache.delete_memoized(get_cached_spare_part_categories_hierarchical)
+            # Clearing spare parts cache might be needed if category_name is used in display directly in index (not category_id)
+            cache.delete_memoized(get_cached_spare_parts)
+        except ValueError as e:
+            conn.rollback()
+            flash(f'เกิดข้อผิดพลาด: {e}', 'danger')
+        except Exception as e:
+            conn.rollback()
+            flash(f'เกิดข้อผิดพลาดในการแก้ไขหมวดหมู่: {e}', 'danger')
+
+        return redirect(url_for('manage_spare_part_categories'))
+
+    return render_template('edit_spare_part_category.html',
+                           category=category,
+                           all_categories_flat=all_categories_flat,
+                           current_user=current_user)
+
+@app.route('/delete_spare_part_category/<int:category_id>', methods=['POST'])
+@login_required
+def delete_spare_part_category(category_id):
+    if not current_user.is_admin():
+        flash('คุณไม่มีสิทธิ์ในการลบหมวดหมู่อะไหล่', 'danger')
+        return redirect(url_for('manage_spare_part_categories'))
+
+    conn = get_db()
+    try:
+        database.delete_spare_part_category(conn, category_id)
+        conn.commit()
+        flash('ลบหมวดหมู่สำเร็จ!', 'success')
+        cache.delete_memoized(get_cached_spare_part_categories_hierarchical)
+        cache.delete_memoized(get_cached_spare_parts) # Clear spare parts cache as category might be removed from them
+    except ValueError as e:
+        conn.rollback()
+        flash(f'ไม่สามารถลบหมวดหมู่ได้: {e}', 'danger')
+    except Exception as e:
+        conn.rollback()
+        flash(f'เกิดข้อผิดพลาดในการลบหมวดหมู่: {e}', 'danger')
+
+    return redirect(url_for('manage_spare_part_categories'))
+
+@app.route('/print_barcodes/<item_type>/<int:item_id>')
+@login_required
+def print_barcodes(item_type, item_id):
+    if not current_user.can_edit():
+        flash('คุณไม่มีสิทธิ์ในการพิมพ์บาร์โค้ด', 'danger')
+        return redirect(request.referrer or url_for('index'))
+
+    conn = get_db()
+    barcodes_data = []
+    item_info = {} # Change to dict to hold more data
+
+    try:
+        item = None
+        barcode_strings = []
+
+        if item_type == 'tire':
+            item = database.get_tire(conn, item_id)
+            if not item: raise ValueError("ไม่พบยางที่ระบุ")
+            barcode_strings = [bc['barcode_string'] for bc in database.get_barcodes_for_tire(conn, item_id)]
+            item_info = {
+                'name': f"{item['brand'].title()} {item['model'].title()} {item['size']}",
+                'price': item.get('price_per_item')
+            }
+        elif item_type == 'wheel':
+            item = database.get_wheel(conn, item_id)
+            if not item: raise ValueError("ไม่พบแม็กที่ระบุ")
+            barcode_strings = [bc['barcode_string'] for bc in database.get_barcodes_for_wheel(conn, item_id)]
+            item_info = {
+                'name': f"{item['brand'].title()} {item['model'].title()} {item['pcd']}",
+                'price': item.get('retail_price')
+            }
+        elif item_type == 'spare_part':
+            item = database.get_spare_part(conn, item_id)
+            if not item: raise ValueError("ไม่พบอะไหล่ที่ระบุ")
+            barcode_strings = [bc['barcode_string'] for bc in database.get_barcodes_for_spare_part(conn, item_id)]
+            item_info = {
+                'name': f"{item['name']} ({item.get('part_number', '')})",
+                'price': item.get('retail_price')
+            }
+        else:
+            raise ValueError("ประเภทสินค้าไม่ถูกต้อง")
+
+        if not barcode_strings:
+            flash('สินค้านี้ยังไม่มีรหัสบาร์โค้ดให้พิมพ์', 'warning')
+            return redirect(request.referrer or url_for('index'))
+
+        writer_options = {'module_height': 10.0, 'font_size': 10, 'text_distance': 3.0, 'quiet_zone': 2.0}
+        
+        for bc_string in barcode_strings:
+            code128 = barcode.get('code128', bc_string, writer=SVGWriter())
+            svg_buffer_barcode = BytesIO()
+            code128.write(svg_buffer_barcode, options=writer_options)
+            svg_string_barcode = svg_buffer_barcode.getvalue().decode('utf-8')
+
+            qr_img = qrcode.make(bc_string, image_factory=qrcode.image.svg.SvgPathImage, box_size=20)
+            svg_buffer_qr = BytesIO()
+            qr_img.save(svg_buffer_qr)
+            svg_string_qrcode = svg_buffer_qr.getvalue().decode('utf-8')
+
+            barcodes_data.append({
+                'svg_barcode': svg_string_barcode, 
+                'svg_qrcode': svg_string_qrcode, 
+                'text': bc_string
+            })
+
+    except ValueError as e:
+        flash(str(e), 'danger')
+        return redirect(request.referrer or url_for('index'))
+
+    return render_template('print_barcodes.html',
+                           barcodes=barcodes_data,
+                           item_info=item_info)
+
+def add_tire_cost_history(conn, tire_id, old_cost, new_cost, user_id, notes=""):
+    """บันทึกการเปลี่ยนแปลงราคาทุนของยาง"""
+    changed_at = get_bkk_time().isoformat()
+    cursor = conn.cursor()
+    is_postgres = "psycopg2" in str(type(conn))
+    
+    query = "INSERT INTO tire_cost_history (tire_id, changed_at, old_cost_sc, new_cost_sc, user_id, notes) VALUES (?, ?, ?, ?, ?, ?)"
+    params = (tire_id, changed_at, old_cost, new_cost, user_id, notes)
+
+    if is_postgres:
+        query = query.replace('?', '%s')
+
+    cursor.execute(query, params)
+    # ไม่ต้อง commit ที่นี่ เพราะจะถูกจัดการโดยฟังก์ชันที่เรียกใช้
+
+def get_tire_cost_history(conn, tire_id):
+    """ดึงประวัติการเปลี่ยนแปลงราคาทุนของยางที่ระบุ"""
+    cursor = conn.cursor()
+    is_postgres = "psycopg2" in str(type(conn))
+    
+    query = """
+        SELECT h.*, u.username
+        FROM tire_cost_history h
+        LEFT JOIN users u ON h.user_id = u.id
+        WHERE h.tire_id = ?
+        ORDER BY h.changed_at DESC
+    """
+    params = (tire_id,)
+    
+    if is_postgres:
+        query = query.replace('?', '%s')
+        
+    cursor.execute(query, params)
+    
+    history = []
+    for row in cursor.fetchall():
+        history_item = dict(row)
+        history_item['changed_at'] = convert_to_bkk_time(history_item['changed_at'])
+        history.append(history_item)
+        
+    return history
 
 # --- Main entry point ---
 if __name__ == '__main__':

@@ -1,99 +1,148 @@
-{% extends 'base.html' %}
+{% extends "base.html" %}
 
 {% block page_title %}แก้ไขข้อมูลยาง{% endblock %}
 
 {% block content %}
-<div class="card shadow-sm">
-    <div class="card-header">
-        <h4 class="mb-0">แก้ไขข้อมูลยาง: {{ tire.brand }} {{ tire.model }} ({{ tire.size }})</h4>
+<div class="container-fluid mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h4 class="mb-0">
+            <i class="fas fa-tire me-2"></i>แก้ไขข้อมูลยาง: {{ tire.brand | title }} {{ tire.model | title }} ({{ tire.size }})
+        </h4>
+        <a href="{{ url_for('index', tab='tires') }}" class="btn btn-sm btn-outline-secondary">
+            <i class="fas fa-arrow-left me-1"></i> กลับไปหน้าสต็อก
+        </a>
     </div>
-    <div class="card-body">
-        <form action="{{ url_for('edit_tire', tire_id=tire.id) }}" method="post">
-            <h5 class="mb-3">ข้อมูลหลัก</h5>
-            <div class="row g-3">
-                <div class="col-md-4">
-                    <label for="brand" class="form-label">ยี่ห้อ*</label>
-                    <input type="text" id="brand" name="brand" class="form-control" value="{{ tire.brand }}" required>
-                </div>
-                <div class="col-md-4">
-                    <label for="model" class="form-label">รุ่นยาง*</label>
-                    <input type="text" id="model" name="model" class="form-control" value="{{ tire.model }}" required>
-                </div>
-                <div class="col-md-4">
-                    <label for="size" class="form-label">เบอร์ยาง*</label>
-                    <input type="text" id="size" name="size" class="form-control" value="{{ tire.size }}" required>
-                </div>
-                <div class="col-md-4">
-                    <label for="price_per_item" class="form-label">ราคาต่อเส้น (บาท)*</label>
-                    <input type="number" id="price_per_item" name="price_per_item" class="form-control" value="{{ '%.2f'|format(tire.price_per_item) }}" step="0.01" required>
-                </div>
-                <div class="col-md-4">
-                    <label for="year_of_manufacture" class="form-label">ปีผลิต</label>
-                    <input type="text" id="year_of_manufacture" name="year_of_manufacture" class="form-control" value="{{ tire.year_of_manufacture if tire.year_of_manufacture else '' }}">
-                </div>
-                <div class="col-md-4">
-                    <label for="promotion_id" class="form-label">โปรโมชัน</label>
-                    <select id="promotion_id" name="promotion_id" class="form-select">
-                        <option value="none" {% if tire.promotion_id is none %}selected{% endif %}>ไม่มีโปรโมชัน</option>
-                        {% for promo in all_promotions %}
-                            <option value="{{ promo.id }}" {% if tire.promotion_id == promo.id %}selected{% endif %}>
-                                {{ promo.name }}
-                            </option>
-                        {% endfor %}
-                    </select>
-                </div>
-            </div>
 
-            <hr class="my-4">
-            <h5 class="mb-3">ต้นทุนและราคาขายส่ง (ไม่บังคับ)</h5>
-            <div class="row g-3">
-                <div class="col-md-4">
-                    <label for="cost_sc" class="form-label">ทุน</label>
-                    <input type="number" id="cost_sc" name="cost_sc" class="form-control" value="{{ '%.2f'|format(tire.cost_sc) if tire.cost_sc is not none else '' }}" step="0.01">
-                </div>
-                <div class="col-md-4">
-                    <label for="cost_dunlop" class="form-label">ทุนล็อต</label>
-                    <input type="number" id="cost_dunlop" name="cost_dunlop" class="form-control" value="{{ '%.2f'|format(tire.cost_dunlop) if tire.cost_dunlop is not none else '' }}" step="0.01">
-                </div>
-                <div class="col-md-4">
-                    <label for="cost_online" class="form-label">ทุน Online</label>
-                    <input type="number" id="cost_online" name="cost_online" class="form-control" value="{{ '%.2f'|format(tire.cost_online) if tire.cost_online is not none else '' }}" step="0.01">
-                </div>
-                <div class="col-md-6">
-                    <label for="wholesale_price1" class="form-label">ราคาส่ง 1</label>
-                    <input type="number" id="wholesale_price1" name="wholesale_price1" class="form-control" value="{{ '%.2f'|format(tire.wholesale_price1) if tire.wholesale_price1 is not none else '' }}" step="0.01">
-                </div>
-                <div class="col-md-6">
-                    <label for="wholesale_price2" class="form-label">ราคาส่งหน้าร้าน</label>
-                    <input type="number" id="wholesale_price2" name="wholesale_price2" class="form-control" value="{{ '%.2f'|format(tire.wholesale_price2) if tire.wholesale_price2 is not none else '' }}" step="0.01">
-                </div>
-            </div>
-            
-            <div class="mt-4">
-                <button type="submit" class="btn btn-primary"><i class="fas fa-save me-2"></i>บันทึกการแก้ไข</button>
-                <a href="{{ url_for('index', tab='tires') }}" class="btn btn-secondary"><i class="fas fa-times me-2"></i>ยกเลิก</a>
-            </div>
-        </form>
-    </div>
-</div>
+    <div class="row">
+        <div class="col-lg-8">
+            <form action="{{ url_for('edit_tire', tire_id=tire.id) }}" method="post">
+                <div class="card shadow-sm">
+                    <div class="card-body">
+                        <h5 class="mb-3 border-bottom pb-2">ข้อมูลหลัก</h5>
+                        <div class="row g-3">
+                            <div class="col-md-4">
+                                <label for="brand" class="form-label">ยี่ห้อ*</label>
+                                <input type="text" id="brand" name="brand" class="form-control" value="{{ tire.brand }}" required>
+                            </div>
+                            <div class="col-md-4">
+                                <label for="model" class="form-label">รุ่นยาง*</label>
+                                <input type="text" id="model" name="model" class="form-control" value="{{ tire.model }}" required>
+                            </div>
+                            <div class="col-md-4">
+                                <label for="size" class="form-label">เบอร์ยาง*</label>
+                                <input type="text" id="size" name="size" class="form-control" value="{{ tire.size }}" required>
+                            </div>
+                            <div class="col-md-4">
+                                <label for="price_per_item" class="form-label">ราคาต่อเส้น (บาท)*</label>
+                                <input type="number" id="price_per_item" name="price_per_item" class="form-control" value="{{ '%.2f'|format(tire.price_per_item) if tire.price_per_item is not none else '' }}" step="0.01" required>
+                            </div>
+                            <div class="col-md-4">
+                                <label for="year_of_manufacture" class="form-label">ปีผลิต</label>
+                                <input type="text" id="year_of_manufacture" name="year_of_manufacture" class="form-control" value="{{ tire.year_of_manufacture if tire.year_of_manufacture else '' }}">
+                            </div>
+                            <div class="col-md-4">
+                                <label for="promotion_id" class="form-label">โปรโมชัน</label>
+                                <select id="promotion_id" name="promotion_id" class="form-select">
+                                    <option value="none" {% if tire.promotion_id is none %}selected{% endif %}>ไม่มีโปรโมชัน</option>
+                                    {% for promo in all_promotions %}
+                                        <option value="{{ promo.id }}" {% if tire.promotion_id == promo.id %}selected{% endif %}>
+                                            {{ promo.name }}
+                                        </option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                        </div>
 
-<div class="card shadow-sm mt-4">
-    <div class="card-header">
-        <h5 class="mb-0">จัดการ Barcode ID</h5>
-    </div>
-    <div class="card-body">
-        <div id="barcodeStatus"></div>
-        <div class="mb-3">
-            <label for="new_tire_barcode" class="form-label">เพิ่ม Barcode ID ใหม่:</label>
-            <div class="input-group">
-                <input type="text" id="new_tire_barcode" class="form-control" placeholder="ยิงหรือพิมพ์ Barcode ID ใหม่">
-                <button id="add_tire_barcode_btn" class="btn btn-outline-success" type="button">เพิ่ม Barcode</button>
-            </div>
+                        <hr class="my-4">
+                        <h5 class="mb-3 border-bottom pb-2">ต้นทุนและราคาขายส่ง (ไม่บังคับ)</h5>
+                        <div class="row g-3">
+                            <div class="col-md-4">
+                                <label for="cost_sc" class="form-label">ทุน</label>
+                                <input type="number" id="cost_sc" name="cost_sc" class="form-control" value="{{ '%.2f'|format(tire.cost_sc) if tire.cost_sc is not none else '' }}" step="0.01">
+                            </div>
+                            <div class="col-md-4">
+                                <label for="cost_dunlop" class="form-label">ทุนล็อต</label>
+                                <input type="number" id="cost_dunlop" name="cost_dunlop" class="form-control" value="{{ '%.2f'|format(tire.cost_dunlop) if tire.cost_dunlop is not none else '' }}" step="0.01">
+                            </div>
+                            <div class="col-md-4">
+                                <label for="cost_online" class="form-label">ทุน Online</label>
+                                <input type="number" id="cost_online" name="cost_online" class="form-control" value="{{ '%.2f'|format(tire.cost_online) if tire.cost_online is not none else '' }}" step="0.01">
+                            </div>
+                            <div class="col-md-6">
+                                <label for="wholesale_price1" class="form-label">ราคาส่ง 1</label>
+                                <input type="number" id="wholesale_price1" name="wholesale_price1" class="form-control" value="{{ '%.2f'|format(tire.wholesale_price1) if tire.wholesale_price1 is not none else '' }}" step="0.01">
+                            </div>
+                            <div class="col-md-6">
+                                <label for="wholesale_price2" class="form-label">ราคาส่งหน้าร้าน</label>
+                                <input type="number" id="wholesale_price2" name="wholesale_price2" class="form-control" value="{{ '%.2f'|format(tire.wholesale_price2) if tire.wholesale_price2 is not none else '' }}" step="0.01">
+                            </div>
+                        </div>
+                    </div>
+                    <div class="card-footer bg-light text-end">
+                        <a href="{{ url_for('index', tab='tires') }}" class="btn btn-secondary"><i class="fas fa-times me-2"></i>ยกเลิก</a>
+                        <button type="submit" class="btn btn-primary"><i class="fas fa-save me-2"></i>บันทึกการแก้ไข</button>
+                    </div>
+                </div>
+            </form>
         </div>
 
-        <h6>Barcode ID ที่ผูกอยู่:</h6>
-        <ul id="tire_barcodes_list" class="list-group">
-            </ul>
+        <div class="col-lg-4">
+            <div class="card shadow-sm">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0"><i class="fas fa-barcode me-2"></i>จัดการ Barcode ID</h5>
+                    <a href="{{ url_for('print_barcodes', item_type='tire', item_id=tire.id) }}" class="btn btn-outline-secondary btn-sm">
+                        <i class="fas fa-print me-1"></i> พิมพ์
+                    </a>
+                </div>
+                <div class="card-body">
+                    <div id="barcodeStatus"></div>
+                    <div class="mb-3">
+                        <label for="new_tire_barcode" class="form-label">เพิ่ม Barcode ID ใหม่:</label>
+                        <div class="input-group">
+                            <input type="text" id="new_tire_barcode" class="form-control" placeholder="ยิงหรือพิมพ์ Barcode ID ใหม่">
+                            <button id="add_tire_barcode_btn" class="btn btn-outline-success" type="button">เพิ่ม</button>
+                        </div>
+                    </div>
+                    <h6>Barcode ID ที่ผูกอยู่:</h6>
+                    <ul id="tire_barcodes_list" class="list-group">
+                        </ul>
+                </div>
+            </div>
+
+            <div class="card shadow-sm mt-4">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="fas fa-history me-2"></i>ประวัติการเปลี่ยนแปลงทุน</h5>
+                </div>
+                <div class="card-body">
+                    {% if cost_history %}
+                    <div class="table-responsive">
+                        <table class="table table-sm table-striped">
+                            <thead>
+                                <tr>
+                                    <th>วันที่</th>
+                                    <th class="text-end">ทุนเดิม</th>
+                                    <th class="text-end">ทุนใหม่</th>
+                                    <th class="text-center">ผู้เปลี่ยนแปลง</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for entry in cost_history %}
+                                <tr>
+                                    <td class="small">{{ entry.changed_at.strftime('%d/%m/%y %H:%M') }}</td>
+                                    <td class="text-end text-danger small">{{ "{:,.2f}".format(entry.old_cost_sc) if entry.old_cost_sc is not none else '-' }}</td>
+                                    <td class="text-end text-success fw-bold small">{{ "{:,.2f}".format(entry.new_cost_sc) if entry.new_cost_sc is not none else '-' }}</td>
+                                    <td class="text-center small">{{ entry.username if entry.username else 'N/A' }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <p class="text-muted text-center mb-0">ยังไม่มีประวัติการเปลี่ยนแปลงราคาทุน</p>
+                    {% endif %}
+                </div>
+            </div>
+            </div>
     </div>
 </div>
 {% endblock %}
@@ -130,7 +179,7 @@
 
                 li.innerHTML = `
                     <span>${barcode_item.barcode_string} ${primaryBadge}</span>
-                    <button class="btn btn-danger btn-sm delete-barcode-btn" data-barcode="${barcode_item.barcode_string}">
+                    <button class="btn btn-danger btn-sm delete-barcode-btn" data-barcode="${barcode_item.barcode_string}" title="ลบ Barcode">
                         <i class="fas fa-trash-alt"></i>
                     </button>
                 `;

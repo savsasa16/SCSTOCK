@@ -36,16 +36,16 @@
                 <hr class="my-4">
                 <h4>ราคา</h4>
                 <div class="row g-3">
-                    <div class="col-6 col-lg-3"><strong>ทุน:</strong> <span>{{ "%,.2f"|format(wheel.cost) if wheel.cost is not none else '-' }}</span></div>
-                    <div class="col-6 col-lg-3"><strong>ทุน Online:</strong> <span>{{ "%,.2f"|format(wheel.cost_online) if wheel.cost_online is not none else '-' }}</span></div>
-                    <div class="col-6 col-lg-3"><strong>ขายส่ง 1:</strong> <span>{{ "%,.2f"|format(wheel.wholesale_price1) if wheel.wholesale_price1 is not none else '-' }}</span></div>
-                    <div class="col-6 col-lg-3"><strong>ขายส่ง 2:</strong> <span>{{ "%,.2f"|format(wheel.wholesale_price2) if wheel.wholesale_price2 is not none else '-' }}</span></div>
+                    <div class="col-6 col-lg-3"><strong>ทุน:</strong> <span>{{ "{:,.2f}".format(wheel.cost) if wheel.cost is not none else '-' }}</span></div>
+                    <div class="col-6 col-lg-3"><strong>ทุน Online:</strong> <span>{{ "{:,.2f}".format(wheel.cost_online) if wheel.cost_online is not none else '-' }}</span></div>
+                    <div class="col-6 col-lg-3"><strong>ขายส่ง 1:</strong> <span>{{ "{:,.2f}".format(wheel.wholesale_price1) if wheel.wholesale_price1 is not none else '-' }}</span></div>
+                    <div class="col-6 col-lg-3"><strong>ขายส่ง 2:</strong> <span>{{ "{:,.2f}".format(wheel.wholesale_price2) if wheel.wholesale_price2 is not none else '-' }}</span></div>
                     <div class="col-12 mt-3">
-                        <strong class="fs-5">ราคาขายปลีก:</strong> 
-                        <span class="fs-4 text-primary fw-bold">{{ '{:,.2f}'.format(wheel.retail_price) }} บาท</span>
+                        <strong class="fs-5">ราคาขายปลีก:</strong>
+                        <span class="fs-4 text-primary fw-bold">{{ "{:,.2f}".format(wheel.retail_price) }} บาท</span>
                     </div>
                 </div>
-                
+
                 <div class="mt-4">
                     <a href="{{ url_for('edit_wheel', wheel_id=wheel.id) }}" class="btn btn-warning"><i class="fas fa-edit me-2"></i>แก้ไขข้อมูลแม็ก</a>
                 </div>

@@ -6,6 +6,9 @@
 <div class="card shadow-sm">
     <div class="card-header">
         <h4 class="mb-0">แก้ไขข้อมูลแม็ก: {{ wheel.brand }} {{ wheel.model }}</h4>
+        <a href="{{ url_for('print_barcodes', item_type='wheel', item_id=wheel.id) }}" class="btn btn-outline-secondary btn-sm">
+            <i class="fas fa-print me-1"></i> พิมพ์บาร์โค้ด
+        </a>
     </div>
     <div class="card-body">
         <form action="{{ url_for('edit_wheel', wheel_id=wheel.id) }}" method="post" enctype="multipart/form-data">

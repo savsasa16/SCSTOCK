@@ -10,19 +10,25 @@
     <div class="card-body">
         <ul class="nav nav-tabs" id="deletedItemsTab" role="tablist">
             <li class="nav-item" role="presentation">
-                <button class="nav-link active" id="tires-tab" data-bs-toggle="tab" data-bs-target="#deleted-tires-pane" type="button" role="tab" aria-controls="deleted-tires-pane" aria-selected="true">
+                <button class="nav-link {% if active_tab == 'deleted_tires' or not active_tab %}active{% endif %}" id="deleted-tires-tab" data-bs-toggle="tab" data-bs-target="#deleted-tires-pane" type="button" role="tab" aria-controls="deleted-tires-pane" aria-selected="true">
                     <i class="fas fa-tire me-2"></i>ยางที่ถูกลบ
                 </button>
             </li>
             <li class="nav-item" role="presentation">
-                <button class="nav-link" id="wheels-tab" data-bs-toggle="tab" data-bs-target="#deleted-wheels-pane" type="button" role="tab" aria-controls="deleted-wheels-pane" aria-selected="false">
+                <button class="nav-link {% if active_tab == 'deleted_wheels' %}active{% endif %}" id="deleted-wheels-tab" data-bs-toggle="tab" data-bs-target="#deleted-wheels-pane" type="button" role="tab" aria-controls="deleted-wheels-pane" aria-selected="false">
                     <i class="fas fa-compact-disc me-2"></i>แม็กที่ถูกลบ
+                </button>
+            </li>
+            {# NEW: Deleted Spare Parts Tab #}
+            <li class="nav-item" role="presentation">
+                <button class="nav-link {% if active_tab == 'deleted_spare_parts' %}active{% endif %}" id="deleted-spare-parts-tab" data-bs-toggle="tab" data-bs-target="#deleted-spare-parts-pane" type="button" role="tab" aria-controls="deleted-spare-parts-pane" aria-selected="false">
+                    <i class="fas fa-tools me-2"></i>อะไหล่ที่ถูกลบ
                 </button>
             </li>
         </ul>
 
         <div class="tab-content pt-3" id="deletedItemsTabContent">
-            <div class="tab-pane fade show active" id="deleted-tires-pane" role="tabpanel" aria-labelledby="tires-tab">
+            <div class="tab-pane fade {% if active_tab == 'deleted_tires' or not active_tab %}show active{% endif %}" id="deleted-tires-pane" role="tabpanel" aria-labelledby="deleted-tires-tab">
                 <h5>ยางที่ถูกลบ</h5>
                 {% if deleted_tires %}
                     <div class="table-responsive">
@@ -64,7 +70,7 @@
                 {% endif %}
             </div>
 
-            <div class="tab-pane fade" id="deleted-wheels-pane" role="tabpanel" aria-labelledby="wheels-tab">
+            <div class="tab-pane fade {% if active_tab == 'deleted_wheels' %}show active{% endif %}" id="deleted-wheels-pane" role="tabpanel" aria-labelledby="wheels-tab">
                 <h5>แม็กที่ถูกลบ</h5>
                 {% if deleted_wheels %}
                     <div class="table-responsive">
@@ -105,6 +111,49 @@
                     <div class="alert alert-info">ไม่พบแม็กที่ถูกลบ</div>
                 {% endif %}
             </div>
+
+            {# NEW: Deleted Spare Parts Pane #}
+            <div class="tab-pane fade {% if active_tab == 'deleted_spare_parts' %}show active{% endif %}" id="deleted-spare-parts-pane" role="tabpanel" aria-labelledby="deleted-spare-parts-tab">
+                <h5>อะไหล่ที่ถูกลบ</h5>
+                {% if deleted_spare_parts %}
+                    <div class="table-responsive">
+                        <table class="table table-striped table-hover table-sm">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>ID</th>
+                                    <th>ชื่ออะไหล่</th>
+                                    <th>Part Number</th>
+                                    <th>ยี่ห้อ</th>
+                                    <th>หมวดหมู่</th>
+                                    <th>สต็อกเดิม</th>
+                                    <th class="text-center">จัดการ</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for part in deleted_spare_parts %}
+                                    <tr>
+                                        <td>{{ part.id }}</td>
+                                        <td>{{ part.name }}</td>
+                                        <td>{{ part.part_number if part.part_number else '-' }}</td>
+                                        <td>{{ part.brand | title if part.brand else '-' }}</td>
+                                        <td>{{ part.category_name if part.category_name else '-' }}</td>
+                                        <td>{{ part.quantity }}</td>
+                                        <td class="text-center">
+                                            <form action="{{ url_for('restore_spare_part_action', spare_part_id=part.id) }}" method="POST" class="d-inline">
+                                                <button type="submit" class="btn btn-success btn-sm" onclick="return confirm('คุณต้องการกู้คืนอะไหล่ {{ part.name }} ใช่หรือไม่?');">
+                                                    <i class="fas fa-trash-restore me-1"></i>กู้คืน
+                                                </button>
+                                            </form>
+                                        </td>
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                {% else %}
+                    <div class="alert alert-info">ไม่พบอะไหล่ที่ถูกลบ</div>
+                {% endif %}
+            </div>
         </div>
     </div>
 </div>
@@ -118,6 +167,7 @@
         tabElms.forEach(function (tabElm) {
             tabElm.addEventListener('shown.bs.tab', function (event) {
                 const url = new URL(window.location);
+                // The tab.id is like 'deleted-tires-tab', so we use it directly
                 url.searchParams.set('tab', event.target.id);
                 window.history.pushState({}, '', url);
             });

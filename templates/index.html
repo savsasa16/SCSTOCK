@@ -10,9 +10,10 @@
             <form id="mainSearchForm" method="GET" action="{{ url_for('index') }}" class="d-flex flex-grow-1 flex-wrap gap-2" style="max-width: 1500px;">
                 <input type="hidden" id="active_tab_input" name="tab" value="{{ active_tab if active_tab else 'tires' }}">
                 <div class="flex-grow-1" style="min-width: 200px;">
-                    <input type="text" class="form-control form-control-sm" id="main_query_input" name="query" placeholder="ค้นหาตามชื่อ, รุ่น, หรือเบอร์..." value="{{ request.args.get('tire_query') or request.args.get('wheel_query', '') }}">
+                    <input type="text" class="form-control form-control-sm" id="main_query_input" name="query" placeholder="ค้นหาตามชื่อ, รุ่น, หรือเบอร์..." value="{{ request.args.get('tire_query') or request.args.get('wheel_query') or request.args.get('spare_part_query', '') }}">
                     <input type="hidden" id="tire_query_hidden" name="tire_query">
                     <input type="hidden" id="wheel_query_hidden" name="wheel_query">
+                    <input type="hidden" id="spare_part_query_hidden" name="spare_part_query"> {# NEW: Hidden input for spare part query #}
                 </div>
                 <div id="tire_brand_filter_wrapper" style="min-width: 400px;">
                     <select class="form-select form-select-sm" name="tire_brand_filter">
@@ -20,11 +21,28 @@
                         {% for brand in available_tire_brands %}<option value="{{ brand }}" {% if request.args.get('tire_brand_filter') == brand %}selected{% endif %}>{{ brand | title }}</option>{% endfor %}
                     </select>
                 </div>
-                <div id="wheel_brand_filter_wrapper" style="min-width: 400px; display: none;">
+                <div id="wheel_brand_filter_wrapper" class="d-none" style="min-width: 400px;">
                      <select class="form-select form-select-sm" name="wheel_brand_filter">
                         <option value="all">-- ทุกยี่ห้อ --</option>
                         {% for brand in available_wheel_brands %}<option value="{{ brand }}" {% if request.args.get('wheel_brand_filter') == brand %}selected{% endif %}>{{ brand | title }}</option>{% endfor %}
                     </select>
+                </div>
+                {# NEW: Spare Parts Brand and Category Filter Wrappers #}
+                <div id="spare_part_filter_wrapper" class="d-flex d-none flex-grow-1 flex-wrap gap-2" style="min-width: 400px;">
+                    <div class="flex-grow-1">
+                        <select class="form-select form-select-sm" name="spare_part_brand_filter">
+                            <option value="all">-- ทุกยี่ห้ออะไหล่ --</option>
+                            {% for brand in available_spare_part_brands %}<option value="{{ brand }}" {% if request.args.get('spare_part_brand_filter') == brand %}selected{% endif %}>{{ brand | title }}</option>{% endfor %}
+                        </select>
+                    </div>
+                    <div class="flex-grow-1">
+                        <select class="form-select form-select-sm" name="spare_part_category_filter">
+                            <option value="all">-- ทุกหมวดหมู่อะไหล่ --</option>
+                            {% for category in available_spare_part_categories %}
+                                <option value="{{ category.id }}" {% if request.args.get('spare_part_category_filter') == category.id | string %}selected{% endif %}>{{ category.name_display }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
                 </div>
                 <button type="submit" class="btn btn-primary btn-sm"><i class="fas fa-search"></i></button>
                 <a href="{{ url_for('index') }}" class="btn btn-secondary btn-sm" title="ล้างค่าค้นหา"><i class="fas fa-redo"></i></a>
@@ -34,9 +52,11 @@
         <ul class="nav nav-tabs card-header-tabs" id="stockTabs" role="tablist">
             <li class="nav-item" role="presentation"><button class="nav-link {% if active_tab == 'tires' or not active_tab %}active{% endif %}" id="tires-tab" data-bs-toggle="tab" data-bs-target="#tires-pane" type="button"><i class="fas fa-tire me-1"></i> สต็อกยาง</button></li>
             <li class="nav-item" role="presentation"><button class="nav-link {% if active_tab == 'wheels' %}active{% endif %}" id="wheels-tab" data-bs-toggle="tab" data-bs-target="#wheels-pane" type="button"><i class="fas fa-car-side me-1"></i> สต็อกแม็ก</button></li>
+            {# NEW: Spare Parts Tab #}
+            <li class="nav-item" role="presentation"><button class="nav-link {% if active_tab == 'spare-parts' %}active{% endif %}" id="spare-parts-tab" data-bs-toggle="tab" data-bs-target="#spare-parts-pane" type="button"><i class="fas fa-tools me-1"></i> สต็อกอะไหล่</button></li>
         </ul>
     </div>
-    
+
     <div class="card-body">
         <div class="tab-content" id="stockTabsContent">
             <div class="tab-pane fade {% if active_tab == 'tires' or not active_tab %}show active{% endif %}" id="tires-pane" role="tabpanel">
@@ -56,14 +76,12 @@
                                                 <th class="text-end">ทุนล็อต</th>
                                                 <th class="text-end">ทุน(Online)</th>
                                             {% endif %}
-                                            {# --- START: แก้ไขส่วนหัวตารางยาง --- #}
                                             {% if current_user.can_view_wholesale_price_1() %}
                                                 <th class="text-center">ราคาส่ง1</th>
                                             {% endif %}
                                             {% if current_user.can_view_wholesale_price_2() %}
                                                 <th class="text-center">ราคาส่งหน้าร้าน</th>
                                             {% endif %}
-                                            {# --- END: แก้ไขส่วนหัวตารางยาง --- #}
                                             {% if current_user.can_view_retail_price() %}
                                                 <th class="text-end">ราคา/เส้น</th>
                                                 <th class="text-center">โปรโมชัน</th>
@@ -76,24 +94,22 @@
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        {% for item in brand_data.items_list %} 
+                                        {% for item in brand_data.items_list %}
                                             <tr class="{% if item.quantity <= 5 %}table-danger{% elif item.quantity <= 10 %}table-warning{% endif %}">
                                                 <td>{{ item.model | title }}</td>
-                                                <td>{{ item.size }}</td>                                          
+                                                <td>{{ item.size }}</td>
                                                 <td class="text-center fw-bold">{{ item.quantity }}</td>
                                                 {% if current_user.can_view_cost() %}
                                                     <td class="text-end">{{ "{:,.0f}".format(item.get('cost_sc')) if item.get('cost_sc') is not none else '-' }}</td>
                                                     <td class="text-end">{{ "{:,.0f}".format(item.get('cost_dunlop')) if item.get('cost_dunlop') is not none else '-' }}</td>
                                                     <td class="text-end">{{ "{:,.0f}".format(item.get('cost_online')) if item.get('cost_online') is not none else '-' }}</td>
                                                 {% endif %}
-                                                {# --- START: แก้ไขส่วนข้อมูลยาง --- #}
                                                 {% if current_user.can_view_wholesale_price_1() %}
                                                     <td class="text-center">{{ "{:,.0f}".format(item.get('wholesale_price1')) if item.get('wholesale_price1') is not none else '-' }}</td>
                                                 {% endif %}
                                                 {% if current_user.can_view_wholesale_price_2() %}
-                                                    <td class="text-center">{{ "{:,.0f}".format(item.get('wholesale_price2')) if item.get('wholesale_price2') is not none else '-' }}</td>
+                                                    <td class="text-center ">{{ "{:,.0f}".format(item.get('wholesale_price2')) if item.get('wholesale_price2') is not none else '-' }}</td>
                                                 {% endif %}
-                                                {# --- END: แก้ไขส่วนข้อมูลยาง --- #}
                                                 {% if current_user.can_view_retail_price() %}
                                                     <td class="text-end">{{ "{:,.0f}".format(item.get('price_per_item')) if item.get('price_per_item') is not none else '-' }}</td>
                                                     <td class="text-center">{% if item.get('promotion_id') and item.get('promo_is_active') == 1 %}<span class="badge text-bg-info" title="{{ item.get('promo_name') }}: {{ item.get('display_promo_description_text') }}">{{ item.get('promo_name') }}</span>{% else %}-{% endif %}</td>
@@ -137,36 +153,38 @@
                                     <tr>
                                         <th class="text-center">รูป</th><th>ลาย</th><th>ขนาด</th><th>รู/ET</th><th>สี</th><th class="text-center">สต็อก</th>
                                         {% if current_user.can_view_cost() %}<th class="text-end">ทุน(ปกติ/ONL)</th>{% endif %}
-                                        {# --- START: แก้ไขส่วนหัวตารางแม็ก --- #}
                                         {% if current_user.can_view_wholesale_price_1() %}
                                             <th class="text-end">ค้าส่ง 1</th>
                                         {% endif %}
                                         {% if current_user.can_view_wholesale_price_2() %}
                                             <th class="text-end">ค้าส่ง 2</th>
                                         {% endif %}
-                                        {# --- END: แก้ไขส่วนหัวตารางแม็ก --- #}
                                         {% if current_user.can_view_retail_price() %}<th class="text-end">ราคาปลีก</th>{% endif %}
                                         {% if current_user.can_edit() %}<th class="text-center">จัดการ</th>{% endif %}
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {% for item in brand_data.items_list %} 
+                                    {% for item in brand_data.items_list %}
                                         <tr class="{% if item.quantity <= 2 %}table-danger{% elif item.quantity <= 4 %}table-warning{% endif %}">
-                                            <td class="text-center align-middle">{% if item.image_filename %}<a href="{{ item.image_filename }}" target="_blank"><img src="{{ item.image_filename }}" alt="{{ item.model }}" class="img-fluid rounded" style="max-width: 50px;"></a>{% else %}<i class="fas fa-image text-muted"></i>{% endif %}</td>
+                                            <td class="text-center align-middle">
+                                                {% if item.image_filename %}
+                                                    <img src="{{ item.image_filename }}" alt="{{ item.model }}" class="img-fluid rounded img-clickable" style="max-width: 50px; cursor: pointer;" data-image-src="{{ item.image_filename }}">
+                                                {% else %}
+                                                    <i class="fas fa-image text-muted"></i>
+                                                {% endif %}
+                                            </td>                                            
                                             <td>{{ item.model }}</td>
                                             <td>{{ "%.0f"|format(item.diameter) }}x{{ "%.0f"|format(item.width) }}</td>
                                             <td>{{ item.pcd }} {{ 'ET'+item.et|string if item.et else '' }}</td>
                                             <td>{{ item.color if item.color else '-' }}</td>
                                             <td class="text-center fw-bold">{{ item.quantity }}</td>
                                             {% if current_user.can_view_cost() %}<td class="text-end small">{{ "{:,.0f}".format(item.get('cost')) if item.get('cost') is not none else '-' }} / {{ "{:,.0f}".format(item.get('cost_online')) if item.get('cost_online') is not none else '-' }}</td>{% endif %}
-                                            {# --- START: แก้ไขส่วนข้อมูลแม็ก --- #}
                                             {% if current_user.can_view_wholesale_price_1() %}
                                                 <td class="text-center">{{ "{:,.0f}".format(item.get('wholesale_price1')) if item.get('wholesale_price1') is not none else '-' }}</td>
                                             {% endif %}
                                             {% if current_user.can_view_wholesale_price_2() %}
                                                 <td class="text-center ">{{ "{:,.0f}".format(item.get('wholesale_price2')) if item.get('wholesale_price2') is not none else '-' }}</td>
                                             {% endif %}
-                                            {# --- END: แก้ไขส่วนข้อมูลแม็ก --- #}
                                             {% if current_user.can_view_retail_price() %}<td class="text-end">{{ "{:,.0f}".format(item.get('retail_price')) if item.get('retail_price') is not none else '-' }}</td>{% endif %}
                                             {% if current_user.can_edit() %}
                                             <td class="text-center">
@@ -194,73 +212,227 @@
                     <div class="alert alert-info text-center m-3">ไม่พบข้อมูลแม็กซ์</div>
                 {% endif %}
             </div>
+
+            {# NEW: Spare Parts Pane #}
+            <div class="tab-pane fade {% if active_tab == 'spare-parts' %}show active{% endif %}" id="spare-parts-pane" role="tabpanel">
+                {% if spare_parts_by_category_and_brand %}
+                    {% for category_name, category_data in spare_parts_by_category_and_brand.items() %}
+                        <div class="card card-body border-start-0 border-end-0 shadow-none mb-3">
+                            <h5 class="mb-3">{{ category_name }}</h5>
+                            {% for brand_name, brand_data in category_data.brands.items() %}
+                                <h6 class="mb-2 ms-3">{{ brand_name | title }}</h6>
+                                <div class="table-responsive mb-3">
+                                    <table class="table table-striped table-hover table-sm mb-0 align-middle">
+                                        <thead class="table-light">
+                                            <tr>
+                                                <th class="text-center">รูป</th>
+                                                <th>ชื่ออะไหล่</th>
+                                                <th>Part Number</th>
+                                                <th class="text-center">สต็อก</th>
+                                                {% if current_user.can_view_cost() %}
+                                                    <th class="text-end">ทุน</th>
+                                                    <th class="text-end">ทุน(Online)</th>
+                                                {% endif %}
+                                                {% if current_user.can_view_wholesale_price_1() %}
+                                                    <th class="text-end">ราคาส่ง 1</th>
+                                                {% endif %}
+                                                {% if current_user.can_view_wholesale_price_2() %}
+                                                    <th class="text-end">ราคาส่ง 2</th>
+                                                {% endif %}
+                                                {% if current_user.can_view_retail_price() %}
+                                                    <th class="text-end">ราคาขายปลีก</th>
+                                                {% endif %}
+                                                {% if current_user.can_edit() %}
+                                                    <th class="text-center">จัดการ</th>
+                                                {% endif %}
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {% for item in brand_data.items_list %}
+                                                <tr class="{% if item.quantity <= 1 %}table-danger{% elif item.quantity <= 5 %}table-warning{% endif %}">
+                                                    <td class="text-center align-middle">
+                                                        {% if item.image_filename %}
+                                                            <img src="{{ item.image_filename }}" alt="{{ item.name }}" class="img-fluid rounded img-clickable" style="max-width: 50px; cursor: pointer;" data-image-src="{{ item.image_filename }}">
+                                                        {% else %}
+                                                            <i class="fas fa-image text-muted"></i>
+                                                        {% endif %}
+                                                    </td>
+                                                    <td>{{ item.name }}</td>
+                                                    <td>{{ item.part_number if item.part_number else '-' }}</td>
+                                                    <td class="text-center fw-bold">{{ item.quantity }}</td>
+                                                    {% if current_user.can_view_cost() %}
+                                                        <td class="text-end">{{ "{:,.0f}".format(item.get('cost')) if item.get('cost') is not none else '-' }}</td>
+                                                        <td class="text-end">{{ "{:,.0f}".format(item.get('cost_online')) if item.get('cost_online') is not none else '-' }}</td>
+                                                    {% endif %}
+                                                    {% if current_user.can_view_wholesale_price_1() %}
+                                                        <td class="text-end">{{ "{:,.0f}".format(item.get('wholesale_price1')) if item.get('wholesale_price1') is not none else '-' }}</td>
+                                                    {% endif %}
+                                                    {% if current_user.can_view_wholesale_price_2() %}
+                                                        <td class="text-end">{{ "{:,.0f}".format(item.get('wholesale_price2')) if item.get('wholesale_price2') is not none else '-' }}</td>
+                                                    {% endif %}
+                                                    {% if current_user.can_view_retail_price() %}
+                                                        <td class="text-end">{{ "{:,.0f}".format(item.get('retail_price')) if item.get('retail_price') is not none else '-' }}</td>
+                                                    {% endif %}
+                                                    {% if current_user.can_edit() %}
+                                                        <td class="text-center">
+                                                            <a href="{{ url_for('spare_part_detail', spare_part_id=item.id) }}" class="btn btn-info btn-sm" title="ดูรายละเอียด"><i class="fas fa-info-circle"></i></a>
+                                                            <a href="{{ url_for('edit_spare_part', spare_part_id=item.id) }}" class="btn btn-warning btn-sm" title="แก้ไข"><i class="fas fa-edit"></i></a>
+                                                            <form class="d-inline delete-form" action="{{ url_for('delete_spare_part', spare_part_id=item.id) }}" method="post"><button type="submit" class="btn btn-danger btn-sm" title="ลบ" data-quantity="{{ item.quantity }}"><i class="fas fa-trash-alt"></i></button></form>
+                                                        </td>
+                                                    {% endif %}
+                                                </tr>
+                                            {% endfor %}
+                                            {% if brand_data.summary.is_summary_to_show and current_user.is_admin() %}
+                                                <tr class="table-light">
+                                                    <td colspan="3" class="text-end fw-bold">ยอดรวม {{ brand_name | title }}</td>
+                                                    <td class="text-center fw-bold">{{ brand_data.summary.quantity }}</td>
+                                                    <td colspan="{{ 6 if current_user.can_view_cost() and current_user.can_view_wholesale_price_1() and current_user.can_view_wholesale_price_2() and current_user.can_view_retail_price() else 1 }}"></td>
+                                                    {% if current_user.can_edit() %}<td></td>{% endif %}
+                                                </tr>
+                                            {% endif %}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            {% endfor %}
+                            {% if category_data.summary.is_summary_to_show and current_user.is_admin() %}
+                                <div class="alert alert-secondary text-end py-2 px-3 fw-bold mb-3" style="font-size: 1.1em;">
+                                    ยอดรวมหมวดหมู่ {{ category_name }} : {{ category_data.summary.quantity }} ชิ้น
+                                </div>
+                            {% endif %}
+                        </div>
+                    {% endfor %}
+                {% else %}
+                    <div class="alert alert-info text-center m-3">ไม่พบข้อมูลอะไหล่</div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{# Image Modal Structure #}
+<div class="modal fade" id="imageModal" tabindex="-1" aria-labelledby="imageModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="imageModalLabel">รูปภาพสินค้า</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body text-center">
+                <img src="" class="img-fluid" id="modalImage" alt="Full size image">
+            </div>
         </div>
     </div>
 </div>
 
 {% endblock %}
 
+
 {% block scripts %}
+
 <script>
-document.addEventListener('DOMContentLoaded', function() {
-    const stockTabs = document.getElementById('stockTabs');
-    const mainSearchForm = document.getElementById('mainSearchForm');
-    const activeTabInput = document.getElementById('active_tab_input');
-    const mainQueryInput = document.getElementById('main_query_input');
+    document.addEventListener('DOMContentLoaded', function() {
+        const stockTabs = document.getElementById('stockTabs');
+        const mainSearchForm = document.getElementById('mainSearchForm');
+        const activeTabInput = document.getElementById('active_tab_input');
+        const mainQueryInput = document.getElementById('main_query_input');
     
-    const tireQueryInput = document.getElementById('tire_query_hidden');
-    const wheelQueryInput = document.getElementById('wheel_query_hidden');
+        const tireQueryInput = document.getElementById('tire_query_hidden');
+        const wheelQueryInput = document.getElementById('wheel_query_hidden');
+        const sparePartQueryInput = document.getElementById('spare_part_query_hidden');
     
-    const tireBrandWrapper = document.getElementById('tire_brand_filter_wrapper');
-    const wheelBrandWrapper = document.getElementById('wheel_brand_filter_wrapper');
-
-    function setupSearchFormForTab(tabName) {
-        if (tabName === 'tires') {
-            tireBrandWrapper.style.display = 'block';
-            wheelBrandWrapper.style.display = 'none';
-            mainQueryInput.value = "{{ request.args.get('tire_query', '') }}";
-        } else { // wheels
-            tireBrandWrapper.style.display = 'none';
-            wheelBrandWrapper.style.display = 'block';
-            mainQueryInput.value = "{{ request.args.get('wheel_query', '') }}";
+        const tireBrandWrapper = document.getElementById('tire_brand_filter_wrapper');
+        const wheelBrandWrapper = document.getElementById('wheel_brand_filter_wrapper');
+        const sparePartFilterWrapper = document.getElementById('spare_part_filter_wrapper');
+    
+    
+        function setupSearchFormForTab(tabName) {
+            // --- START: MODIFIED SECTION ---
+            // Hide all filter wrappers first by adding 'd-none' class
+            tireBrandWrapper.classList.add('d-none');
+            wheelBrandWrapper.classList.add('d-none');
+            sparePartFilterWrapper.classList.add('d-none');
+            // --- END: MODIFIED SECTION ---
+    
+            // Reset all hidden query inputs
+            tireQueryInput.value = '';
+            wheelQueryInput.value = '';
+            sparePartQueryInput.value = '';
+    
+            if (tabName === 'tires') {
+                // --- MODIFIED: Use classList to show ---
+                tireBrandWrapper.classList.remove('d-none');
+                mainQueryInput.value = "{{ request.args.get('tire_query', '') }}";
+                mainQueryInput.setAttribute('name', 'tire_query');
+                mainQueryInput.setAttribute('placeholder', 'ค้นหาตามชื่อ, รุ่น, หรือเบอร์...');
+            } else if (tabName === 'wheels') {
+                // --- MODIFIED: Use classList to show ---
+                wheelBrandWrapper.classList.remove('d-none');
+                mainQueryInput.value = "{{ request.args.get('wheel_query', '') }}";
+                mainQueryInput.setAttribute('name', 'wheel_query');
+                mainQueryInput.setAttribute('placeholder', 'ค้นหาตามยี่ห้อ, ลาย, ขนาด, รู...');
+            } else if (tabName === 'spare-parts') {
+                // --- MODIFIED: Use classList to show ---
+                // The 'd-flex' class is already on the element, removing 'd-none' will make it visible as a flex container.
+                sparePartFilterWrapper.classList.remove('d-none');
+                mainQueryInput.value = "{{ request.args.get('spare_part_query', '') }}";
+                mainQueryInput.setAttribute('name', 'spare_part_query');
+                mainQueryInput.setAttribute('placeholder', 'ค้นหาตามชื่อ, Part No., ยี่ห้อ, หมวดหมู่...');
+            }
+            activeTabInput.value = tabName;
         }
-        activeTabInput.value = tabName;
-    }
-
-    stockTabs.addEventListener('shown.bs.tab', function (event) {
-        const newTabName = event.target.getAttribute('data-bs-target').replace('#', '').replace('-pane', '');
-        setupSearchFormForTab(newTabName);
-    });
-
-    mainSearchForm.addEventListener('submit', function(event) {
-        tireQueryInput.value = '';
-        wheelQueryInput.value = '';
-        const currentTab = activeTabInput.value;
-        if (currentTab === 'tires') {
-            tireQueryInput.value = mainQueryInput.value;
-        } else {
-            wheelQueryInput.value = mainQueryInput.value;
-        }
-    });
-
-    document.querySelectorAll('.delete-form').forEach(form => {
-        form.addEventListener('submit', function(event) {
-            const button = event.submitter || document.activeElement;
-            const quantity = parseInt(button.dataset.quantity);
-            const isAdmin = {{ current_user.is_admin()|tojson }};
-
-            if (quantity > 0 && !isAdmin) {
-                event.preventDefault(); 
-                alert('ไม่สามารถลบสินค้าได้ เนื่องจากยังมีสต็อกเหลืออยู่');
-            } else {
-                if (!confirm('คุณแน่ใจหรือไม่ว่าต้องการลบรายการนี้อย่างถาวร?')) {
-                    event.preventDefault(); 
-                }
+    
+        stockTabs.addEventListener('shown.bs.tab', function (event) {
+            const newTabName = event.target.getAttribute('data-bs-target').replace('#', '').replace('-pane', '');
+            setupSearchFormForTab(newTabName);
+        });
+    
+        mainSearchForm.addEventListener('submit', function(event) {
+            const currentTab = activeTabInput.value;
+            if (currentTab === 'tires') {
+                tireQueryInput.value = mainQueryInput.value;
+                wheelQueryInput.value = '';
+                sparePartQueryInput.value = '';
+            } else if (currentTab === 'wheels') {
+                wheelQueryInput.value = mainQueryInput.value;
+                tireQueryInput.value = '';
+                sparePartQueryInput.value = '';
+            } else if (currentTab === 'spare-parts') {
+                sparePartQueryInput.value = mainQueryInput.value;
+                tireQueryInput.value = '';
+                wheelQueryInput.value = '';
             }
         });
+    
+        document.querySelectorAll('.delete-form').forEach(form => {
+            form.addEventListener('submit', function(event) {
+                const button = event.submitter || document.activeElement;
+                const quantity = parseInt(button.dataset.quantity);
+                const isAdmin = {{ current_user.is_admin()|tojson }};
+    
+                if (quantity > 0 && !isAdmin) {
+                    event.preventDefault();
+                    alert('ไม่สามารถลบสินค้าได้ เนื่องจากยังมีสต็อกเหลืออยู่');
+                } else {
+                    if (!confirm('คุณแน่ใจหรือไม่ว่าต้องการลบรายการนี้อย่างถาวร?')) {
+                        event.preventDefault();
+                    }
+                }
+            });
+        });
+    
+        // Initialize form on page load based on the active_tab from Flask
+        setupSearchFormForTab(activeTabInput.value);
     });
     
-    setupSearchFormForTab(activeTabInput.value);
-});
-</script>
+    // NEW: Image Modal Logic
+    document.querySelectorAll('.img-clickable').forEach(img => {
+            img.addEventListener('click', function() {
+                const imageUrl = this.dataset.imageSrc;
+                if (imageUrl) {
+                    document.getElementById('modalImage').src = imageUrl;
+                    const imageModal = new bootstrap.Modal(document.getElementById('imageModal'));
+                    imageModal.show();
+                }
+            });
+        });
+    </script>
 {% endblock %}

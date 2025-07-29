@@ -10,16 +10,13 @@
         border: 1px solid #dee2e6;
         border-radius: .25rem;
         padding: 1rem;
-        /* ลบ height และ overflow-y ออก เพื่อให้ตารางขยายตามเนื้อหาและหน้าเว็บเลื่อนแทน */
-        /* height: 85vh; */
         display: flex;
         flex-direction: column;
     }
     .table-container {
-        flex-grow: 1; 
-        /* ลบ overflow-y ออก */
-        /* overflow-y: auto; */ 
+        flex-grow = 1; /* Changed from flex-grow to flex-grow */
     }
+    /* Select2 default styling */
     .select2-container { width: 100% !important; }
     .select2-container--default .select2-selection--single { height: calc(1.5em + .75rem + 2px); padding: .375rem .75rem; border-radius: .25rem; }
     .select2-container--default .select2-selection--single .select2-selection__arrow { height: calc(1.5em + .75rem); }
@@ -52,8 +49,6 @@
     }
     /* Style for sum by type */
     .sum-by-type {
-        /* เปลี่ยนจาก display: block; เป็น inline-block หรือลบออก */
-        /* display: block; */ 
         display: inline-block; /* ทำให้แสดงผลในบรรทัดเดียวกัน */
         margin-left: 15px; /* เพิ่มระยะห่างด้านซ้ายระหว่างแต่ละประเภท */
     }
@@ -96,12 +91,21 @@
                         <tbody>
                             {% for move in system_movements %}
                             <tr data-movement-id="{{move.id}}" data-item-type="{{move.item_type}}">
-                                <td>{{ move.brand | title }} {{ move.model | title }}{% if move.size %}<br><small class="text-muted">{{ move.size }}</small>{% endif %}</td>
+                                <td>
+                                    {# NEW: Display logic for spare_part #}
+                                    {% if move.item_type == 'tire' %}
+                                        {{ move.brand | title }} {{ move.model | title }}{% if move.size %}<br><small class="text-muted">{{ move.size }}</small>{% endif %}
+                                    {% elif move.item_type == 'wheel' %}
+                                        {{ move.brand | title }} {{ move.model | title }}{% if move.size %}<br><small class="text-muted">{{ move.size }}</small>{% endif %}
+                                    {% elif move.item_type == 'spare_part' %}
+                                        {{ move.brand | title }} {{ move.model | title }}{% if move.size %}<br><small class="text-muted">Part No.: {{ move.size }}</small>{% endif %}
+                                    {% endif %}
+                                </td>
                                 <td>
                                     {% if move.type == 'IN' %}
                                         <span class="badge bg-success">{{ move.type }}</span>
                                     {% elif move.type == 'RETURN' %}
-                                        <span class="badge bg-info">{{ move.type }}</span> {# Changed to bg-info #}
+                                        <span class="badge bg-info">{{ move.type }}</span>
                                     {% else %}
                                         <span class="badge bg-danger">{{ move.type }}</span>
                                     {% endif %}
@@ -147,6 +151,8 @@
                     <ul class="nav nav-tabs mb-3" id="managerItemTypeTab" role="tablist">
                         <li class="nav-item" role="presentation"><button class="nav-link active" id="manager-tire-tab" data-bs-toggle="tab" data-bs-target="#manager-tire-pane" type="button"><i class="fas fa-tire me-2"></i>เพิ่มยาง</button></li>
                         <li class="nav-item" role="presentation"><button class="nav-link" id="manager-wheel-tab" data-bs-toggle="tab" data-bs-target="#manager-wheel-pane" type="button"><i class="fas fa-compact-disc me-2"></i>เพิ่มแม็ก</button></li>
+                        {# NEW: Add Spare Parts Tab #}
+                        <li class="nav-item" role="presentation"><button class="nav-link" id="manager-spare-part-tab" data-bs-toggle="tab" data-bs-target="#manager-spare-part-pane" type="button"><i class="fas fa-tools me-2"></i>เพิ่มอะไหล่</button></li>
                     </ul>
                     <div class="tab-content">
                         <div class="tab-pane fade show active" id="manager-tire-pane" role="tabpanel">
@@ -160,6 +166,13 @@
                              <h6>ลิสต์ชั่วคราว (แม็ก)</h6>
                              <div class="table-responsive border rounded mb-3" style="max-height: 150px; overflow-y: auto;"><table class="table table-sm table-striped mb-0"><tbody id="wheel_staging_list"></tbody></table></div>
                              <button type="button" class="btn btn-secondary w-100" id="add-all-wheels-from-staging-btn"><i class="fas fa-check-double me-2"></i>ยืนยันเพิ่มรายการทั้งหมด</button>
+                        </div>
+                        {# NEW: Add Spare Parts Tab Pane #}
+                        <div class="tab-pane fade" id="manager-spare-part-pane" role="tabpanel">
+                            <div class="row g-2 mb-3 align-items-end"><div class="col-sm-6"><label for="manager_spare_part_selector" class="form-label">ค้นหาสินค้า (อะไหล่)</label><select class="form-select item-selector" id="manager_spare_part_selector"></select></div><div class="col-sm-3"><label for="manager_spare_part_quantity" class="form-label">จำนวน</label><input type="number" class="form-control" id="manager_spare_part_quantity" placeholder="ใส่จำนวน" min="1"></div><div class="col-sm-3"><button type="button" class="btn btn-primary w-100 manager-add-item-btn" data-item-type="spare_part"><i class="fas fa-plus"></i> เพิ่ม</button></div></div>
+                            <h6>ลิสต์ชั่วคราว (อะไหล่)</h6>
+                            <div class="table-responsive border rounded mb-3" style="max-height: 150px; overflow-y: auto;"><table class="table table-sm table-striped mb-0"><tbody id="spare_part_staging_list"></tbody></table></div>
+                            <button type="button" class="btn btn-secondary w-100" id="add-all-spare-parts-from-staging-btn"><i class="fas fa-check-double me-2"></i>ยืนยันเพิ่มรายการทั้งหมด</button>
                         </div>
                     </div>
                 </div>
@@ -193,7 +206,7 @@
         <input type="hidden" name="reconciliation_id" value="{{ reconciliation_record.id }}">
         <input type="hidden" id="manager_ledger_data" name="manager_ledger_data">
     </form>
-</div> 
+</div>
 
 <div class="modal fade" id="editManagerLedgerItemModal" tabindex="-1" aria-labelledby="editManagerLedgerItemModalLabel" aria-hidden="true">
     <div class="modal-dialog"><div class="modal-content"><div class="modal-header"><h5 class="modal-title" id="editManagerLedgerItemModalLabel">แก้ไขรายการ: <span id="modal-manager-item-name"></span></h5><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button></div><div class="modal-body"><input type="hidden" id="modal-manager-composite-key"><div class="mb-3"><label for="modal-manager-quantity" class="form-label">จำนวน</label><input type="number" class="form-control" id="modal-manager-quantity" min="1" required></div></div><div class="modal-footer"><button type="button" class="btn secondary" data-bs-dismiss="modal">ยกเลิก</button><button type="button" class="btn btn-primary" id="save-manager-ledger-item-btn">บันทึกการแก้ไข</button></div></div></div>
@@ -223,7 +236,7 @@
 
     // ----- GLOBAL STATE -----
     let managerLedgerItems = [];
-    let stagingItems = { tire: [], wheel: [] };
+    let stagingItems = { tire: [], wheel: [], spare_part: [] };
 
     document.addEventListener('DOMContentLoaded', function() {
         const editSystemMovementModal = new bootstrap.Modal(document.getElementById('editMovementModal'));
@@ -264,7 +277,7 @@
                 }).then((result) => {
                     if (result.isConfirmed) {
                         $('#manager_ledger_data').val(JSON.stringify(managerLedgerItems));
-                        $('#save-ledger-form').submit(); 
+                        $('#save-ledger-form').submit();
                     }
                 });
             });
@@ -277,27 +290,56 @@
                 }
             });
         }
-        
+
         // =================================================================
         // SECTION 1: HELPER FUNCTIONS
         // =================================================================
         function populateSelect($select, data, placeholder, initialValue = null, isModal = false) {
-            if ($select.data('select2')) { $select.select2('destroy'); }
-            $select.empty().append(new Option(placeholder, ''));
-            data.forEach(item => $select.append(new Option(item.name || item.text, item.id)));
-            const select2Options = { width: '100%', dropdownParent: isModal ? $select.closest('.modal') : $(document.body) };
-            $select.select2(select2Options);
-            setTimeout(() => {
-                if (initialValue !== null && initialValue !== undefined) { $select.val(initialValue).trigger('change.select2'); }
-                else { $select.val(null).trigger('change.select2'); }
-            }, 50);
+            // Check if Select2 is already initialized on this element
+            // If it is, clear existing options; if not, Select2 will initialize it.
+            if ($select.data('select2')) {
+                $select.empty();
+            } else {
+                // Initialize Select2 if it's not already,
+                // but this scenario should be handled in SECTION 6 for most elements.
+                // For modal dropdowns, it's explicitly initialized on modal show.
+                const select2Options = {
+                    width: '100%',
+                    placeholder: placeholder,
+                    allowClear: true,
+                    dropdownParent: isModal ? $select.closest('.modal-content') : $('body')
+                };
+                $select.select2(select2Options);
+            }
+
+            // Always add placeholder first for consistency
+            $select.append(new Option(placeholder, ''));
+
+            // Add options based on provided data
+            data.forEach(item => {
+                $select.append(new Option(item.name || item.text, item.id));
+            });
+
+            // Set the value. Use trigger('change') to notify Select2 of the change.
+            if (initialValue !== null && initialValue !== undefined) {
+                // Ensure the option actually exists before trying to select it
+                if ($select.find(`option[value="${initialValue}"]`).length) {
+                    $select.val(initialValue).trigger('change');
+                } else {
+                    $select.val(null).trigger('change'); // Clear if initial value is invalid
+                }
+            } else {
+                $select.val(null).trigger('change'); // Explicitly set to null if no initial value
+            }
         }
+
 
         function buildComparisonKey(item) {
             const getKeyPart = (value) => (value !== null && value !== undefined && value !== '') ? value : '';
-            const itemId = `${item.item_type}-${item.tire_id || item.wheel_id}`;
+            // MODIFIED: Use item_type directly, assuming it's available in systemMovementsData and managerLedgerItems
+            const itemId = `${item.item_type}-${item.tire_id || item.wheel_id || item.spare_part_id}`; // NEW: Added spare_part_id
             let platformIdPart = '', customerIdPart = '';
-            
+
             const channel = allSalesChannels.find(c => c.id == item.channel_id);
             const channelName = channel ? channel.name : '';
 
@@ -352,8 +394,8 @@
             }
             managerLedgerItems.sort((a, b) => a.text.localeCompare(b.text));
             managerLedgerItems.forEach(itemData => {
-                // Clean item text: remove [TIRE] or [WHEEL]
-                let cleanedText = itemData.text.replace(/\[(TIRE|WHEEL)\]\s*/g, ''); 
+                // Clean item text: remove [TIRE], [WHEEL], or [SPARE_PART]
+                let cleanedText = itemData.text.replace(/\[(TIRE|WHEEL|SPARE_PART)\]\s*/g, '');
 
                 // Determine badge color based on type
                 let badgeClass;
@@ -361,7 +403,7 @@
                     badgeClass = 'bg-success';
                     managerTotalIn += itemData.quantity;
                 } else if (itemData.type === 'RETURN') {
-                    badgeClass = 'bg-info'; // Changed to bg-info for RETURN type
+                    badgeClass = 'bg-info';
                     managerTotalReturn += itemData.quantity;
                 } else if (itemData.type === 'OUT') {
                     badgeClass = 'bg-danger';
@@ -397,7 +439,7 @@
                 tbody.append(`
                     <tr data-composite-key="${itemData.compositeKey}">
                         <td>${cleanedText}</td>
-                        <td><span class="badge ${badgeClass}">${itemData.type || 'N/A'}</span></td> {# ใช้ badgeClass ที่คำนวณไว้ #}
+                        <td><span class="badge ${badgeClass}">${itemData.type || 'N/A'}</span></td>
                         <td><small>${detailsHtml}</small></td>
                         <td class="text-end fw-bold">${itemData.quantity}</td>
                         <td class="text-center"><button class="btn btn-sm btn-outline-secondary edit-manager-ledger-item-btn"><i class="fas fa-pencil-alt"></i></button></td>
@@ -429,15 +471,17 @@
             $('#system-total-out').text(systemTotalOut);
             $('#system-total-return').text(systemTotalReturn);
         }
-        
+
         // =================================================================
         // SECTION 3: CASCADING DROPDOWN LOGIC
         // =================================================================
         function handleManagerReturnChange() {
             const returnType = $('#common_return_customer_type').val();
             $('#common_wholesale_customer_section, #common_online_platform_section').addClass('d-none');
+            // Ensure Select2 is initialized before trying to clear
             $('#common_wholesale_customer_id').val(null).trigger('change');
             $('#common_online_platform_id').val(null).trigger('change');
+
 
             if (returnType === 'หน้าร้านร้านยาง') $('#common_wholesale_customer_section').removeClass('d-none');
             else if (returnType === 'ออนไลน์') $('#common_online_platform_section').removeClass('d-none');
@@ -446,9 +490,12 @@
         function handleManagerChannelChange() {
             const channelName = $('#common_channel_id option:selected').text();
             $('#common_online_platform_section, #common_wholesale_customer_section, #common_return_customer_type_section').addClass('d-none');
+
+            // Ensure Select2 is initialized before trying to clear
             $('#common_online_platform_id').val(null).trigger('change');
             $('#common_wholesale_customer_id').val(null).trigger('change');
             $('#common_return_customer_type').val(null).trigger('change');
+
 
             if (channelName === 'ออนไลน์') $('#common_online_platform_section').removeClass('d-none');
             else if (channelName === 'ค้าส่ง') $('#common_wholesale_customer_section').removeClass('d-none');
@@ -475,19 +522,20 @@
             if (typeValue === 'IN') validChannels = allSalesChannels.filter(c => c.id === buyInId);
             else if (typeValue === 'OUT') validChannels = allSalesChannels.filter(c => outIds.includes(c.id));
             else if (typeValue === 'RETURN') validChannels = allSalesChannels.filter(c => c.id === returnId);
-            populateSelect(channelSelect, validChannels, '-- เลือกช่องทาง --');
-            if (validChannels.length === 1) {
-                channelSelect.val(validChannels[0].id).trigger('change');
-            } else {
-                handleManagerChannelChange();
-            }
+            const currentChannelId = channelSelect.val();
+            const isCurrentChannelStillValid = validChannels.some(c => c.id == currentChannelId);
+
+            populateSelect(channelSelect, validChannels, '-- เลือกช่องทาง --', isCurrentChannelStillValid ? currentChannelId : null, true);
+            handleManagerChannelChange();
         }
 
         function handleModalReturnChange() {
             const returnType = $('#modal-return-customer-type').val();
             $('#modal-customer-group, #modal-platform-group').addClass('d-none');
+            // MODIFIED: Use jQuery .val(null) on Select2 instance directly
             $('#modal-customer').val(null).trigger('change');
             $('#modal-platform').val(null).trigger('change');
+
             if (returnType === 'หน้าร้านร้านยาง') $('#modal-customer-group').removeClass('d-none');
             else if (returnType === 'ออนไลน์') $('#modal-platform-group').removeClass('d-none');
         }
@@ -495,9 +543,11 @@
         function handleModalChannelChange() {
             const channelName = $('#modal-channel option:selected').text();
             $('#modal-platform-group, #modal-customer-group, #modal-return-type-group').addClass('d-none');
+            // MODIFIED: Use jQuery .val(null) on Select2 instance directly
             $('#modal-platform').val(null).trigger('change');
             $('#modal-customer').val(null).trigger('change');
             $('#modal-return-customer-type').val(null).trigger('change');
+
 
             if (channelName === 'ออนไลน์') $('#modal-platform-group').removeClass('d-none');
             else if (channelName === 'ค้าส่ง') $('#modal-customer-group').removeClass('d-none');
@@ -517,14 +567,14 @@
             if (typeValue === 'IN') validChannels = allSalesChannels.filter(c => c.id === buyInId);
             else if (typeValue === 'OUT') validChannels = allSalesChannels.filter(c => outIds.includes(c.id));
             else if (typeValue === 'RETURN') validChannels = allSalesChannels.filter(c => c.id === returnId);
-            
+
             const currentChannelId = channelSelect.val();
             const isCurrentChannelStillValid = validChannels.some(c => c.id == currentChannelId);
 
             populateSelect(channelSelect, validChannels, '-- เลือกช่องทาง --', isCurrentChannelStillValid ? currentChannelId : null, true);
             handleModalChannelChange();
         }
-		
+
 		// --- Date Picker Handler ---
         $('#reportDatePicker').on('change', function() {
             const newDate = $(this).val();
@@ -563,11 +613,13 @@
             const quantity = parseInt(quantityInput.val());
             if (!selectedOption || !selectedOption.id) { Swal.fire('ข้อผิดพลาด', 'กรุณาเลือกสินค้า', 'error'); return; }
             if (isNaN(quantity) || quantity <= 0) { Swal.fire('ข้อผิดพลาด', 'กรุณาใส่จำนวน', 'error'); quantityInput.focus(); return; }
+
             stagingItems[itemType].push({ id: selectedOption.id, text: selectedOption.text, quantity: quantity });
             renderStagingArea(itemType);
             selector.val(null).trigger('change');
             quantityInput.val('');
-            selector.select2('open');
+            // Ensure Select2 dropdown is closed after selection for AJAX selectors
+            selector.select2('close'); // NEW
         });
 
         $(document).on('click', '.remove-from-staging-btn', function() {
@@ -577,8 +629,14 @@
             renderStagingArea(itemType);
         });
 
-        $('#add-all-tires-from-staging-btn, #add-all-wheels-from-staging-btn').on('click', function() {
-            const itemType = $(this).attr('id').includes('tires') ? 'tire' : 'wheel';
+        // NEW: Add Spare Parts from Staging
+        $('#add-all-tires-from-staging-btn, #add-all-wheels-from-staging-btn, #add-all-spare-parts-from-staging-btn').on('click', function() {
+            const buttonId = $(this).attr('id');
+            let itemType = '';
+            if (buttonId.includes('tires')) { itemType = 'tire'; }
+            else if (buttonId.includes('wheels')) { itemType = 'wheel'; }
+            else if (buttonId.includes('spare-parts')) { itemType = 'spare_part'; } // NEW
+
             const stagedItemsForType = stagingItems[itemType];
             if (stagedItemsForType.length === 0) { Swal.fire('ไม่มีรายการ', 'ไม่มีรายการในลิสต์', 'info'); return; }
             const moveType = $('#common_movement_type').val();
@@ -595,7 +653,8 @@
                     return_customer_type: $('#common_return_customer_type').val() || null,
                     item_type: item_type_from_id,
                     tire_id: item_type_from_id === 'tire' ? db_id : null,
-                    wheel_id: item_type_from_id === 'wheel' ? db_id : null
+                    wheel_id: item_type_from_id === 'wheel' ? db_id : null,
+                    spare_part_id: item_type_from_id === 'spare_part' ? db_id : null // NEW
                 };
                 const compositeKey = buildComparisonKey(itemDataFromForm);
                 const existingItem = managerLedgerItems.find(item => item.compositeKey === compositeKey);
@@ -614,6 +673,7 @@
             renderManagerLedgerTablePreview(); // Re-render and update sum
             Swal.fire('สำเร็จ', `เพิ่ม ${addedItemCount} รายการลงในบันทึกแล้ว`, 'success');
         });
+
 
         // --- Main Ledger Table Handlers ---
         $(document).on('click', '.edit-manager-ledger-item-btn', function() {
@@ -657,7 +717,18 @@
                 const data = await response.json();
                 if (!data.success) { Swal.fire('ผิดพลาด', data.message, 'error'); return; }
                 const d = data.details;
-                $('#modal-item-name').text(d.brand + ' ' + d.model);
+
+                // MODIFIED: Adjust item name display based on type
+                let itemNameDisplay = '';
+                if (itemType === 'tire') {
+                    itemNameDisplay = `${d.brand || ''} ${d.model || ''} ${d.size || ''}`;
+                } else if (itemType === 'wheel') {
+                    itemNameDisplay = `${d.brand || ''} ${d.model || ''} ${d.diameter || ''}x${d.width || ''}`;
+                } else if (itemType === 'spare_part') { // NEW
+                    itemNameDisplay = `${d.spare_part_name || ''} ${d.spare_part_brand ? '(' + d.spare_part_brand + ')' : ''}`;
+                }
+
+                $('#modal-item-name').text(itemNameDisplay);
                 $('#modal-movement-id').val(d.id);
                 $('#modal-item-type').val(itemType);
                 $('#modal-image-filename').val(d.image_filename);
@@ -668,25 +739,27 @@
                 if (d.type === 'IN') channelOptions = allSalesChannels.filter(c => c.name === 'ซื้อเข้า');
                 else if (d.type === 'OUT') channelOptions = allSalesChannels.filter(c => ['หน้าร้าน', 'ออนไลน์', 'ค้าส่ง'].includes(c.name));
                 else if (d.type === 'RETURN') channelOptions = allSalesChannels.filter(c => c.name === 'รับคืน');
-                
+
                 populateSelect($('#modal-channel'), channelOptions, 'เลือกช่องทาง', d.channel_id, true);
                 populateSelect($('#modal-return-customer-type'), returnCustomerTypes, 'เลือกประเภทการคืน', d.return_customer_type, true);
                 populateSelect($('#modal-platform'), allOnlinePlatforms, 'เลือกแพลตฟอร์ม', d.online_platform_id, true);
                 populateSelect($('#modal-customer'), allWholesaleCustomers, 'เลือกลูกค้า', d.wholesale_customer_id, true);
-                
-                $('#modal-move-type').trigger('change'); 
+
+                // No need for setTimeout here if populateSelect is synchronous regarding DOM manipulation
+                // This triggers the cascading dropdown logic
+                $('#modal-move-type').trigger('change');
                 editSystemMovementModal.show();
             } catch (error) { Swal.fire('ผิดพลาด', 'ไม่สามารถเชื่อมต่อกับเซิร์ฟเวอร์ได้', 'error'); }
         });
-        
+
         $('#save-correction-btn').on('click', async function() {
             const payload = {
                 movement_id: $('#modal-movement-id').val(), item_type: $('#modal-item-type').val(),
                 quantity_change: $('#modal-quantity').val(), notes: $('#modal-notes').val(),
                 type: $('#modal-move-type').val(), channel_id: $('#modal-channel').val(),
-                online_platform_id: $('#modal-platform').val() || null, 
+                online_platform_id: $('#modal-platform').val() || null,
                 wholesale_customer_id: $('#modal-customer').val() || null,
-                return_customer_type: $('#modal-return-customer-type').val() || null, 
+                return_customer_type: $('#modal-return-customer-type').val() || null,
                 image_filename: $('#modal-image-filename').val()
             };
             try {
@@ -705,7 +778,7 @@
         // --- Main Page Action Handlers ---
         function performComparisonLogic() {
             $('#system-movements-table tbody td, #manager-ledger-table tbody td').css('background-color', '');
-            
+
             const systemTotals = {}, managerTotals = {};
             systemMovementsData.forEach(move => {
                 const key = buildComparisonKey(move);
@@ -722,7 +795,7 @@
                 const itemType = row.data('item-type');
                 const move = systemMovementsData.find(m => m.id == movementId && m.item_type === itemType);
                 if (!move) return;
-                
+
                 const key = buildComparisonKey(move);
                 let color = '';
                 if (!(key in managerTotals) || systemTotals[key] !== managerTotals[key]) {
@@ -770,22 +843,96 @@
         // =================================================================
         // SECTION 6: INITIALIZATION
         // =================================================================
-        $('.item-selector').select2({
-            placeholder: "ค้นหาและเลือกสินค้า",
-            ajax: { url: "{{ url_for('api_search_all_items') }}", dataType: 'json', delay: 250, data: params => ({ q: params.term }), processResults: data => ({ results: data }), cache: true }
+        // Initialize Select2 for all selectors when the DOM is ready
+        // MODIFIED: Ensure proper initialization for AJAX selectors and others
+        $('.item-selector').each(function() { // Only item-selector uses AJAX search
+            const $this = $(this);
+            // Destroy existing Select2 instance if it exists to ensure a clean re-initialization
+            if ($this.data('select2')) {
+                $this.select2('destroy');
+            }
+            $this.select2({
+                width: '100%',
+                allowClear: true,
+                placeholder: $this.attr('placeholder') || '-- เลือก --',
+                ajax: {
+                    url: "{{ url_for('api_search_all_items') }}",
+                    dataType: 'json',
+                    delay: 250,
+                    data: params => ({ q: params.term }),
+                    processResults: data => ({ results: data.results }),
+                    cache: true
+                },
+                dropdownParent: $this.closest('.tab-pane').length ? $this.closest('.tab-pane') : $('body')
+            });
         });
+
+        // Initialize Select2 for non-AJAX dropdowns (these do not need to be destroyed/reinitialized frequently)
+        $('#common_movement_type, #common_channel_id, #common_return_customer_type, #common_online_platform_id, #common_wholesale_customer_id').each(function() {
+            const $this = $(this);
+            if (!$this.data('select2')) { // Only initialize if it hasn't been initialized
+                $this.select2({
+                    width: '100%',
+                    allowClear: true,
+                    placeholder: $this.attr('placeholder') || '-- เลือก --',
+                    dropdownParent: $this.closest('.modal-content').length ? $this.closest('.modal-content') : $('body')
+                });
+            }
+        });
+
+
+        // Initialize modal Select2s when the modal is shown - THIS IS CRUCIAL
+        // For modal elements, always destroy and re-initialize to prevent issues with modal reopening
+        $('#editMovementModal').on('shown.bs.modal', function() {
+            $('#modal-move-type, #modal-channel, #modal-return-customer-type, #modal-platform, #modal-customer').each(function() {
+                const $this = $(this);
+                // Always destroy before re-initializing for modal elements
+                if ($this.data('select2')) {
+                    $this.select2('destroy');
+                }
+                $this.select2({
+                    width: '100%',
+                    dropdownParent: $('#editMovementModal .modal-content') // Specify parent for modals
+                });
+            });
+            // These populateSelect calls are expected to be triggered by the edit-movement-btn click handler
+            // and should update the already initialized Select2 instances.
+        });
+
+        // Optional: Destroy Select2 instances when modal is hidden to prevent memory leaks/z-index issues on subsequent opens
+        $('#editMovementModal').on('hidden.bs.modal', function() {
+            $('#modal-move-type, #modal-channel, #modal-return-customer-type, #modal-platform, #modal-customer').each(function() {
+                if ($(this).data('select2')) {
+                    $(this).select2('destroy');
+                }
+            });
+        });
+
+
+        // Initial population for common details form (for elements that are always on the page)
+        // These will populate the Select2s initialized above.
         populateSelect($('#common_movement_type'), movementTypes, '-- เลือกประเภท --');
         populateSelect($('#common_channel_id'), [], '-- เลือกช่องทาง --');
         populateSelect($('#common_return_customer_type'), returnCustomerTypes, '-- เลือกประเภทการคืน --');
         populateSelect($('#common_online_platform_id'), allOnlinePlatforms, '-- เลือกแพลตฟอร์ม --');
         populateSelect($('#common_wholesale_customer_id'), allWholesaleCustomers, '-- เลือกลูกค้า --');
+
+        // Initial population for manager ledger (from DB)
         if (managerLedgerFromDB && Array.isArray(managerLedgerFromDB)) {
             managerLedgerItems = JSON.parse(JSON.stringify(managerLedgerFromDB));
+        } else {
+            managerLedgerItems = []; // Default to empty array if managerLedgerFromDB is null or not an array
         }
+
         renderManagerLedgerTablePreview(); // Call to render manager table and calculate its sum
         updateSystemTotalSum(); // Call to calculate and display system sum
+
+        // Render staging areas
         renderStagingArea('tire');
         renderStagingArea('wheel');
+        renderStagingArea('spare_part'); // NEW
+
+        // Trigger initial change handlers for common details form
         handleManagerMovementTypeChange();
 
         // Initialize fixed buttons AFTER all other DOM content is ready
