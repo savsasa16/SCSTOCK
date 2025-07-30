@@ -44,7 +44,7 @@
 
                         <div class="col-12">
                             <label for="tire_barcode_id_for_add" class="form-label">Barcode ID (สำหรับยาง)</label>
-                            <input type="text" class="form-control" id="tire_barcode_id_for_add" name="barcode_id_for_add" value="{{ request.args.get('scanned_barcode', '') }}" autofocus>
+                            <input type="text" name="barcode_id_for_add" value="{{ scanned_barcode_for_add or '' }}" class="form-control">
                             <div class="form-text">ยิงบาร์โค้ด หรือพิมพ์รหัสบาร์โค้ดลงไป</div>
                         </div>
 
@@ -121,7 +121,7 @@
 
                         <div class="col-12">
                             <label for="wheel_barcode_id_for_add" class="form-label">Barcode ID (สำหรับแม็ก)</label>
-                            <input type="text" class="form-control" id="wheel_barcode_id_for_add" name="barcode_id_for_add" value="{{ request.args.get('scanned_barcode', '') }}" autofocus>
+                            <input type="text" name="barcode_id_for_add" value="{{ scanned_barcode_for_add or '' }}" class="form-control">
                             <div class="form-text">ยิงบาร์โค้ด หรือพิมพ์รหัสบาร์โค้ดลงไป</div>
                         </div>
 
@@ -209,7 +209,7 @@
 
                         <div class="col-12">
                             <label for="spare_part_barcode_id_for_add" class="form-label">Barcode ID (สำหรับอะไหล่)</label>
-                            <input type="text" class="form-control" id="spare_part_barcode_id_for_add" name="barcode_id_for_add" value="{{ request.args.get('scanned_barcode', '') }}" autofocus>
+                            <input type="text" name="barcode_id_for_add" value="{{ scanned_barcode_for_add or '' }}" class="form-control">
                             <div class="form-text">ยิงบาร์โค้ด หรือพิมพ์รหัสบาร์โค้ดลงไป</div>
                         </div>
 

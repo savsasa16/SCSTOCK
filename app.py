@@ -791,6 +791,7 @@ def add_item():
     current_year = get_bkk_time().year
     form_data = None
     active_tab = request.args.get('tab', 'tire')
+    scanned_barcode_for_add = request.args.get('barcode_id_for_add', '')
 
     all_promotions = get_all_promotions_cached()
     # NEW: สำหรับอะไหล่
@@ -1097,7 +1098,7 @@ def add_item():
                 active_tab = 'spare_part'
                 return render_template('add_item.html', form_data=form_data, active_tab=active_tab, current_year=current_year, all_promotions=all_promotions, all_spare_part_categories=all_spare_part_categories, current_user=current_user)
 
-    return render_template('add_item.html', form_data=form_data, active_tab=active_tab, current_year=current_year, all_promotions=all_promotions, all_spare_part_categories=all_spare_part_categories, current_user=current_user)
+    return render_template('add_item.html', form_data=form_data, active_tab=active_tab, current_year=current_year, all_promotions=all_promotions, all_spare_part_categories=all_spare_part_categories, current_user=current_user, scanned_barcode_for_add=scanned_barcode_for_add)
 
 @app.route('/edit_tire/<int:tire_id>', methods=('GET', 'POST'))
 @login_required
