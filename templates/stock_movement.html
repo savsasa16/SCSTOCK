@@ -2,6 +2,50 @@
 
 {% block page_title %}ทำรายการสต็อก (Bulk){% endblock %}
 
+{% block styles %}
+{{ super() }}
+<style>
+    #total-summary-box {
+        position: fixed;
+        bottom: 90px;
+        right: 20px;
+        background-color: #2c3e50;
+        color: white;
+        padding: 15px;
+        border-radius: 10px;
+        box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+        z-index: 1050;
+        min-width: 220px;
+        display: none;
+        transition: opacity 0.3s ease-in-out;
+    }
+    #total-summary-box h5 {
+        margin-top: 0;
+        border-bottom: 1px solid #46627f;
+        padding-bottom: 10px;
+        margin-bottom: 10px;
+        font-size: 1.1rem;
+    }
+    .total-line {
+        display: flex;
+        justify-content: space-between;
+        margin-bottom: 8px;
+        font-size: 1rem;
+    }
+    .total-line span {
+        opacity: 0.9;
+    }
+</style>
+{% endblock %}
+
+{% block extra_fixed_elements %}
+<div id="total-summary-box">
+    <h5><i class="fas fa-calculator me-2"></i>ยอดรวมในรายการ</h5>
+    <div id="totals-content">
+        </div>
+</div>
+{% endblock %}
+
 {% block content %}
 <div class="card shadow-sm">
     <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
@@ -27,7 +71,6 @@
                     <i class="fas fa-compact-disc me-2"></i>แม็ก
                 </button>
             </li>
-            {# NEW: Spare Parts Tab #}
             <li class="nav-item" role="presentation">
                 <button class="nav-link {% if active_tab == 'spare_part_movements' %}active{% endif %}" id="spare-part-tab" data-bs-toggle="tab" data-bs-target="#spare-part-pane" type="button" role="tab">
                     <i class="fas fa-tools me-2"></i>อะไหล่
@@ -80,7 +123,6 @@
                     </table>
                 </div>
             </div>
-            {# NEW: Spare Parts Pane #}
             <div class="tab-pane fade {% if active_tab == 'spare_part_movements' %}show active{% endif %}" id="spare-part-pane" role="tabpanel">
                 <div class="row g-2 mb-3">
                     <div class="col-sm-8">
@@ -124,7 +166,6 @@
 
         <hr class="my-4">
         <div id="history_section">
-            {# History section will dynamically show based on active tab #}
             <div id="tire-history-section" class="{% if active_tab == 'tire_movements' or not active_tab %}d-block{% else %}d-none{% endif %}">
                 <h5>ประวัติล่าสุด (ยาง)</h5>
                 <div class="table-responsive">
@@ -151,7 +192,6 @@
                     </table>
                 </div>
             </div>
-            {# NEW: Spare Parts History Section #}
             <div id="spare-part-history-section" class="{% if active_tab == 'spare_part_movements' %}d-block{% else %}d-none{% endif %}">
                 <h5>ประวัติล่าสุด (อะไหล่)</h5>
                 <div class="table-responsive">
@@ -175,6 +215,47 @@
 // --- Global Data ---
 const salesChannels = JSON.parse('{{ sales_channels | tojson | safe }}');
 
+// --- START: เพิ่มฟังก์ชันคำนวณยอดรวม ---
+function updateTotals() {
+    const totalBox = $('#total-summary-box');
+    const totalsContent = $('#totals-content');
+    totalsContent.html(''); // ล้างค่าเก่าทิ้งก่อน
+
+    let totalTires = 0;
+    $('#tire_transaction_list .item-quantity').each(function() {
+        totalTires += parseInt($(this).val()) || 0;
+    });
+
+    let totalWheels = 0;
+    $('#wheel_transaction_list .item-quantity').each(function() {
+        totalWheels += parseInt($(this).val()) || 0;
+    });
+
+    let totalSpareParts = 0;
+    $('#spare_part_transaction_list .item-quantity').each(function() {
+        totalSpareParts += parseInt($(this).val()) || 0;
+    });
+
+    let contentHtml = '';
+    if (totalTires > 0) {
+        contentHtml += `<div class="total-line"><span><i class="fas fa-tire fa-fw me-2"></i>ยาง:</span> <strong>${totalTires} เส้น</strong></div>`;
+    }
+    if (totalWheels > 0) {
+        contentHtml += `<div class="total-line"><span><i class="fas fa-compact-disc fa-fw me-2"></i>แม็ก:</span> <strong>${totalWheels} วง</strong></div>`;
+    }
+    if (totalSpareParts > 0) {
+        contentHtml += `<div class="total-line"><span><i class="fas fa-tools fa-fw me-2"></i>อะไหล่:</span> <strong>${totalSpareParts} ชิ้น</strong></div>`;
+    }
+
+    if (totalTires > 0 || totalWheels > 0 || totalSpareParts > 0) {
+        totalsContent.html(contentHtml);
+        totalBox.fadeIn(); // แสดงกล่องถ้ามีรายการ
+    } else {
+        totalBox.fadeOut(); // ซ่อนกล่องถ้าไม่มีรายการ
+    }
+}
+// --- END: เพิ่มฟังก์ชันคำนวณยอดรวม ---
+
 // --- Helper Functions ---
 function addItemToList(itemType) {
     const selector = $(`#${itemType}_selector`);
@@ -187,24 +268,20 @@ function addItemToList(itemType) {
     if (!itemId) { alert('กรุณาเลือกสินค้าก่อน'); return; }
     if (list.find(`tr[data-item-id="${itemId}"]`).length > 0) { alert('สินค้านี้อยู่ในรายการแล้ว'); return; }
 
-    // Determine the unit for display in the table header
     let unit = '';
-    if (itemType === 'tire') {
-        unit = 'เส้น';
-    } else if (itemType === 'wheel') {
-        unit = 'วง';
-    } else if (itemType === 'spare_part') { // NEW
-        unit = 'ชิ้น';
-    }
+    if (itemType === 'tire') unit = 'เส้น';
+    else if (itemType === 'wheel') unit = 'วง';
+    else if (itemType === 'spare_part') unit = 'ชิ้น';
 
     const newRow = `
         <tr data-item-id="${itemId}" data-item-type="${itemType}">
             <td class="align-middle">${itemName}<small class="text-muted d-block">คงเหลือ: ${itemStock}</small></td>
-            <td><input type="number" class="form-control item-quantity" min="1" required placeholder="จำนวน (${unit})"></td>
-            <td class="text-center align-middle"><button type="button" class="btn btn-danger btn-sm" onclick="this.closest('tr').remove()"><i class="fas fa-trash-alt"></i></button></td>
+            <td><input type="number" class="form-control item-quantity" min="1" value="1" required placeholder="จำนวน (${unit})"></td>
+            <td class="text-center align-middle"><button type="button" class="btn btn-danger btn-sm remove-item-btn"><i class="fas fa-trash-alt"></i></button></td>
         </tr>`;
     list.append(newRow);
     selector.val('').trigger('change');
+    updateTotals(); // <-- เรียกฟังก์ชันอัปเดตยอดรวม
 }
 
 function handleMovementTypeChange() {
@@ -260,7 +337,7 @@ async function submitBulkTransaction() {
     } else if (activeTabId === 'wheel-tab') {
         itemType = 'wheel';
         listId = 'wheel_transaction_list';
-    } else if (activeTabId === 'spare-part-tab') { // NEW
+    } else if (activeTabId === 'spare-part-tab') {
         itemType = 'spare_part';
         listId = 'spare_part_transaction_list';
     } else {
@@ -281,11 +358,11 @@ async function submitBulkTransaction() {
             alert('กรุณากรอกจำนวนให้ถูกต้อง (ต้องเป็นตัวเลขมากกว่า 0)');
             row.find('.item-quantity').focus();
             hasError = true;
-            return false; // Break out of .each loop
+            return false;
         }
         items.push({ id: itemId, quantity: parseInt(quantity) });
     });
-    if (hasError) return; // Stop if there was an error in quantity input
+    if (hasError) return;
 
     const formData = new FormData();
     formData.append('item_type', itemType);
@@ -321,45 +398,48 @@ async function submitBulkTransaction() {
 }
 
 document.addEventListener('DOMContentLoaded', function() {
-    // Initialize Select2 for all relevant dropdowns
     $('#tire_selector, #wheel_selector, #spare_part_selector, #common_channel_id, #online_platform_id, #wholesale_customer_id, #return_customer_type, #return_wholesale_customer_id, #return_online_platform_id').select2({
         width: '100%',
-        allowClear: true, // Allow clearing selected value
-        placeholder: function(){ // Dynamic placeholder for item selectors
+        allowClear: true,
+        placeholder: function(){
             const id = $(this).attr('id');
             if (id === 'tire_selector') return '-- ค้นหาและเลือกยาง --';
             if (id === 'wheel_selector') return '-- ค้นหาและเลือกแม็ก --';
-            if (id === 'spare_part_selector') return '-- ค้นหาและเลือกอะไหล่ --'; // NEW
+            if (id === 'spare_part_selector') return '-- ค้นหาและเลือกอะไหล่ --';
             return '-- เลือก --';
         }
     });
 
-    // Event listeners for common movement details
+    $('body').on('click', '.remove-item-btn', function() {
+        $(this).closest('tr').remove();
+        updateTotals();
+    });
+
+    $('body').on('change input', '.item-quantity', function() {
+        updateTotals();
+    });
+
     $('#common_movement_type').on('change', handleMovementTypeChange);
     $('#common_channel_id').on('change', handleChannelChange);
     $('#return_customer_type').on('change', handleReturnChange);
 
-    // Toggle history visibility based on active tab
     $('#stockMovementTab button').on('shown.bs.tab', function(event) {
         const tireHistory = $('#tire-history-section');
         const wheelHistory = $('#wheel-history-section');
-        const sparePartHistory = $('#spare-part-history-section'); // NEW
+        const sparePartHistory = $('#spare-part-history-section');
 
-        // Hide all history sections first
         tireHistory.addClass('d-none').removeClass('d-block');
         wheelHistory.addClass('d-none').removeClass('d-block');
-        sparePartHistory.addClass('d-none').removeClass('d-block'); // NEW
+        sparePartHistory.addClass('d-none').removeClass('d-block');
 
-        // Show the relevant history section
         if (event.target.id === 'tire-tab') {
             tireHistory.addClass('d-block').removeClass('d-none');
         } else if (event.target.id === 'wheel-tab') {
             wheelHistory.addClass('d-block').removeClass('d-none');
-        } else if (event.target.id === 'spare-part-tab') { // NEW
+        } else if (event.target.id === 'spare-part-tab') {
             sparePartHistory.addClass('d-block').removeClass('d-none');
         }
 
-        // Update URL hash without reloading, useful for direct links to a tab
         const newTabName = event.target.getAttribute('data-bs-target').replace('#', '');
         if (history.pushState) {
             history.pushState(null, null, '#' + newTabName);
@@ -368,32 +448,28 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
 
-    // Handle initial active tab on page load based on URL hash
     const hash = window.location.hash;
-    let initialActiveTabId = 'tire-pane'; // Default to tire tab
+    let initialActiveTabId = 'tire-pane';
 
     if (hash) {
-        const tabPaneId = hash.substring(1); // Remove '#'
-        // Check if the tab pane exists before trying to activate it
-        if ($(tabPaneId).length) { // Use $(tabPaneId) instead of $(`#${tabPaneId}`) directly for safety
+        const tabPaneId = hash.substring(1);
+        if ($(tabPaneId).length) {
             initialActiveTabId = tabPaneId;
         }
     }
 
-    // Activate the determined initial tab and show its history section
     $(`#stockMovementTab button[data-bs-target="#${initialActiveTabId}"]`).tab('show');
 
-    // Manually set display for history sections based on initial tab after tab 'show' event is handled
     if (initialActiveTabId === 'tire-pane') {
         $('#tire-history-section').addClass('d-block').removeClass('d-none');
     } else if (initialActiveTabId === 'wheel-pane') {
         $('#wheel-history-section').addClass('d-block').removeClass('d-none');
-    } else if (initialActiveTabId === 'spare-part-pane') { // NEW
+    } else if (initialActiveTabId === 'spare-part-pane') {
         $('#spare-part-history-section').addClass('d-block').removeClass('d-none');
     }
 
-    // Initial call for common details form logic
     handleMovementTypeChange();
+    updateTotals();
 });
 </script>
 {% endblock %}
