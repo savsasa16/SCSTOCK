@@ -2257,11 +2257,23 @@ def edit_tire_movement(movement_id):
             new_return_customer_type = None
 
         try:
+            old_type = movement_data['type']
+            old_quantity_change = movement_data['quantity_change']
             database.update_tire_movement(conn, movement_id, new_notes, bill_image_url_to_db, 
                                             new_type, new_quantity_change,
                                             final_new_channel_id, final_new_online_platform_id, 
                                             final_new_wholesale_customer_id, new_return_customer_type)
             flash('แก้ไขข้อมูลการเคลื่อนไหวสต็อกยางสำเร็จ!', 'success')
+
+            tire_info = f"{movement_data['brand'].title()} {movement_data['model'].title()} ({movement_data['size']})"
+            message = (
+                f"แก้ไขสต็อกยาง: {tire_info} "
+                f"จาก [{old_type}] {old_quantity_change} เส้น เป็น [{new_type}] {new_quantity_change} เส้น "
+                f"โดย {current_user.username}"
+            )
+            database.add_notification(conn, message, current_user.id)
+            conn.commit()
+
             cache.delete_memoized(get_cached_tires)
             cache.delete_memoized(get_all_tires_list_cached)
             return redirect(url_for('daily_stock_report'))
@@ -2422,10 +2434,23 @@ def edit_wheel_movement(movement_id):
             new_return_customer_type = None
 
         try:
+            old_type = movement_data['type']
+            old_quantity_change = movement_data['quantity_change']
+
             database.update_wheel_movement(conn, movement_id, new_notes, bill_image_url_to_db, 
                                             new_type, new_quantity_change,
                                             final_new_channel_id, final_new_online_platform_id, 
                                             final_new_wholesale_customer_id, new_return_customer_type)
+
+            wheel_info = f"{movement_data['brand'].title()} {movement_data['model'].title()}"
+            message = (
+                f"แก้ไขสต็อกแม็ก: {wheel_info} "
+                f"จาก [{old_type}] {old_quantity_change} วง เป็น [{new_type}] {new_quantity_change} วง "
+                f"โดย {current_user.username}"
+            )
+            database.add_notification(conn, message, current_user.id)
+            conn.commit()
+
             flash('แก้ไขข้อมูลการเคลื่อนไหวสต็อกแม็กสำเร็จ!', 'success')
             cache.delete_memoized(get_cached_wheels)
             cache.delete_memoized(get_all_wheels_list_cached)
@@ -2446,20 +2471,36 @@ def edit_wheel_movement(movement_id):
 @app.route('/delete_tire_movement/<int:movement_id>', methods=['POST'])
 @login_required
 def delete_tire_movement_action(movement_id):
-    # ตรวจสอบสิทธิ์: เฉพาะ Admin เท่านั้นที่ลบประวัติการเคลื่อนไหวได้
     if not current_user.is_admin():
         flash('คุณไม่มีสิทธิ์ในการลบข้อมูลการเคลื่อนไหวสต็อกยาง', 'danger')
         return redirect(url_for('daily_stock_report'))
     
     conn = get_db()
     try:
-        database.delete_tire_movement(conn, movement_id)
+        # ส่ง user id เข้าไปในฟังก์ชัน และรับค่าที่ return กลับมา
+        item_details, move_type, quantity_change = database.delete_tire_movement(conn, movement_id, current_user.id)
+        
+        # สร้าง Notification
+        message = (
+            f"ลบรายการสต็อกยาง: {item_details} "
+            f"ประเภท [{move_type}] จำนวน {quantity_change} เส้น "
+            f"โดย {current_user.username}"
+        )
+        database.add_notification(conn, message, current_user.id)
+        conn.commit() # Commit ทั้งการลบและการเพิ่ม Notification
+        
         flash('ลบข้อมูลการเคลื่อนไหวสต็อกยางสำเร็จ และปรับยอดคงเหลือแล้ว!', 'success')
+        
+        # เคลียร์ Cache
         cache.delete_memoized(get_cached_tires)
         cache.delete_memoized(get_all_tires_list_cached)
+        cache.delete_memoized(get_cached_unread_notification_count) # เคลียร์ cache กระดิ่ง
+
     except ValueError as e:
+        conn.rollback()
         flash(f'ไม่สามารถลบข้อมูลการเคลื่อนไหวสต็อกยางได้: {e}', 'danger')
     except Exception as e:
+        conn.rollback()
         flash(f'เกิดข้อผิดพลาดในการลบข้อมูลการเคลื่อนไหวสต็อกยาง: {e}', 'danger')
     
     return redirect(url_for('daily_stock_report'))
@@ -2468,20 +2509,36 @@ def delete_tire_movement_action(movement_id):
 @app.route('/delete_wheel_movement/<int:movement_id>', methods=['POST'])
 @login_required
 def delete_wheel_movement_action(movement_id):
-    # ตรวจสอบสิทธิ์: เฉพาะ Admin เท่านั้นที่ลบประวัติการเคลื่อนไหวได้
     if not current_user.is_admin():
         flash('คุณไม่มีสิทธิ์ในการลบข้อมูลการเคลื่อนไหวสต็อกแม็ก', 'danger')
         return redirect(url_for('daily_stock_report'))
     
     conn = get_db()
     try:
-        database.delete_wheel_movement(conn, movement_id)
+        # ส่ง user id เข้าไปในฟังก์ชัน และรับค่าที่ return กลับมา
+        item_details, move_type, quantity_change = database.delete_wheel_movement(conn, movement_id, current_user.id)
+        
+        # สร้าง Notification
+        message = (
+            f"ลบรายการสต็อกแม็ก: {item_details} "
+            f"ประเภท [{move_type}] จำนวน {quantity_change} วง "
+            f"โดย {current_user.username}"
+        )
+        database.add_notification(conn, message, current_user.id)
+        conn.commit() # Commit ทั้งการลบและการเพิ่ม Notification
+        
         flash('ลบข้อมูลการเคลื่อนไหวสต็อกแม็กสำเร็จ และปรับยอดคงเหลือแล้ว!', 'success')
+        
+        # เคลียร์ Cache
         cache.delete_memoized(get_cached_wheels)
         cache.delete_memoized(get_all_wheels_list_cached)
+        cache.delete_memoized(get_cached_unread_notification_count) # เคลียร์ cache กระดิ่ง
+
     except ValueError as e:
+        conn.rollback()
         flash(f'ไม่สามารถลบข้อมูลการเคลื่อนไหวสต็อกแม็กได้: {e}', 'danger')
     except Exception as e:
+        conn.rollback()
         flash(f'เกิดข้อผิดพลาดในการลบข้อมูลการเคลื่อนไหวสต็อกแม็ก: {e}', 'danger')
     
     return redirect(url_for('daily_stock_report'))
@@ -2620,10 +2677,23 @@ def edit_spare_part_movement(movement_id):
             new_return_customer_type = None
 
         try:
+            old_type = movement_data['type']
+            old_quantity_change = movement_data['quantity_change']
+
             database.update_spare_part_movement(conn, movement_id, new_notes, bill_image_url_to_db,
                                             new_type, new_quantity_change,
                                             final_new_channel_id, final_new_online_platform_id,
                                             final_new_wholesale_customer_id, new_return_customer_type)
+
+            spare_part_info = f"{movement_data['spare_part_name']} ({movement_data.get('spare_part_brand', 'ไม่ระบุยี่ห้อ')})"
+            message = (
+                f"แก้ไขสต็อกอะไหล่: {spare_part_info} "
+                f"จาก [{old_type}] {old_quantity_change} ชิ้น เป็น [{new_type}] {new_quantity_change} ชิ้น "
+                f"โดย {current_user.username}"
+            )
+            database.add_notification(conn, message, current_user.id)
+            conn.commit()
+
             flash('แก้ไขข้อมูลการเคลื่อนไหวสต็อกอะไหล่สำเร็จ!', 'success')
             cache.delete_memoized(get_cached_spare_parts)
             return redirect(url_for('daily_stock_report', tab='spare_part_movements_history')) # Redirect to spare parts history on daily report
@@ -2649,12 +2719,29 @@ def delete_spare_part_movement_action(movement_id):
 
     conn = get_db()
     try:
-        database.delete_spare_part_movement(conn, movement_id)
+        # ส่ง user id เข้าไปในฟังก์ชัน และรับค่าที่ return กลับมา
+        item_details, move_type, quantity_change = database.delete_spare_part_movement(conn, movement_id, current_user.id)
+        
+        # สร้าง Notification
+        message = (
+            f"ลบรายการสต็อกอะไหล่: {item_details} "
+            f"ประเภท [{move_type}] จำนวน {quantity_change} ชิ้น "
+            f"โดย {current_user.username}"
+        )
+        database.add_notification(conn, message, current_user.id)
+        conn.commit() # Commit ทั้งการลบและการเพิ่ม Notification
+
         flash('ลบข้อมูลการเคลื่อนไหวสต็อกอะไหล่สำเร็จ และปรับยอดคงเหลือแล้ว!', 'success')
+
+        # เคลียร์ Cache
         cache.delete_memoized(get_cached_spare_parts)
+        cache.delete_memoized(get_cached_unread_notification_count) # เคลียร์ cache กระดิ่ง
+
     except ValueError as e:
+        conn.rollback()
         flash(f'ไม่สามารถลบข้อมูลการเคลื่อนไหวสต็อกอะไหล่ได้: {e}', 'danger')
     except Exception as e:
+        conn.rollback()
         flash(f'เกิดข้อผิดพลาดในการลบข้อมูลการเคลื่อนไหวสต็อกอะไหล่: {e}', 'danger')
 
     return redirect(url_for('daily_stock_report', tab='spare_part_movements_history'))

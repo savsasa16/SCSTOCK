@@ -6,12 +6,38 @@
 <div class="container mt-4">
     <h1 class="mb-4">การแจ้งเตือนทั้งหมด</h1>
 
+    <!-- START: โค้ดที่แก้ไขและเพิ่มเข้ามา -->
+    <style>
+        .text-edit-notification {
+            color: #E67E22 !important; /* สีส้ม สำหรับการแก้ไข */
+            font-weight: 500;
+        }
+        .text-delete-notification {
+            color: #E74C3C !important; /* สีแดง สำหรับการลบ */
+            font-weight: 500;
+        }
+    </style>
+    <!-- END: โค้ดที่แก้ไขและเพิ่มเข้ามา -->
+
     <div class="list-group">
         {% if notifications %}
             {% for notif in notifications %}
             <div class="list-group-item list-group-item-action flex-column align-items-start">
                 <div class="d-flex w-100 justify-content-between">
-                    <p class="mb-1">{{ notif.message }}</p>
+                    
+                    <!-- START: โค้dที่แก้ไข -->
+                    {% if 'ลบ' in notif.message %}
+                        {# ถ้าในข้อความมีคำว่า "ลบ" ให้ใช้ class สีแดง #}
+                        <p class="mb-1 text-delete-notification">{{ notif.message }}</p>
+                    {% elif 'แก้ไข' in notif.message %}
+                        {# ถ้าในข้อความมีคำว่า "แก้ไข" ให้ใช้ class สีส้ม #}
+                        <p class="mb-1 text-edit-notification">{{ notif.message }}</p>
+                    {% else %}
+                        {# ถ้าไม่มี ก็ใช้ p tag เดิม (สีดำ) #}
+                        <p class="mb-1">{{ notif.message }}</p>
+                    {% endif %}
+                    <!-- END: โค้ดที่แก้ไข -->
+
                     <small class="text-muted">
                         {{ notif.created_at.strftime('%d %b %Y %H:%M') }}
                     </small>
