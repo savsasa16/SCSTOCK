@@ -787,6 +787,7 @@ def init_db(conn):
                 channel_id INTEGER NULL,
                 online_platform_id INTEGER NULL,
                 wholesale_customer_id INTEGER NULL,
+                commission_amount REAL NULL,
                 return_customer_type VARCHAR(50) NULL,
                 FOREIGN KEY (spare_part_id) REFERENCES spare_parts(id),
                 FOREIGN KEY (user_id) REFERENCES users(id),
@@ -809,6 +810,7 @@ def init_db(conn):
                 user_id INTEGER NULL,
                 channel_id INTEGER NULL,
                 online_platform_id INTEGER NULL,
+                commission_amount REAL NULL,
                 wholesale_customer_id INTEGER NULL,
                 return_customer_type TEXT NULL,
                 FOREIGN KEY (spare_part_id) REFERENCES spare_parts(id),
@@ -1825,14 +1827,16 @@ def add_spare_part_movement(conn, spare_part_id, move_type, quantity_change, rem
 
     commission_amount = 0.0
 
-    # --- START: MODIFIED COMMISSION LOGIC ---
     if move_type == 'OUT' and channel_id:
         sales_channel_name = get_sales_channel_name(conn, channel_id)
         
         if sales_channel_name == 'หน้าร้าน':
-            commission_program = None
-            comm_query = "SELECT commission_amount_per_item FROM daily_commissions WHERE item_type = 'spare_part' AND item_id = ? AND commission_date = ?"
-            comm_params = (spare_part_id, timestamp.strftime('%Y-%m-%d'))
+            date_str = timestamp.strftime('%Y-%m-%d')
+            # --- START: แก้ไขชื่อตารางตรงนี้ ---
+            comm_query = "SELECT commission_amount_per_item FROM commission_programs WHERE item_type = 'spare_part' AND item_id = ? AND start_date <= ? AND (end_date IS NULL OR end_date >= ?)"
+            # --- END: แก้ไขชื่อตารางตรงนี้ ---
+            comm_params = (spare_part_id, date_str, date_str)
+            
             if is_postgres:
                 comm_query = comm_query.replace('?', '%s')
             
@@ -1842,9 +1846,9 @@ def add_spare_part_movement(conn, spare_part_id, move_type, quantity_change, rem
             if commission_program:
                 commission_per_item = commission_program['commission_amount_per_item']
                 commission_amount = commission_per_item * quantity_change
-    # --- END: MODIFIED COMMISSION LOGIC ---
 
-    if is_postgres:
+    # ... (ส่วน INSERT INTO ไม่ต้องแก้ไข) ...
+    if "psycopg2" in str(type(conn)):
         cursor.execute("""
             INSERT INTO spare_part_movements (spare_part_id, timestamp, type, quantity_change, remaining_quantity, notes, image_filename, user_id,
                                         channel_id, online_platform_id, wholesale_customer_id, return_customer_type,
@@ -1965,6 +1969,41 @@ def add_promotion(conn, name, promo_type, value1, value2, is_active):
         promo_id = cursor.lastrowid
     conn.commit()
     return promo_id
+
+def get_spare_part_movement(conn, movement_id):
+    cursor = conn.cursor()
+    if "psycopg2" in str(type(conn)):
+        cursor.execute("""
+            SELECT spm.*, sp.name AS spare_part_name, sp.part_number, sp.brand AS spare_part_brand, u.username,
+                   sc.name AS channel_name,
+                   op.name AS online_platform_name,
+                   wc.name AS wholesale_customer_name
+            FROM spare_part_movements spm
+            JOIN spare_parts sp ON spm.spare_part_id = sp.id
+            LEFT JOIN users u ON spm.user_id = u.id
+            LEFT JOIN sales_channels sc ON spm.channel_id = sc.id
+            LEFT JOIN online_platforms op ON spm.online_platform_id = op.id
+            LEFT JOIN wholesale_customers wc ON spm.wholesale_customer_id = wc.id
+            WHERE spm.id = %s
+        """, (movement_id,))
+    else: # SQLite
+        cursor.execute("""
+            SELECT spm.*, sp.name AS spare_part_name, sp.part_number, sp.brand AS spare_part_brand, u.username,
+                   sc.name AS channel_name,
+                   op.name AS online_platform_name,
+                   wc.name AS wholesale_customer_name
+            FROM spare_part_movements spm
+            JOIN spare_parts sp ON spm.spare_part_id = sp.id
+            LEFT JOIN users u ON spm.user_id = u.id
+            LEFT JOIN sales_channels sc ON spm.channel_id = sc.id
+            LEFT JOIN online_platforms op ON spm.online_platform_id = op.id
+            LEFT JOIN wholesale_customers wc ON spm.wholesale_customer_id = wc.id
+            WHERE spm.id = ?
+        """, (movement_id,))
+    movement_data = cursor.fetchone()
+    if movement_data:
+        return dict(movement_data)
+    return None
 
 def get_promotion(conn, promo_id):
     cursor = conn.cursor()
@@ -2865,17 +2904,16 @@ def add_tire_movement(conn, tire_id, move_type, quantity_change, remaining_quant
 
     commission_amount = 0.0
 
-    # --- START: MODIFIED COMMISSION LOGIC ---
     if move_type == 'OUT' and channel_id:
-        # ดึงชื่อช่องทางการขายจาก channel_id
         sales_channel_name = get_sales_channel_name(conn, channel_id)
         
-        # ตรวจสอบว่าช่องทางเป็น 'หน้าร้าน' หรือไม่
         if sales_channel_name == 'หน้าร้าน':
-            # ค้นหาว่ามีโปรแกรมคอมมิชชั่นสำหรับสินค้านี้ในวันนี้หรือไม่
-            commission_program = None
-            comm_query = "SELECT commission_amount_per_item FROM daily_commissions WHERE item_type = 'tire' AND item_id = ? AND commission_date = ?"
-            comm_params = (tire_id, timestamp.strftime('%Y-%m-%d'))
+            date_str = timestamp.strftime('%Y-%m-%d')
+            # --- START: แก้ไขชื่อตารางตรงนี้ ---
+            comm_query = "SELECT commission_amount_per_item FROM commission_programs WHERE item_type = 'tire' AND item_id = ? AND start_date <= ? AND (end_date IS NULL OR end_date >= ?)"
+            # --- END: แก้ไขชื่อตารางตรงนี้ ---
+            comm_params = (tire_id, date_str, date_str)
+
             if is_postgres:
                 comm_query = comm_query.replace('?', '%s')
             
@@ -2885,8 +2923,8 @@ def add_tire_movement(conn, tire_id, move_type, quantity_change, remaining_quant
             if commission_program:
                 commission_per_item = commission_program['commission_amount_per_item']
                 commission_amount = commission_per_item * quantity_change
-    # --- END: MODIFIED COMMISSION LOGIC ---
 
+    # ... (ส่วน INSERT INTO ไม่ต้องแก้ไข) ...
     if is_postgres:
         cursor.execute("""
             INSERT INTO tire_movements (tire_id, timestamp, type, quantity_change, remaining_quantity, notes, image_filename, user_id,
@@ -3096,14 +3134,15 @@ def add_wheel_movement(conn, wheel_id, move_type, quantity_change, remaining_qua
 
     commission_amount = 0.0
 
-    # --- START: MODIFIED COMMISSION LOGIC ---
     if move_type == 'OUT' and channel_id:
         sales_channel_name = get_sales_channel_name(conn, channel_id)
         
         if sales_channel_name == 'หน้าร้าน':
-            commission_program = None
-            comm_query = "SELECT commission_amount_per_item FROM daily_commissions WHERE item_type = 'wheel' AND item_id = ? AND commission_date = ?"
-            comm_params = (wheel_id, timestamp.strftime('%Y-%m-%d'))
+            date_str = timestamp.strftime('%Y-%m-%d')
+            # --- START: แก้ไขชื่อตารางตรงนี้ ---
+            comm_query = "SELECT commission_amount_per_item FROM commission_programs WHERE item_type = 'wheel' AND item_id = ? AND start_date <= ? AND (end_date IS NULL OR end_date >= ?)"
+            # --- END: แก้ไขชื่อตารางตรงนี้ ---
+            comm_params = (wheel_id, date_str, date_str)
             if is_postgres:
                 comm_query = comm_query.replace('?', '%s')
             
@@ -3113,8 +3152,8 @@ def add_wheel_movement(conn, wheel_id, move_type, quantity_change, remaining_qua
             if commission_program:
                 commission_per_item = commission_program['commission_amount_per_item']
                 commission_amount = commission_per_item * quantity_change
-    # --- END: MODIFIED COMMISSION LOGIC ---
 
+    # ... (ส่วน INSERT INTO ไม่ต้องแก้ไข) ...
     if is_postgres:
         cursor.execute("""
             INSERT INTO wheel_movements (wheel_id, timestamp, type, quantity_change, remaining_quantity, notes, image_filename, user_id,

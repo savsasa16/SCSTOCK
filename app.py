@@ -1607,6 +1607,7 @@ def edit_spare_part(spare_part_id):
                 flash('แก้ไขข้อมูลอะไหล่สำเร็จ!', 'success')
                 cache.delete_memoized(get_cached_spare_parts)
                 cache.delete_memoized(get_cached_spare_part_brands)
+                cache.delete_memoized(get_all_spare_parts_list_cached)
                 return redirect(url_for('spare_part_detail', spare_part_id=spare_part_id))
             except ValueError:
                 flash('ข้อมูลตัวเลขไม่ถูกต้อง กรุณาตรวจสอบ', 'danger')
@@ -1720,6 +1721,12 @@ def get_all_wheels_list_cached():
     conn = get_db()
     return database.get_all_wheels(conn, include_deleted=False)
 
+@cache.memoize(timeout=600)
+def get_all_spare_parts_list_cached():
+    print("--- CACHE MISS (All Spare Parts List) --- Fetching complete spare part list from DB")
+    conn = get_db()
+    return database.get_all_spare_parts(conn)
+
 
 # --- Stock Movement Routes (Movement editing) (assuming these are already in your app.py) ---
 @app.route('/stock_movement', methods=('GET', 'POST'))
@@ -1732,7 +1739,7 @@ def stock_movement():
 
     tires = get_all_tires_list_cached()
     wheels = get_all_wheels_list_cached()
-    spare_parts = database.get_all_spare_parts(conn) # NEW: Get all spare parts for dropdown
+    spare_parts = get_all_spare_parts_list_cached() # NEW: Get all spare parts for dropdown
 
     sales_channels = get_all_sales_channels_cached()
     online_platforms = get_all_online_platforms_cached()
@@ -2742,6 +2749,8 @@ def delete_spare_part_movement_action(movement_id):
         # เคลียร์ Cache
         cache.delete_memoized(get_cached_spare_parts)
         cache.delete_memoized(get_cached_unread_notification_count) # เคลียร์ cache กระดิ่ง
+        cache.delete_memoized(get_all_spare_parts_list_cached)
+        cache.delete_memoized(get_cached_spare_part_brands)
 
     except ValueError as e:
         conn.rollback()
