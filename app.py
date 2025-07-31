@@ -2719,6 +2719,8 @@ def edit_spare_part_movement(movement_id):
 
             flash('แก้ไขข้อมูลการเคลื่อนไหวสต็อกอะไหล่สำเร็จ!', 'success')
             cache.delete_memoized(get_cached_spare_parts)
+            cache.delete_memoized(get_cached_unread_notification_count)
+            cache.delete_memoized(get_all_spare_parts_list_cached)
             return redirect(url_for('daily_stock_report', tab='spare_part_movements_history')) # Redirect to spare parts history on daily report
         except ValueError as e:
             flash(f'ข้อมูลไม่ถูกต้อง: {e}', 'danger')
@@ -6059,7 +6061,9 @@ def api_process_stock_transaction():
         conn.commit()
         if tires_moved: cache.delete_memoized(get_cached_tires); cache.delete_memoized(get_all_tires_list_cached)
         if wheels_moved: cache.delete_memoized(get_cached_wheels); cache.delete_memoized(get_all_wheels_list_cached)
-        if spare_parts_moved: cache.delete_memoized(get_cached_spare_parts)
+        if spare_parts_moved: 
+            cache.delete_memoized(get_cached_spare_parts)
+            cache.delete_memoized(get_all_spare_parts_list_cached)
         
         return jsonify({"success": True, "message": f"ทำรายการ {transaction_type} สำเร็จสำหรับ {len(items_to_process)} ประเภทสินค้า"}), 200
 
@@ -6499,6 +6503,10 @@ def bulk_stock_movement():
             print("--- CACHE CLEARED for Spare Parts ---")
 
         conn.commit()
+        if tires_were_moved or wheels_were_moved or spare_parts_were_moved:
+            cache.delete_memoized(get_cached_unread_notification_count)
+            print("--- CACHE CLEARED for Unread Notification Count ---")
+
         return jsonify({"success": True, "message": f"บันทึกการทำรายการ {len(items)} รายการสำเร็จ!"})
 
     except ValueError as e:
@@ -6977,6 +6985,15 @@ def api_correct_movement():
                 new_return_customer_type=data.get('return_customer_type')
             )
         conn.commit()
+        if item_type == 'tire':
+            cache.delete_memoized(get_cached_tires)
+            cache.delete_memoized(get_all_tires_list_cached)
+        elif item_type == 'wheel':
+            cache.delete_memoized(get_cached_wheels)
+            cache.delete_memoized(get_all_wheels_list_cached)
+        elif item_type == 'spare_part':
+            cache.delete_memoized(get_cached_spare_parts)
+            cache.delete_memoized(get_all_spare_parts_list_cached)
         return jsonify({"success": True, "message": "แก้ไขรายการสำเร็จ!"})
     except Exception as e:
         conn.rollback()
