@@ -524,12 +524,16 @@ def process_spare_part_report_data(all_spare_parts, include_summary_in_output=Tr
 @login_required
 def index():
     conn = get_db()
+    today = get_bkk_time().date()
 
     tire_query = request.args.get('tire_query', '').strip()
     tire_selected_brand = request.args.get('tire_brand_filter', 'all').strip()
     is_tire_search_active = bool(tire_query or (tire_selected_brand and tire_selected_brand != 'all'))
     all_tires_raw = get_cached_tires(tire_query, tire_selected_brand)
     available_tire_brands = get_cached_tire_brands()
+    todays_commissions_raw = database.get_commission_programs_for_date(conn, today)
+    todays_commissions = {f"{p['item_type']}-{p['item_id']}": p['commission_amount_per_item'] for p in todays_commissions_raw}
+
 
     # NEW: Filter tire data based on viewing permissions before sending to template
     tires_for_display_filtered_by_permissions = []
@@ -633,7 +637,8 @@ def index():
                            spare_parts_by_category_and_brand=spare_parts_by_category_and_brand, # NEW
                            tire_query=tire_query,
                            available_tire_brands=available_tire_brands,
-                           tire_selected_brand=tire_selected_brand,
+                           todays_commissions=todays_commissions, # NEW
+                           tire_selected_brand=tire_selected_brand, 
                            wheel_query=wheel_query,
                            available_wheel_brands=available_wheel_brands,
                            wheel_selected_brand=wheel_selected_brand,
@@ -7024,7 +7029,7 @@ def api_search_all_items():
     # COALESCE handles NULL values, replacing them with empty strings for concatenation
     wheel_size_search_col_sql = f"LOWER(COALESCE(w.diameter, '') || 'x' || COALESCE(w.width, '') || ' ' || COALESCE(w.pcd, '') || ' ET' || COALESCE(w.et, '') || ' ' || COALESCE(w.color, ''))"
     if is_postgres:
-        wheel_size_search_col_sql = f"LOWER(CONCAT(w.diameter, 'x', w.width, ' ', COALESCE(w.pcd, ''), ' ET', COALESCE(w.et, ''), ' ', COALESCE(w.color, '')))"
+        wheel_size_search_col_sql = f"LOWER(CONCAT(w.diameter::TEXT, 'x', w.width::TEXT, ' ', COALESCE(w.pcd, ''), ' ET', COALESCE(w.et::TEXT, ''), ' ', COALESCE(w.color, '')))"
 
 
     tire_query = f"""
@@ -7032,7 +7037,7 @@ def api_search_all_items():
         FROM tires t
         WHERE t.is_deleted = { 'FALSE' if is_postgres else '0' }
         AND (LOWER(t.brand) {like_op} {placeholder} OR LOWER(t.model) {like_op} {placeholder} OR LOWER(t.size) {like_op} {placeholder})
-        LIMIT 10
+        LIMIT 30
     """
 
     # For wheels, explicitly select all relevant columns for formatting in Python
@@ -7041,7 +7046,7 @@ def api_search_all_items():
         FROM wheels w
         WHERE w.is_deleted = { 'FALSE' if is_postgres else '0' }
         AND (LOWER(w.brand) {like_op} {placeholder} OR LOWER(w.model) {like_op} {placeholder} OR LOWER(w.pcd) {like_op} {placeholder} OR {wheel_size_search_col_sql} {like_op} {placeholder})
-        LIMIT 10
+        LIMIT 30
     """
 
     # For spare parts, select all relevant original column names
@@ -7050,7 +7055,7 @@ def api_search_all_items():
         FROM spare_parts sp
         WHERE sp.is_deleted = { 'FALSE' if is_postgres else '0' }
         AND (LOWER(sp.name) {like_op} {placeholder} OR LOWER(sp.part_number) {like_op} {placeholder} OR LOWER(sp.brand) {like_op} {placeholder})
-        LIMIT 10
+        LIMIT 30
     """
 
     results_raw = []
@@ -7411,6 +7416,270 @@ def get_tire_cost_history(conn, tire_id):
         history.append(history_item)
         
     return history
+
+
+@app.route('/api/update_tire_cost', methods=['POST'])
+@login_required
+def api_update_tire_cost():
+    # ตรวจสอบสิทธิ์: ต้องเป็น Admin หรือ Editor และต้องมีสิทธิ์ดูราคาทุน
+    if not current_user.can_edit() or not current_user.can_view_cost():
+        return jsonify({"success": False, "message": "คุณไม่มีสิทธิ์ในการแก้ไขราคาทุน"}), 403
+
+    data = request.get_json()
+    tire_id = data.get('tire_id')
+    cost_type = data.get('cost_type')
+    new_cost = data.get('new_cost')
+
+    # ตรวจสอบว่าข้อมูลที่ส่งมาครบถ้วน
+    if not all([tire_id, cost_type]):
+        return jsonify({"success": False, "message": "ข้อมูลไม่สมบูรณ์"}), 400
+
+    # ตรวจสอบว่า cost_type เป็นค่าที่อนุญาตเพื่อป้องกัน SQL Injection
+    allowed_cost_types = ['cost_sc', 'cost_dunlop', 'cost_online']
+    if cost_type not in allowed_cost_types:
+        return jsonify({"success": False, "message": "ประเภทของราคาทุนไม่ถูกต้อง"}), 400
+
+    conn = get_db()
+    try:
+        # เรียกใช้ฟังก์ชันใหม่ใน database.py
+        database.update_single_tire_cost(
+            conn=conn,
+            tire_id=tire_id,
+            cost_type=cost_type,
+            new_cost=new_cost,
+            user_id=current_user.id
+        )
+        conn.commit()
+
+        # เคลียร์ Cache ที่เกี่ยวข้องเพื่อให้ข้อมูลหน้าเว็บอัปเดต
+        cache.delete_memoized(get_cached_tires)
+        cache.delete_memoized(get_all_tires_list_cached)
+
+        return jsonify({"success": True, "message": "อัปเดตราคาทุนสำเร็จ"})
+
+    except ValueError as e:
+        conn.rollback()
+        return jsonify({"success": False, "message": str(e)}), 404
+    except Exception as e:
+        conn.rollback()
+        current_app.logger.error(f"Error in api_update_tire_cost: {e}", exc_info=True)
+        return jsonify({"success": False, "message": "เกิดข้อผิดพลาดในเซิร์ฟเวอร์"}), 500
+
+@app.route('/api/get_item_details_for_modal')
+@login_required
+def api_get_item_details_for_modal():
+    # ตรวจสอบสิทธิ์เบื้องต้นว่าผู้ใช้ login อยู่หรือไม่
+    if not current_user.is_authenticated:
+        return jsonify({"success": False, "message": "Unauthorized"}), 401
+
+    item_type = request.args.get('item_type')
+    item_id = request.args.get('item_id', type=int)
+
+    if not item_type or not item_id:
+        return jsonify({"success": False, "message": "ข้อมูลไม่ครบถ้วน"}), 400
+
+    conn = get_db()
+    item_details = None
+    
+    try:
+        if item_type == 'tire':
+            item_details = database.get_tire(conn, item_id)
+        elif item_type == 'wheel':
+            item_details = database.get_wheel(conn, item_id)
+        elif item_type == 'spare_part':
+            item_details = database.get_spare_part(conn, item_id)
+        else:
+            return jsonify({"success": False, "message": "ประเภทสินค้าไม่ถูกต้อง"}), 400
+
+        if item_details:
+            # แปลง Row object เป็น Dictionary เพื่อให้ jsonify ทำงานได้ถูกต้อง
+            details_dict = dict(item_details)
+            return jsonify({"success": True, "details": details_dict})
+        else:
+            return jsonify({"success": False, "message": "ไม่พบข้อมูลสินค้า"}), 404
+            
+    except Exception as e:
+        current_app.logger.error(f"Error fetching item details for modal: {e}", exc_info=True)
+        return jsonify({"success": False, "message": "เกิดข้อผิดพลาดในเซิร์ฟเวอร์"}), 500
+
+@app.route('/api/update_item_from_modal', methods=['POST'])
+@login_required
+def api_update_item_from_modal():
+    # ตรวจสอบสิทธิ์: ต้องเป็น Admin หรือ Editor เท่านั้น
+    if not current_user.can_edit():
+        return jsonify({"success": False, "message": "คุณไม่มีสิทธิ์ในการแก้ไขข้อมูล"}), 403
+
+    data = request.get_json()
+    item_type = data.get('item_type')
+    item_id = data.get('item_id')
+
+    if not item_type or not item_id:
+        return jsonify({"success": False, "message": "ข้อมูลไม่ครบถ้วน"}), 400
+
+    conn = get_db()
+    try:
+        # --- Logic for Tire ---
+        if item_type == 'tire':
+            # ดึงข้อมูลเดิมเพื่อเปรียบเทียบราคาทุน
+            old_tire_data = database.get_tire(conn, item_id)
+            if not old_tire_data:
+                raise ValueError("ไม่พบข้อมูลยางที่ต้องการแก้ไข")
+
+            # รับค่าใหม่จากฟอร์มใน Modal
+            new_brand = data.get('brand').strip().lower()
+            new_model = data.get('model').strip().lower()
+            new_size = data.get('size').strip()
+            
+            # แปลงค่าราคาทุน (จัดการกรณีที่ผู้ใช้ลบค่าออก)
+            new_cost_sc = float(data['cost_sc']) if data.get('cost_sc') else None
+            new_cost_dunlop = float(data['cost_dunlop']) if data.get('cost_dunlop') else None
+            new_cost_online = float(data['cost_online']) if data.get('cost_online') else None
+
+            # ตรวจสอบและบันทึกประวัติการเปลี่ยนแปลงราคาทุน
+            if current_user.can_view_cost() and old_tire_data.get('cost_sc') != new_cost_sc:
+                database.add_tire_cost_history(
+                    conn=conn,
+                    tire_id=item_id,
+                    old_cost=old_tire_data.get('cost_sc'),
+                    new_cost=new_cost_sc,
+                    user_id=current_user.id,
+                    notes="แก้ไขผ่าน Modal จากหน้า Stock Movement"
+                )
+            
+            # อัปเดตข้อมูลยางทั้งหมด (ใช้ฟังก์ชันเดิม)
+            database.update_tire(conn, item_id, new_brand, new_model, new_size,
+                                 new_cost_sc, new_cost_dunlop, new_cost_online,
+                                 old_tire_data['wholesale_price1'], old_tire_data['wholesale_price2'],
+                                 old_tire_data['price_per_item'], old_tire_data['promotion_id'],
+                                 old_tire_data['year_of_manufacture'])
+            
+            # เคลียร์ Cache ที่เกี่ยวข้อง
+            cache.delete_memoized(get_cached_tires)
+            cache.delete_memoized(get_cached_tire_brands)
+
+        # --- Logic for Wheel (สามารถเพิ่มได้ในอนาคต) ---
+        elif item_type == 'wheel':
+            # (ใส่โค้ดสำหรับอัปเดตข้อมูลแม็กที่นี่)
+            pass
+
+        # --- Logic for Spare Part (สามารถเพิ่มได้ในอนาคต) ---
+        elif item_type == 'spare_part':
+            # (ใส่โค้ดสำหรับอัปเดตข้อมูลอะไหล่ที่นี่)
+            pass
+            
+        else:
+            raise ValueError("ประเภทสินค้าไม่ถูกต้อง")
+
+        conn.commit()
+        return jsonify({"success": True, "message": "บันทึกการเปลี่ยนแปลงสำเร็จ!"})
+
+    except Exception as e:
+        conn.rollback()
+        current_app.logger.error(f"Error in update_item_from_modal: {e}", exc_info=True)
+        return jsonify({"success": False, "message": f"เกิดข้อผิดพลาด: {str(e)}"}), 500
+
+@app.route('/manage_daily_commission', methods=['GET', 'POST'])
+@login_required
+def manage_daily_commission():
+    if not current_user.is_admin():
+        flash('คุณไม่มีสิทธิ์เข้าถึงหน้านี้', 'danger')
+        return redirect(url_for('index'))
+
+    conn = get_db()
+    
+    if request.method == 'POST':
+        action = request.form.get('action')
+        if action == 'set':
+            try:
+                item_identifier = request.form.get('item_select')
+                amount = request.form.get('commission_amount', type=float)
+                start_date = datetime.strptime(request.form.get('start_date'), '%Y-%m-%d').date()
+                
+                end_date_str = request.form.get('end_date')
+                no_end_date = 'no_end_date' in request.form
+                
+                end_date = None
+                if not no_end_date and end_date_str:
+                    end_date = datetime.strptime(end_date_str, '%Y-%m-%d').date()
+                    if end_date < start_date:
+                        raise ValueError("วันที่สิ้นสุดต้องไม่น้อยกว่าวันที่เริ่มต้น")
+
+                if item_identifier and amount is not None and amount >= 0:
+                    item_type, item_id = item_identifier.split('-')
+                    database.set_commission_program(conn, start_date, end_date, item_type, int(item_id), amount, current_user.id)
+                    flash('ตั้งค่าโปรแกรมคอมมิชชั่นสำเร็จ!', 'success')
+                else:
+                    flash('ข้อมูลไม่ครบถ้วนหรือไม่ถูกต้อง', 'danger')
+            except ValueError as e:
+                flash(str(e), 'danger')
+
+        elif action == 'delete':
+            program_id = request.form.get('program_id', type=int)
+            if program_id:
+                database.delete_commission_program(conn, program_id)
+                flash('ลบโปรแกรมคอมมิชชั่นสำเร็จ', 'success')
+
+        return redirect(url_for('manage_daily_commission'))
+    
+    # สำหรับ GET request (แสดงผล)
+    today = get_bkk_time().date()
+    commission_programs = database.get_commission_programs_for_date(conn, today)
+
+    return render_template('manage_daily_commission.html',
+                           programs=commission_programs,
+                           today_str=today.strftime('%Y-%m-%d'),
+                           current_user=current_user)
+
+@app.route('/commission_summary_report', methods=['GET', 'POST'])
+@login_required
+def commission_summary_report():
+    if not current_user.is_admin():
+        flash('คุณไม่มีสิทธิ์เข้าถึงหน้านี้', 'danger')
+        return redirect(url_for('index'))
+
+    conn = get_db()
+    
+    date_str = request.args.get('date', get_bkk_time().strftime('%Y-%m-%d'))
+    try:
+        selected_date = datetime.strptime(date_str, '%Y-%m-%d').date()
+    except ValueError:
+        selected_date = get_bkk_time().date()
+
+    if request.method == 'POST':
+        try:
+            num_items = database.calculate_and_log_commission_summary(conn, selected_date)
+            flash(f'ปิดยอดและสรุปค่าคอมมิชชั่นสำหรับวันที่ {date_str} สำเร็จ ({num_items} รายการ)!', 'success')
+        except ValueError as e:
+            flash(str(e), 'warning')
+        except Exception as e:
+            flash(f'เกิดข้อผิดพลาด: {e}', 'danger')
+        return redirect(url_for('commission_summary_report', date=date_str))
+
+    # --- START: แก้ไขส่วนนี้ ---
+    summary_log_query = "SELECT details_json FROM commission_summary_log WHERE summary_date = ?"
+    if "psycopg2" in str(type(conn)):
+        summary_log_query = summary_log_query.replace('?', '%s')
+    
+    cursor = conn.cursor()
+    cursor.execute(summary_log_query, (date_str,))
+    log_result = cursor.fetchone()
+
+    summary_data = []
+    is_summarized = False
+    if log_result:
+        summary_data = json.loads(log_result['details_json'])
+        is_summarized = True
+    else:
+        # ถ้ายังไม่มี Log ให้ดึงข้อมูลสดมาแสดง
+        summary_data = database.get_live_commission_summary(conn, selected_date)
+        is_summarized = False
+    # --- END: แก้ไขส่วนนี้ ---
+
+    return render_template('commission_summary_report.html',
+                           summary_data=summary_data,
+                           is_summarized=is_summarized,
+                           selected_date_str=date_str,
+                           current_user=current_user)
 
 # --- Main entry point ---
 if __name__ == '__main__':

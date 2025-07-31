@@ -1,0 +1,85 @@
+{% extends 'base.html' %}
+{% block title %}รายงานสรุปคอมมิชชั่น{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <h1 class="mb-4">รายงานสรุปคอมมิชชั่น</h1>
+
+    <div class="card mb-4">
+        <div class="card-body">
+            <form id="date-form" method="GET" action="{{ url_for('commission_summary_report') }}">
+                <div class="row align-items-end">
+                    <div class="col-md-4">
+                        <label for="date" class="form-label">เลือกวันที่</label>
+                        <input type="date" class="form-control" id="date" name="date" value="{{ selected_date_str }}">
+                    </div>
+                    {% if not is_summarized %}
+                    <div class="col-md-4">
+                        <form method="POST" action="{{ url_for('commission_summary_report', date=selected_date_str) }}" onsubmit="return confirm('คุณต้องการปิดยอดและสรุปข้อมูลของวันนี้ใช่หรือไม่? การกระทำนี้ไม่สามารถย้อนกลับได้')">
+                             <button type="submit" class="btn btn-warning">ปิดยอดและสรุปค่าคอมมิชชั่น</button>
+                        </form>
+                    </div>
+                     {% endif %}
+                </div>
+            </form>
+        </div>
+    </div>
+    
+    <div class="card">
+        <div class="card-header">
+            {% if is_summarized %}
+                ข้อมูลสรุปคอมมิชชั่นสำหรับวันที่ {{ selected_date_str }} (ปิดยอดแล้ว)
+            {% else %}
+                ยอดขายและคอมมิชชั่น (ยังไม่ปิดยอด)
+            {% endif %}
+        </div>
+        <div class="card-body">
+            <table class="table table-hover">
+                <thead>
+                    <tr>
+                        <th>สินค้า</th>
+                        <th class="text-center">จำนวนที่ขาย (หน่วย)</th>
+                        <th class="text-end">ยอดคอมมิชชั่นรวม (บาท)</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in summary_data %}
+                    <tr>
+                        <td>{{ item.item_description }}</td>
+                        <td class="text-center">{{ item.total_units_sold | int }}</td>
+                        <td class="text-end fw-bold">{{ "%.2f"|format(item.total_commission) }}</td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="3" class="text-center text-muted">ไม่พบข้อมูล</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+                {% if summary_data %}
+                <tfoot>
+                    <tr class="table-dark">
+                        <td class="text-end fw-bold" colspan="2">รวมค่าคอมมิชชั่นทั้งหมด</td>
+                        <td class="text-end fw-bold">
+                            {{ "%.2f"|format(summary_data | sum(attribute='total_commission')) }}
+                        </td>
+                    </tr>
+                </tfoot>
+                {% endif %}
+            </table>
+             {% if not is_summarized %}
+                <div class="alert alert-info mt-3">
+                    <strong>หมายเหตุ:</strong> ข้อมูลนี้เป็นข้อมูล ณ ปัจจุบัน หากมีการขายเพิ่มในวันนี้ ยอดจะอัปเดตตามจริงจนกว่าจะกด "ปิดยอด"
+                </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.getElementById('date').addEventListener('change', function() {
+    document.getElementById('date-form').submit();
+});
+</script>
+{% endblock %}

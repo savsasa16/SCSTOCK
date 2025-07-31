@@ -96,13 +96,26 @@
                                     <tbody>
                                         {% for item in brand_data.items_list %}
                                             <tr class="{% if item.quantity <= 5 %}table-danger{% elif item.quantity <= 10 %}table-warning{% endif %}">
-                                                <td>{{ item.model | title }}</td>
+                                                <td>{{ item.model | title }}
+                                                    {% set commission_key = 'tire-' ~ item.id %}
+                                                    {% if commission_key in todays_commissions %}
+                                                        <span title="ค่าคอม {{ todays_commissions[commission_key] }} บาท">
+                                                            💰
+                                                        </span>
+                                                    {% endif %}
+                                                </td>
                                                 <td>{{ item.size }}</td>
                                                 <td class="text-center fw-bold">{{ item.quantity }}</td>
                                                 {% if current_user.can_view_cost() %}
-                                                    <td class="text-end">{{ "{:,.0f}".format(item.get('cost_sc')) if item.get('cost_sc') is not none else '-' }}</td>
-                                                    <td class="text-end">{{ "{:,.0f}".format(item.get('cost_dunlop')) if item.get('cost_dunlop') is not none else '-' }}</td>
-                                                    <td class="text-end">{{ "{:,.0f}".format(item.get('cost_online')) if item.get('cost_online') is not none else '-' }}</td>
+                                                    <td class="text-end editable-cost" data-tire-id="{{ item.id }}" data-cost-type="cost_sc">
+                                                        <span>{{ "{:,.0f}".format(item.get('cost_sc')) if item.get('cost_sc') is not none else '-' }}</span>
+                                                    </td>
+                                                    <td class="text-end editable-cost" data-tire-id="{{ item.id }}" data-cost-type="cost_dunlop">
+                                                        <span>{{ "{:,.0f}".format(item.get('cost_dunlop')) if item.get('cost_dunlop') is not none else '-' }}</span>
+                                                    </td>
+                                                    <td class="text-end editable-cost" data-tire-id="{{ item.id }}" data-cost-type="cost_online">
+                                                        <span>{{ "{:,.0f}".format(item.get('cost_online')) if item.get('cost_online') is not none else '-' }}</span>
+                                                    </td>
                                                 {% endif %}
                                                 {% if current_user.can_view_wholesale_price_1() %}
                                                     <td class="text-center">{{ "{:,.0f}".format(item.get('wholesale_price1')) if item.get('wholesale_price1') is not none else '-' }}</td>
@@ -173,7 +186,14 @@
                                                     <i class="fas fa-image text-muted"></i>
                                                 {% endif %}
                                             </td>                                            
-                                            <td>{{ item.model }}</td>
+                                            <td>{{ item.model }}
+                                                {% set commission_key = 'wheel-' ~ item.id %}
+                                                {% if commission_key in todays_commissions %}
+                                                    <span title="ค่าคอม {{ todays_commissions[commission_key] }} บาท">
+                                                        💰
+                                                    </span>
+                                                {% endif %}
+                                            </td>
                                             <td>{{ "%.0f"|format(item.diameter) }}x{{ "%.0f"|format(item.width) }}</td>
                                             <td>{{ item.pcd }} {{ 'ET'+item.et|string if item.et else '' }}</td>
                                             <td>{{ item.color if item.color else '-' }}</td>
@@ -257,7 +277,14 @@
                                                             <i class="fas fa-image text-muted"></i>
                                                         {% endif %}
                                                     </td>
-                                                    <td>{{ item.name }}</td>
+                                                    <td>{{ item.name }}
+                                                        {% set commission_key = 'spare_part-' ~ item.id %}
+                                                        {% if commission_key in todays_commissions %}
+                                                            <span title="ค่าคอม {{ todays_commissions[commission_key] }} บาท">
+                                                                💰
+                                                            </span>
+                                                        {% endif %}
+                                                    </td>
                                                     <td>{{ item.part_number if item.part_number else '-' }}</td>
                                                     <td class="text-center fw-bold">{{ item.quantity }}</td>
                                                     {% if current_user.can_view_cost() %}
@@ -421,10 +448,115 @@
     
         // Initialize form on page load based on the active_tab from Flask
         setupSearchFormForTab(activeTabInput.value);
-    });
+
+        // --- START: NEW SCRIPT FOR INLINE COST EDITING ---
+        document.querySelectorAll('.editable-cost').forEach(cell => {
+            const span = cell.querySelector('span');
+            
+            cell.addEventListener('click', () => {
+                // Prevent turning into input if it's already an input
+                if (cell.querySelector('input')) {
+                    return;
+                }
+
+                const originalValueText = span.textContent.trim().replace(/,/g, '');
+                const originalValue = originalValueText === '-' ? '' : originalValueText;
+
+                // Create input element
+                const input = document.createElement('input');
+                input.type = 'number';
+                input.className = 'form-control form-control-sm';
+                input.value = originalValue;
+                input.style.width = '100px'; // Adjust width as needed
+
+                // Replace span with input
+                cell.innerHTML = '';
+                cell.appendChild(input);
+                input.focus();
+                input.select();
+
+                // Handle blur (losing focus) - revert if no change
+                input.addEventListener('blur', () => {
+                    setTimeout(() => { // Use timeout to allow click on save button
+                        if (!document.activeElement.classList.contains('btn-save-cost')) {
+                             cell.innerHTML = '';
+                             cell.appendChild(span);
+                        }
+                    }, 200);
+                });
+
+                // Handle Enter key press
+                input.addEventListener('keydown', (e) => {
+                    if (e.key === 'Enter') {
+                        e.preventDefault();
+                        saveCost(cell, input.value, originalValue, span);
+                    } else if (e.key === 'Escape') {
+                        cell.innerHTML = '';
+                        cell.appendChild(span);
+                    }
+                });
+            });
+        });
+
+        function saveCost(cell, newValue, originalValue, originalSpan) {
+            const newCost = newValue.trim() === '' ? null : parseFloat(newValue);
+            const tireId = cell.dataset.tireId;
+            const costType = cell.dataset.costType;
+
+            if (newCost === parseFloat(originalValue) || (newCost === null && originalValue === '')) {
+                cell.innerHTML = '';
+                cell.appendChild(originalSpan);
+                return;
+            }
+            
+            const confirmationMessage = `คุณแน่ใจหรือไม่ว่าต้องการอัปเดตทุนนี้เป็น ${newCost !== null ? newCost.toLocaleString() : 'ไม่มีค่า'}?`;
+            if (!confirm(confirmationMessage)) {
+                cell.innerHTML = '';
+                cell.appendChild(originalSpan);
+                return;
+            }
+
+            fetch('/api/update_tire_cost', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    tire_id: tireId,
+                    cost_type: costType,
+                    new_cost: newCost
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    originalSpan.textContent = newCost !== null ? newCost.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 }) : '-';
+                    cell.innerHTML = '';
+                    cell.appendChild(originalSpan);
+                    
+                    // Visual feedback
+                    cell.classList.add('bg-success', 'text-white');
+                    setTimeout(() => {
+                        cell.classList.remove('bg-success', 'text-white');
+                    }, 1500);
+
+                } else {
+                    alert('เกิดข้อผิดพลาด: ' + data.message);
+                    cell.innerHTML = '';
+                    cell.appendChild(originalSpan);
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('เกิดข้อผิดพลาดในการเชื่อมต่อกับเซิร์ฟเวอร์');
+                cell.innerHTML = '';
+                cell.appendChild(originalSpan);
+            });
+        }
+        // --- END: NEW SCRIPT FOR INLINE COST EDITING ---
     
-    // NEW: Image Modal Logic
-    document.querySelectorAll('.img-clickable').forEach(img => {
+        // NEW: Image Modal Logic
+        document.querySelectorAll('.img-clickable').forEach(img => {
             img.addEventListener('click', function() {
                 const imageUrl = this.dataset.imageSrc;
                 if (imageUrl) {
@@ -434,5 +566,6 @@
                 }
             });
         });
+    });
     </script>
 {% endblock %}

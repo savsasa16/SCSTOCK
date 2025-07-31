@@ -35,6 +35,14 @@
     .total-line span {
         opacity: 0.9;
     }
+    /* Style for Modal Details */
+    .detail-label {
+        font-weight: bold;
+        color: #555;
+    }
+    .detail-value {
+        padding-left: 10px;
+    }
 </style>
 {% endblock %}
 
@@ -170,10 +178,27 @@
                 <h5>ประวัติล่าสุด (ยาง)</h5>
                 <div class="table-responsive">
                     <table class="table table-striped table-hover table-sm align-middle">
-                        <thead class="table-light"><tr><th>เวลา</th><th>ข้อมูล</th><th>ประเภท</th><th>จำนวน</th><th>คงเหลือ</th><th>ช่องทาง/ลูกค้า</th><th>พนักงาน</th><th>หมายเหตุ</th><th class="text-center">หลักฐาน</th>{% if current_user.is_admin() %}<th class="text-center">จัดการ</th>{% endif %}</tr></thead>
+                        <thead class="table-light"><tr><th>เวลา</th><th>ข้อมูล</th><th>ประเภท</th><th>จำนวน</th><th>คงเหลือ</th><th>ช่องทาง/ลูกค้า</th><th>พนักงาน</th><th>หมายเหตุ</th><th class="text-center">หลักฐาน</th>{% if current_user.can_edit() %}<th class="text-center">จัดการ</th>{% endif %}</tr></thead>
                         <tbody>
                             {% for m in tire_movements %}
-                            <tr><td>{{ m.timestamp.strftime('%d/%m %H:%M') }}</td><td>{{ m.brand }} {{ m.model }} {{ m.size }}</td><td>{% if m.type=='IN' %}<span class="badge text-bg-success">รับเข้า</span>{% elif m.type=='OUT' %}<span class="badge text-bg-danger">จ่ายออก</span>{% elif m.type=='RETURN' %}<span class="badge text-bg-info">รับคืน</span>{% endif %}</td><td>{{ m.quantity_change }}</td><td>{{ m.remaining_quantity }}</td><td>{% if m.channel_name=='ออนไลน์'%}{{m.online_platform_name|default('-')}}{% elif m.channel_name=='ค้าส่ง'%}{{m.wholesale_customer_name|default('-')}}{% elif m.type=='RETURN' and m.return_customer_type%}{{m.return_customer_type}}{% if m.return_customer_type=='ออนไลน์'%}({{m.online_platform_name|default('-')}}){% elif m.return_customer_type=='หน้าร้านร้านยาง'%}({{m.wholesale_customer_name|default('-')}}){% endif %}{% else %}{{m.channel_name|default('-')}}{% endif %}</td><td>{{ m.user_username|default('-') }}</td><td>{{ m.notes|default('-')}}</td><td class="text-center">{% if m.image_filename %}<a href="{{ m.image_filename }}" target="_blank"><i class="fas fa-image"></i></a>{% else %}-{% endif %}</td>{% if current_user.is_admin() %}<td class="text-center"><div class="d-flex gap-1 justify-content-center"><a href="{{url_for('edit_tire_movement', movement_id=m.id)}}" class="btn btn-warning btn-sm" title="แก้ไข"><i class="fas fa-edit"></i></a><form action="{{url_for('delete_tire_movement_action', movement_id=m.id)}}" method="POST" class="d-inline" onsubmit="return confirm('ยืนยันการลบ?');"><button type="submit" class="btn btn-danger btn-sm" title="ลบ"><i class="fas fa-trash-alt"></i></button></form></div></td>{% endif %}</tr>
+                            <tr><td>{{ m.timestamp.strftime('%d/%m %H:%M') }}</td><td>{{ m.brand }} {{ m.model }} {{ m.size }}</td><td>{% if m.type=='IN' %}<span class="badge text-bg-success">รับเข้า</span>{% elif m.type=='OUT' %}<span class="badge text-bg-danger">จ่ายออก</span>{% elif m.type=='RETURN' %}<span class="badge text-bg-info">รับคืน</span>{% endif %}</td><td>{{ m.quantity_change }}</td><td>{{ m.remaining_quantity }}</td><td>{% if m.channel_name=='ออนไลน์'%}{{m.online_platform_name|default('-')}}{% elif m.channel_name=='ค้าส่ง'%}{{m.wholesale_customer_name|default('-')}}{% elif m.type=='RETURN' and m.return_customer_type%}{{m.return_customer_type}}{% if m.return_customer_type=='ออนไลน์'%}({{m.online_platform_name|default('-')}}){% elif m.return_customer_type=='หน้าร้านร้านยาง'%}({{m.wholesale_customer_name|default('-')}}){% endif %}{% else %}{{m.channel_name|default('-')}}{% endif %}</td><td>{{ m.user_username|default('-') }}</td><td>{{ m.notes|default('-')}}</td><td class="text-center">{% if m.image_filename %}<a href="{{ m.image_filename }}" target="_blank"><i class="fas fa-image"></i></a>{% else %}-{% endif %}</td>
+                            {% if current_user.can_edit() %}
+                                <td class="text-center">
+                                    <div class="d-flex gap-1 justify-content-center">
+                                        <button type="button" class="btn btn-primary btn-sm btn-edit-item" 
+                                                data-item-type="tire" 
+                                                data-item-id="{{ m.tire_main_id }}" 
+                                                title="แก้ไขข้อมูลสินค้า">
+                                            <i class="fas fa-edit"></i>
+                                        </button>
+                                        <a href="{{url_for('edit_tire_movement', movement_id=m.id)}}" class="btn btn-warning btn-sm" title="แก้ไข Movement"><i class="fas fa-history"></i></a>
+                                        {% if current_user.is_admin() %}
+                                        <form action="{{url_for('delete_tire_movement_action', movement_id=m.id)}}" method="POST" class="d-inline" onsubmit="return confirm('ยืนยันการลบ?');"><button type="submit" class="btn btn-danger btn-sm" title="ลบ"><i class="fas fa-trash-alt"></i></button></form>
+                                        {% endif %}
+                                    </div>
+                                </td>
+                            {% endif %}
+                            </tr>
                             {% else %}<tr><td colspan="10" class="text-center text-muted">ยังไม่มีประวัติ</td></tr>{% endfor %}
                         </tbody>
                     </table>
@@ -183,10 +208,27 @@
                 <h5>ประวัติล่าสุด (แม็ก)</h5>
                 <div class="table-responsive">
                     <table class="table table-striped table-hover table-sm align-middle">
-                        <thead class="table-light"><tr><th>เวลา</th><th>ข้อมูล</th><th>ประเภท</th><th>จำนวน</th><th>คงเหลือ</th><th>ช่องทาง/ลูกค้า</th><th>พนักงาน</th><th>หมายเหตุ</th><th class="text-center">หลักฐาน</th>{% if current_user.is_admin() %}<th class="text-center">จัดการ</th>{% endif %}</tr></thead>
+                        <thead class="table-light"><tr><th>เวลา</th><th>ข้อมูล</th><th>ประเภท</th><th>จำนวน</th><th>คงเหลือ</th><th>ช่องทาง/ลูกค้า</th><th>พนักงาน</th><th>หมายเหตุ</th><th class="text-center">หลักฐาน</th>{% if current_user.can_edit() %}<th class="text-center">จัดการ</th>{% endif %}</tr></thead>
                         <tbody>
                             {% for m in wheel_movements %}
-                            <tr><td>{{ m.timestamp.strftime('%d/%m %H:%M') }}</td><td>{{ m.brand }} {{ m.model }} {{ "%.1f"|format(m.diameter) }}</td><td>{% if m.type=='IN' %}<span class="badge text-bg-success">รับเข้า</span>{% elif m.type=='OUT' %}<span class="badge text-bg-danger">จ่ายออก</span>{% elif m.type=='RETURN' %}<span class="badge text-bg-info">รับคืน</span>{% endif %}</td><td>{{ m.quantity_change }}</td><td>{{ m.remaining_quantity }}</td><td>{% if m.channel_name=='ออนไลน์'%}{{m.online_platform_name|default('-')}}{% elif m.channel_name=='ค้าส่ง'%}{{m.wholesale_customer_name|default('-')}}{% elif m.type=='RETURN' and m.return_customer_type%}{{m.return_customer_type}}{% if m.return_customer_type=='ออนไลน์'%}({{m.online_platform_name|default('-')}}){% elif m.return_customer_type=='หน้าร้านร้านยาง'%}({{m.wholesale_customer_name|default('-')}}){% endif %}{% else %}{{m.channel_name|default('-')}}{% endif %}</td><td>{{ m.user_username|default('-') }}</td><td>{{ m.notes|default('-')}}</td><td class="text-center">{% if m.image_filename %}<a href="{{ m.image_filename }}" target="_blank"><i class="fas fa-image"></i></a>{% else %}-{% endif %}</td>{% if current_user.is_admin() %}<td class="text-center"><div class="d-flex gap-1 justify-content-center"><a href="{{url_for('edit_wheel_movement', movement_id=m.id)}}" class="btn btn-warning btn-sm" title="แก้ไข"><i class="fas fa-edit"></i></a><form action="{{url_for('delete_wheel_movement_action', movement_id=m.id)}}" method="POST" class="d-inline" onsubmit="return confirm('ยืนยันการลบ?');"><button type="submit" class="btn btn-danger btn-sm" title="ลบ"><i class="fas fa-trash-alt"></i></button></form></div></td>{% endif %}</tr>
+                            <tr><td>{{ m.timestamp.strftime('%d/%m %H:%M') }}</td><td>{{ m.brand }} {{ m.model }} {{ "%.1f"|format(m.diameter) }}</td><td>{% if m.type=='IN' %}<span class="badge text-bg-success">รับเข้า</span>{% elif m.type=='OUT' %}<span class="badge text-bg-danger">จ่ายออก</span>{% elif m.type=='RETURN' %}<span class="badge text-bg-info">รับคืน</span>{% endif %}</td><td>{{ m.quantity_change }}</td><td>{{ m.remaining_quantity }}</td><td>{% if m.channel_name=='ออนไลน์'%}{{m.online_platform_name|default('-')}}{% elif m.channel_name=='ค้าส่ง'%}{{m.wholesale_customer_name|default('-')}}{% elif m.type=='RETURN' and m.return_customer_type%}{{m.return_customer_type}}{% if m.return_customer_type=='ออนไลน์'%}({{m.online_platform_name|default('-')}}){% elif m.return_customer_type=='หน้าร้านร้านยาง'%}({{m.wholesale_customer_name|default('-')}}){% endif %}{% else %}{{m.channel_name|default('-')}}{% endif %}</td><td>{{ m.user_username|default('-') }}</td><td>{{ m.notes|default('-')}}</td><td class="text-center">{% if m.image_filename %}<a href="{{ m.image_filename }}" target="_blank"><i class="fas fa-image"></i></a>{% else %}-{% endif %}</td>
+                            {% if current_user.can_edit() %}
+                                <td class="text-center">
+                                    <div class="d-flex gap-1 justify-content-center">
+                                        <button type="button" class="btn btn-primary btn-sm btn-edit-item" 
+                                                data-item-type="wheel" 
+                                                data-item-id="{{ m.wheel_main_id }}" 
+                                                title="แก้ไขข้อมูลสินค้า">
+                                            <i class="fas fa-edit"></i>
+                                        </button>
+                                        <a href="{{url_for('edit_wheel_movement', movement_id=m.id)}}" class="btn btn-warning btn-sm" title="แก้ไข Movement"><i class="fas fa-history"></i></a>
+                                        {% if current_user.is_admin() %}
+                                        <form action="{{url_for('delete_wheel_movement_action', movement_id=m.id)}}" method="POST" class="d-inline" onsubmit="return confirm('ยืนยันการลบ?');"><button type="submit" class="btn btn-danger btn-sm" title="ลบ"><i class="fas fa-trash-alt"></i></button></form>
+                                        {% endif %}
+                                    </div>
+                                </td>
+                            {% endif %}
+                            </tr>
                             {% else %}<tr><td colspan="10" class="text-center text-muted">ยังไม่มีประวัติ</td></tr>{% endfor %}
                         </tbody>
                     </table>
@@ -196,10 +238,27 @@
                 <h5>ประวัติล่าสุด (อะไหล่)</h5>
                 <div class="table-responsive">
                     <table class="table table-striped table-hover table-sm align-middle">
-                        <thead class="table-light"><tr><th>เวลา</th><th>ข้อมูล</th><th>ประเภท</th><th>จำนวน</th><th>คงเหลือ</th><th>ช่องทาง/ลูกค้า</th><th>พนักงาน</th><th>หมายเหตุ</th><th class="text-center">หลักฐาน</th>{% if current_user.is_admin() %}<th class="text-center">จัดการ</th>{% endif %}</tr></thead>
+                        <thead class="table-light"><tr><th>เวลา</th><th>ข้อมูล</th><th>ประเภท</th><th>จำนวน</th><th>คงเหลือ</th><th>ช่องทาง/ลูกค้า</th><th>พนักงาน</th><th>หมายเหตุ</th><th class="text-center">หลักฐาน</th>{% if current_user.can_edit() %}<th class="text-center">จัดการ</th>{% endif %}</tr></thead>
                         <tbody>
                             {% for m in spare_part_movements %}
-                            <tr><td>{{ m.timestamp.strftime('%d/%m %H:%M') }}</td><td>{{ m.spare_part_name }} ({{ m.spare_part_brand if m.spare_part_brand else '-' }})</td><td>{% if m.type=='IN' %}<span class="badge text-bg-success">รับเข้า</span>{% elif m.type=='OUT' %}<span class="badge text-bg-danger">จ่ายออก</span>{% elif m.type=='RETURN' %}<span class="badge text-bg-info">รับคืน</span>{% endif %}</td><td>{{ m.quantity_change }}</td><td>{{ m.remaining_quantity }}</td><td>{% if m.channel_name=='ออนไลน์'%}{{m.online_platform_name|default('-')}}{% elif m.channel_name=='ค้าส่ง'%}{{m.wholesale_customer_name|default('-')}}{% elif m.type=='RETURN' and m.return_customer_type%}{{m.return_customer_type}}{% if m.return_customer_type=='ออนไลน์'%}({{m.online_platform_name|default('-')}}){% elif m.return_customer_type=='หน้าร้านร้านยาง'%}({{m.wholesale_customer_name|default('-')}}){% endif %}{% else %}{{m.channel_name|default('-')}}{% endif %}</td><td>{{ m.user_username|default('-') }}</td><td>{{ m.notes|default('-')}}</td><td class="text-center">{% if m.image_filename %}<a href="{{ m.image_filename }}" target="_blank"><i class="fas fa-image"></i></a>{% else %}-{% endif %}</td>{% if current_user.is_admin() %}<td class="text-center"><div class="d-flex gap-1 justify-content-center"><a href="{{url_for('edit_spare_part_movement', movement_id=m.id)}}" class="btn btn-warning btn-sm" title="แก้ไข"><i class="fas fa-edit"></i></a><form action="{{url_for('delete_spare_part_movement_action', movement_id=m.id)}}" method="POST" class="d-inline" onsubmit="return confirm('ยืนยันการลบ?');"><button type="submit" class="btn btn-danger btn-sm" title="ลบ"><i class="fas fa-trash-alt"></i></button></form></div></td>{% endif %}</tr>
+                            <tr><td>{{ m.timestamp.strftime('%d/%m %H:%M') }}</td><td>{{ m.spare_part_name }} ({{ m.spare_part_brand if m.spare_part_brand else '-' }})</td><td>{% if m.type=='IN' %}<span class="badge text-bg-success">รับเข้า</span>{% elif m.type=='OUT' %}<span class="badge text-bg-danger">จ่ายออก</span>{% elif m.type=='RETURN' %}<span class="badge text-bg-info">รับคืน</span>{% endif %}</td><td>{{ m.quantity_change }}</td><td>{{ m.remaining_quantity }}</td><td>{% if m.channel_name=='ออนไลน์'%}{{m.online_platform_name|default('-')}}{% elif m.channel_name=='ค้าส่ง'%}{{m.wholesale_customer_name|default('-')}}{% elif m.type=='RETURN' and m.return_customer_type%}{{m.return_customer_type}}{% if m.return_customer_type=='ออนไลน์'%}({{m.online_platform_name|default('-')}}){% elif m.return_customer_type=='หน้าร้านร้านยาง'%}({{m.wholesale_customer_name|default('-')}}){% endif %}{% else %}{{m.channel_name|default('-')}}{% endif %}</td><td>{{ m.user_username|default('-') }}</td><td>{{ m.notes|default('-')}}</td><td class="text-center">{% if m.image_filename %}<a href="{{ m.image_filename }}" target="_blank"><i class="fas fa-image"></i></a>{% else %}-{% endif %}</td>
+                            {% if current_user.can_edit() %}
+                            <td class="text-center">
+                                <div class="d-flex gap-1 justify-content-center">
+                                     <button type="button" class="btn btn-primary btn-sm btn-edit-item" 
+                                            data-item-type="spare_part" 
+                                            data-item-id="{{ m.spare_part_main_id }}" 
+                                            title="แก้ไขข้อมูลสินค้า">
+                                        <i class="fas fa-edit"></i>
+                                    </button>
+                                     <a href="{{url_for('edit_spare_part_movement', movement_id=m.id)}}" class="btn btn-warning btn-sm" title="แก้ไข Movement"><i class="fas fa-history"></i></a>
+                                    {% if current_user.is_admin() %}
+                                    <form action="{{url_for('delete_spare_part_movement_action', movement_id=m.id)}}" method="POST" class="d-inline" onsubmit="return confirm('ยืนยันการลบ?');"><button type="submit" class="btn btn-danger btn-sm" title="ลบ"><i class="fas fa-trash-alt"></i></button></form>
+                                    {% endif %}
+                                </div>
+                            </td>
+                            {% endif %}
+                            </tr>
                             {% else %}<tr><td colspan="10" class="text-center text-muted">ยังไม่มีประวัติ</td></tr>{% endfor %}
                         </tbody>
                     </table>
@@ -208,12 +267,37 @@
         </div>
     </div>
 </div>
+
+<div class="modal fade" id="itemEditModal" tabindex="-1" aria-labelledby="itemEditModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="itemEditModalLabel">แก้ไขข้อมูลสินค้า</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <div id="modal-edit-spinner" class="text-center">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+        </div>
+        <div id="modal-edit-content-area" style="display: none;">
+            </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">ยกเลิก</button>
+        <button type="button" id="modal-save-button" class="btn btn-primary"><i class="fas fa-save me-2"></i>บันทึกการเปลี่ยนแปลง</button>
+      </div>
+    </div>
+  </div>
+</div>
 {% endblock %}
 
 {% block scripts %}
 <script>
 // --- Global Data ---
 const salesChannels = JSON.parse('{{ sales_channels | tojson | safe }}');
+const canViewCost = {{ current_user.can_view_cost()|tojson }};
 
 // --- START: เพิ่มฟังก์ชันคำนวณยอดรวม ---
 function updateTotals() {
@@ -397,6 +481,33 @@ async function submitBulkTransaction() {
     }
 }
 
+// --- START: SCRIPT สำหรับ Modal แก้ไขข้อมูลสินค้า ---
+function buildTireEditFormHtml(details) {
+    const costFields = canViewCost ? `
+        <div class="row">
+            <div class="col-md-4"><label for="cost_sc" class="form-label">ทุน</label><input type="number" step="0.01" class="form-control" name="cost_sc" value="${details.cost_sc || ''}"></div>
+            <div class="col-md-4"><label for="cost_dunlop" class="form-label">ทุนล็อต</label><input type="number" step="0.01" class="form-control" name="cost_dunlop" value="${details.cost_dunlop || ''}"></div>
+            <div class="col-md-4"><label for="cost_online" class="form-label">ทุน Online</label><input type="number" step="0.01" class="form-control" name="cost_online" value="${details.cost_online || ''}"></div>
+        </div>
+    ` : '';
+
+    return `
+        <form id="modal-edit-form">
+            <input type="hidden" name="item_id" value="${details.id}">
+            <input type="hidden" name="item_type" value="tire">
+            <div class="row g-3">
+                <div class="col-md-4"><label for="brand" class="form-label">ยี่ห้อ*</label><input type="text" class="form-control" name="brand" value="${details.brand || ''}" required></div>
+                <div class="col-md-4"><label for="model" class="form-label">รุ่น*</label><input type="text" class="form-control" name="model" value="${details.model || ''}" required></div>
+                <div class="col-md-4"><label for="size" class="form-label">เบอร์*</label><input type="text" class="form-control" name="size" value="${details.size || ''}" required></div>
+            </div>
+            <hr>
+            ${costFields}
+        </form>
+    `;
+}
+// Add similar buildWheelEditFormHtml and buildSparePartEditFormHtml functions if needed
+// --- END: SCRIPT สำหรับ Modal ---
+
 document.addEventListener('DOMContentLoaded', function() {
     $('#tire_selector, #wheel_selector, #spare_part_selector, #common_channel_id, #online_platform_id, #wholesale_customer_id, #return_customer_type, #return_wholesale_customer_id, #return_online_platform_id').select2({
         width: '100%',
@@ -418,6 +529,78 @@ document.addEventListener('DOMContentLoaded', function() {
     $('body').on('change input', '.item-quantity', function() {
         updateTotals();
     });
+
+    // --- START: Event Listener สำหรับปุ่มแก้ไขใน Modal ---
+    const itemEditModal = new bootstrap.Modal(document.getElementById('itemEditModal'));
+    const modalEditSpinner = document.getElementById('modal-edit-spinner');
+    const modalEditContentArea = document.getElementById('modal-edit-content-area');
+    const modalSaveButton = document.getElementById('modal-save-button');
+
+    document.querySelectorAll('.btn-edit-item').forEach(button => {
+        button.addEventListener('click', async function() {
+            const itemType = this.dataset.itemType;
+            const itemId = this.dataset.itemId;
+
+            modalEditSpinner.style.display = 'block';
+            modalEditContentArea.style.display = 'none';
+            modalEditContentArea.innerHTML = '';
+            itemEditModal.show();
+
+            try {
+                const response = await fetch(`/api/get_item_details_for_modal?item_type=${itemType}&item_id=${itemId}`);
+                const data = await response.json();
+
+                if (data.success) {
+                    let htmlContent = '';
+                    if (itemType === 'tire') {
+                        htmlContent = buildTireEditFormHtml(data.details);
+                    } 
+                    // Add else if for wheel and spare_part here
+                    
+                    modalEditContentArea.innerHTML = htmlContent;
+                } else {
+                    modalEditContentArea.innerHTML = `<div class="alert alert-danger">${data.message}</div>`;
+                }
+            } catch (error) {
+                modalEditContentArea.innerHTML = '<div class="alert alert-danger">เกิดข้อผิดพลาดในการเชื่อมต่อ</div>';
+            } finally {
+                modalEditSpinner.style.display = 'none';
+                modalEditContentArea.style.display = 'block';
+            }
+        });
+    });
+
+    modalSaveButton.addEventListener('click', async function() {
+        const form = document.getElementById('modal-edit-form');
+        if (!form.checkValidity()) {
+            form.reportValidity();
+            return;
+        }
+
+        const formData = new FormData(form);
+        const data = Object.fromEntries(formData.entries());
+
+        if (!confirm('ยืนยันการแก้ไขข้อมูลสินค้า?')) return;
+        
+        try {
+            const response = await fetch('/api/update_item_from_modal', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data)
+            });
+            const result = await response.json();
+            if (result.success) {
+                alert(result.message);
+                itemEditModal.hide();
+                window.location.reload(); // Reload to see changes
+            } else {
+                alert('เกิดข้อผิดพลาด: ' + result.message);
+            }
+        } catch (error) {
+            alert('เกิดข้อผิดพลาดในการเชื่อมต่อกับเซิร์ฟเวอร์');
+        }
+    });
+    // --- END: Event Listener ---
 
     $('#common_movement_type').on('change', handleMovementTypeChange);
     $('#common_channel_id').on('change', handleChannelChange);

@@ -1,0 +1,212 @@
+{% extends 'base.html' %}
+
+{% block title %}จัดการโปรแกรมคอมมิชชั่น{% endblock %}
+
+
+
+{% block content %}<div class="container mt-4">
+
+<h1 class="mb-4">จัดการโปรแกรมคอมมิชชั่น</h1>
+
+
+<div class="card mb-4">
+
+<div class="card-header">เพิ่ม/แก้ไข โปรแกรมคอมมิชชั่น</div>
+
+<div class="card-body">
+
+<form method="POST" action="{{ url_for('manage_daily_commission') }}">
+
+<input type="hidden" name="action" value="set">
+
+<div class="row g-3 align-items-end">
+
+<div class="col-md-5">
+
+<label for="item_select" class="form-label">ค้นหาสินค้า</label>
+
+<select class="form-select" id="item_select" name="item_select" required></select>
+
+</div>
+
+<div class="col-md-2">
+
+<label for="start_date" class="form-label">วันที่เริ่ม</label>
+
+<input type="date" class="form-control" id="start_date" name="start_date" value="{{ today_str }}" required>
+
+</div>
+
+<div class="col-md-2">
+
+<label for="end_date" class="form-label">วันที่สิ้นสุด</label>
+
+<input type="date" class="form-control" id="end_date" name="end_date">
+
+</div>
+
+<div class="col-md-1 d-flex align-items-center">
+
+<div class="form-check">
+
+<input class="form-check-input" type="checkbox" id="no_end_date" name="no_end_date">
+
+<label class="form-check-label" for="no_end_date">ไม่มีสิ้นสุด</label>
+
+</div>
+
+</div>
+
+<div class="col-md-2">
+
+<label for="commission_amount" class="form-label">คอมมิชชั่น (บาท)</label>
+
+<input type="number" step="0.01" min="0" class="form-control" id="commission_amount" name="commission_amount" required>
+
+</div>
+
+</div>
+
+<div class="row mt-3">
+
+<div class="col-12 text-end">
+
+<button type="submit" class="btn btn-primary">บันทึกโปรแกรม</button>
+
+</div>
+
+</div>
+
+</form>
+
+</div>
+
+<div class="card-footer text-muted small">
+
+หมายเหตุ: การบันทึกโปรแกรมสำหรับสินค้าที่มีอยู่แล้ว จะเป็นการเขียนทับโปรแกรมเก่าของสินค้านั้นทั้งหมด
+
+</div>
+
+</div>
+
+
+
+<div class="card">
+
+<div class="card-header">รายการโปรแกรมคอมมิชชั่นที่ใช้งานในวันนี้ ({{ today_str }})</div>
+
+<div class="card-body">
+
+<table class="table table-sm">
+
+<thead>
+
+<tr>
+
+<th>สินค้า</th>
+
+<th>ช่วงเวลาโปรแกรม</th>
+
+<th class="text-end">ค่าคอมมิชชั่น (บาท/หน่วย)</th>
+
+<th class="text-end">จัดการ</th>
+
+</tr>
+
+</thead>
+
+<tbody>
+
+{% for prog in programs %}
+
+<tr>
+
+<td>{{ prog.item_description }}</td>
+
+<td>{{ prog.start_date }} ถึง {{ prog.end_date if prog.end_date else 'ไม่มีสิ้นสุด' }}</td>
+
+<td class="text-end">{{ "%.2f"|format(prog.commission_amount_per_item) }}</td>
+
+<td class="text-end">
+
+<form method="POST" action="{{ url_for('manage_daily_commission') }}" class="d-inline">
+
+<input type="hidden" name="action" value="delete">
+
+<input type="hidden" name="program_id" value="{{ prog.id }}">
+
+<button type="submit" class="btn btn-danger btn-sm">ลบ</button>
+
+</form>
+
+</td>
+
+</tr>
+
+{% else %}
+
+<tr><td colspan="4" class="text-center text-muted">ยังไม่มีโปรแกรมคอมมิชชั่นสำหรับวันนี้</td></tr>
+
+{% endfor %}
+
+</tbody>
+
+</table>
+
+</div>
+
+</div></div>
+
+{% endblock %}
+
+
+
+{% block scripts %}<script>document.addEventListener('DOMContentLoaded', function() {
+
+const endDateInput = document.getElementById('end_date');
+
+const noEndDateCheckbox = document.getElementById('no_end_date');
+
+
+
+noEndDateCheckbox.addEventListener('change', function() {
+
+endDateInput.disabled = this.checked;
+
+if (this.checked) {
+
+endDateInput.value = '';
+
+}
+
+});
+
+
+
+$('#item_select').select2({
+
+placeholder: 'พิมพ์เพื่อค้นหาสินค้า...',
+
+ajax: {
+
+url: "{{ url_for('api_search_all_items') }}",
+
+dataType: 'json',
+
+delay: 250,
+
+data: function (params) { return { q: params.term }; },
+
+processResults: function (data) { return { results: data.results }; },
+
+cache: true
+
+},
+
+minimumInputLength: 2
+
+});
+
+});</script>
+
+{% endblock %}

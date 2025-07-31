@@ -90,6 +90,57 @@ def init_db(conn):
     
     is_postgres = "psycopg2" in str(type(conn)) # จะคืนค่า True หาก conn เป็น psycopg2 connection
 
+    # Commission Programs Table (เปลี่ยนชื่อจาก daily_commissions)
+    if is_postgres:
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS commission_programs (
+                id SERIAL PRIMARY KEY,
+                start_date DATE NOT NULL,
+                end_date DATE NULL, -- NULL หมายถึงไม่มีวันสิ้นสุด
+                item_type VARCHAR(50) NOT NULL,
+                item_id INTEGER NOT NULL,
+                commission_amount_per_item REAL NOT NULL,
+                user_id INTEGER NULL,
+                created_at TIMESTAMP WITH TIME ZONE NOT NULL,
+                UNIQUE(item_type, item_id, start_date), -- ป้องกันการสร้างซ้ำในวันเริ่มต้นเดียวกัน
+                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
+            );
+        """)
+    else: # SQLite
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS commission_programs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                start_date TEXT NOT NULL,
+                end_date TEXT NULL, -- NULL หมายถึงไม่มีวันสิ้นสุด
+                item_type TEXT NOT NULL,
+                item_id INTEGER NOT NULL,
+                commission_amount_per_item REAL NOT NULL,
+                user_id INTEGER NULL,
+                created_at TEXT NOT NULL,
+                UNIQUE(item_type, item_id, start_date)
+            );
+        """)
+
+    # NEW: Commission Summary Log Table
+    if is_postgres:
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS commission_summary_log (
+                id SERIAL PRIMARY KEY,
+                summary_date DATE NOT NULL UNIQUE,
+                details_json TEXT NOT NULL, -- เก็บข้อมูลสรุปเป็น JSON
+                created_at TIMESTAMP WITH TIME ZONE NOT NULL
+            );
+        """)
+    else: # SQLite
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS commission_summary_log (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                summary_date TEXT NOT NULL UNIQUE,
+                details_json TEXT NOT NULL,
+                created_at TEXT NOT NULL
+            );
+        """)
+
     # Movements Deletion
     if is_postgres:
         cursor.execute("""
@@ -422,13 +473,12 @@ def init_db(conn):
                 notes TEXT,
                 image_filename VARCHAR(500) NULL,
                 user_id INTEGER NULL,
-                
                 -- NEW COLUMNS FOR DETAILED TRACKING
                 channel_id INTEGER NULL, -- หน้าร้าน, ออนไลน์, ค้าส่ง, ซื้อเข้า, รับคืน
                 online_platform_id INTEGER NULL, -- Shopee, Lazada, etc. (สำหรับ OUT/RETURN จากออนไลน์)
                 wholesale_customer_id INTEGER NULL, -- ร้าน 1, ร้าน 2 (สำหรับ OUT ค้าส่ง)
                 return_customer_type VARCHAR(50) NULL, -- 'หน้าร้านลูกค้า', 'หน้าร้านร้านยาง' (สำหรับ RETURN หน้าร้าน)
-
+                commission_amount REAL NULL,
                 FOREIGN KEY (tire_id) REFERENCES tires(id),
                 FOREIGN KEY (user_id) REFERENCES users(id),
                 FOREIGN KEY (channel_id) REFERENCES sales_channels(id),
@@ -448,7 +498,7 @@ def init_db(conn):
                 notes TEXT,
                 image_filename TEXT NULL,
                 user_id INTEGER NULL,
-
+                commission_amount REAL NULL,
                 -- NEW COLUMNS FOR DETAILED TRACKING
                 channel_id INTEGER NULL, 
                 online_platform_id INTEGER NULL,
@@ -476,13 +526,12 @@ def init_db(conn):
                 notes TEXT,
                 image_filename VARCHAR(500) NULL,
                 user_id INTEGER NULL,
-
+                commission_amount REAL NULL,
                 -- NEW COLUMNS FOR DETAILED TRACKING
                 channel_id INTEGER NULL, 
                 online_platform_id INTEGER NULL,
                 wholesale_customer_id INTEGER NULL,
                 return_customer_type VARCHAR(50) NULL,
-
                 FOREIGN KEY (wheel_id) REFERENCES wheels(id),
                 FOREIGN KEY (user_id) REFERENCES users(id),
                 FOREIGN KEY (channel_id) REFERENCES sales_channels(id),
@@ -502,7 +551,7 @@ def init_db(conn):
                 notes TEXT,
                 image_filename TEXT NULL,
                 user_id INTEGER NULL,
-
+                commission_amount REAL NULL,
                 -- NEW COLUMNS FOR DETAILED TRACKING
                 channel_id INTEGER NULL, 
                 online_platform_id INTEGER NULL,
@@ -1770,22 +1819,49 @@ def update_spare_part_quantity(conn, spare_part_id, new_quantity):
 
 def add_spare_part_movement(conn, spare_part_id, move_type, quantity_change, remaining_quantity, notes, image_filename=None, user_id=None,
                       channel_id=None, online_platform_id=None, wholesale_customer_id=None, return_customer_type=None):
-    timestamp = get_bkk_time().isoformat()
+    timestamp = get_bkk_time()
     cursor = conn.cursor()
-    if "psycopg2" in str(type(conn)):
+    is_postgres = "psycopg2" in str(type(conn))
+
+    commission_amount = 0.0
+
+    # --- START: MODIFIED COMMISSION LOGIC ---
+    if move_type == 'OUT' and channel_id:
+        sales_channel_name = get_sales_channel_name(conn, channel_id)
+        
+        if sales_channel_name == 'หน้าร้าน':
+            commission_program = None
+            comm_query = "SELECT commission_amount_per_item FROM daily_commissions WHERE item_type = 'spare_part' AND item_id = ? AND commission_date = ?"
+            comm_params = (spare_part_id, timestamp.strftime('%Y-%m-%d'))
+            if is_postgres:
+                comm_query = comm_query.replace('?', '%s')
+            
+            cursor.execute(comm_query, comm_params)
+            commission_program = cursor.fetchone()
+
+            if commission_program:
+                commission_per_item = commission_program['commission_amount_per_item']
+                commission_amount = commission_per_item * quantity_change
+    # --- END: MODIFIED COMMISSION LOGIC ---
+
+    if is_postgres:
         cursor.execute("""
             INSERT INTO spare_part_movements (spare_part_id, timestamp, type, quantity_change, remaining_quantity, notes, image_filename, user_id,
-                                        channel_id, online_platform_id, wholesale_customer_id, return_customer_type)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-        """, (spare_part_id, timestamp, move_type, quantity_change, remaining_quantity, notes, image_filename, user_id,
-              channel_id, online_platform_id, wholesale_customer_id, return_customer_type))
+                                        channel_id, online_platform_id, wholesale_customer_id, return_customer_type,
+                                        commission_amount)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        """, (spare_part_id, timestamp.isoformat(), move_type, quantity_change, remaining_quantity, notes, image_filename, user_id,
+              channel_id, online_platform_id, wholesale_customer_id, return_customer_type,
+              commission_amount))
     else:
         cursor.execute("""
             INSERT INTO spare_part_movements (spare_part_id, timestamp, type, quantity_change, remaining_quantity, notes, image_filename, user_id,
-                                        channel_id, online_platform_id, wholesale_customer_id, return_customer_type)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """, (spare_part_id, timestamp, move_type, quantity_change, remaining_quantity, notes, image_filename, user_id,
-              channel_id, online_platform_id, wholesale_customer_id, return_customer_type))
+                                        channel_id, online_platform_id, wholesale_customer_id, return_customer_type,
+                                        commission_amount)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (spare_part_id, timestamp.isoformat(), move_type, quantity_change, remaining_quantity, notes, image_filename, user_id,
+              channel_id, online_platform_id, wholesale_customer_id, return_customer_type,
+              commission_amount))
     conn.commit()
 
 def delete_spare_part(conn, spare_part_id):
@@ -2783,22 +2859,52 @@ def update_wheel_quantity(conn, wheel_id, new_quantity):
 
 def add_tire_movement(conn, tire_id, move_type, quantity_change, remaining_quantity, notes, image_filename=None, user_id=None,
                       channel_id=None, online_platform_id=None, wholesale_customer_id=None, return_customer_type=None):
-    timestamp = get_bkk_time().isoformat()
+    timestamp = get_bkk_time()
     cursor = conn.cursor()
-    if "psycopg2" in str(type(conn)):
+    is_postgres = "psycopg2" in str(type(conn))
+
+    commission_amount = 0.0
+
+    # --- START: MODIFIED COMMISSION LOGIC ---
+    if move_type == 'OUT' and channel_id:
+        # ดึงชื่อช่องทางการขายจาก channel_id
+        sales_channel_name = get_sales_channel_name(conn, channel_id)
+        
+        # ตรวจสอบว่าช่องทางเป็น 'หน้าร้าน' หรือไม่
+        if sales_channel_name == 'หน้าร้าน':
+            # ค้นหาว่ามีโปรแกรมคอมมิชชั่นสำหรับสินค้านี้ในวันนี้หรือไม่
+            commission_program = None
+            comm_query = "SELECT commission_amount_per_item FROM daily_commissions WHERE item_type = 'tire' AND item_id = ? AND commission_date = ?"
+            comm_params = (tire_id, timestamp.strftime('%Y-%m-%d'))
+            if is_postgres:
+                comm_query = comm_query.replace('?', '%s')
+            
+            cursor.execute(comm_query, comm_params)
+            commission_program = cursor.fetchone()
+
+            if commission_program:
+                commission_per_item = commission_program['commission_amount_per_item']
+                commission_amount = commission_per_item * quantity_change
+    # --- END: MODIFIED COMMISSION LOGIC ---
+
+    if is_postgres:
         cursor.execute("""
             INSERT INTO tire_movements (tire_id, timestamp, type, quantity_change, remaining_quantity, notes, image_filename, user_id,
-                                        channel_id, online_platform_id, wholesale_customer_id, return_customer_type)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-        """, (tire_id, timestamp, move_type, quantity_change, remaining_quantity, notes, image_filename, user_id,
-              channel_id, online_platform_id, wholesale_customer_id, return_customer_type))
+                                        channel_id, online_platform_id, wholesale_customer_id, return_customer_type,
+                                        commission_amount)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        """, (tire_id, timestamp.isoformat(), move_type, quantity_change, remaining_quantity, notes, image_filename, user_id,
+              channel_id, online_platform_id, wholesale_customer_id, return_customer_type,
+              commission_amount))
     else:
         cursor.execute("""
             INSERT INTO tire_movements (tire_id, timestamp, type, quantity_change, remaining_quantity, notes, image_filename, user_id,
-                                        channel_id, online_platform_id, wholesale_customer_id, return_customer_type)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """, (tire_id, timestamp, move_type, quantity_change, remaining_quantity, notes, image_filename, user_id,
-              channel_id, online_platform_id, wholesale_customer_id, return_customer_type))
+                                        channel_id, online_platform_id, wholesale_customer_id, return_customer_type,
+                                        commission_amount)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (tire_id, timestamp.isoformat(), move_type, quantity_change, remaining_quantity, notes, image_filename, user_id,
+              channel_id, online_platform_id, wholesale_customer_id, return_customer_type,
+              commission_amount))
     conn.commit()
 
 def delete_tire(conn, tire_id):
@@ -2984,22 +3090,49 @@ def update_wheel(conn, wheel_id, brand, model, diameter, pcd, width, et, color, 
 
 def add_wheel_movement(conn, wheel_id, move_type, quantity_change, remaining_quantity, notes, image_filename=None, user_id=None,
                        channel_id=None, online_platform_id=None, wholesale_customer_id=None, return_customer_type=None):
-    timestamp = get_bkk_time().isoformat()
+    timestamp = get_bkk_time()
     cursor = conn.cursor()
-    if "psycopg2" in str(type(conn)):
+    is_postgres = "psycopg2" in str(type(conn))
+
+    commission_amount = 0.0
+
+    # --- START: MODIFIED COMMISSION LOGIC ---
+    if move_type == 'OUT' and channel_id:
+        sales_channel_name = get_sales_channel_name(conn, channel_id)
+        
+        if sales_channel_name == 'หน้าร้าน':
+            commission_program = None
+            comm_query = "SELECT commission_amount_per_item FROM daily_commissions WHERE item_type = 'wheel' AND item_id = ? AND commission_date = ?"
+            comm_params = (wheel_id, timestamp.strftime('%Y-%m-%d'))
+            if is_postgres:
+                comm_query = comm_query.replace('?', '%s')
+            
+            cursor.execute(comm_query, comm_params)
+            commission_program = cursor.fetchone()
+
+            if commission_program:
+                commission_per_item = commission_program['commission_amount_per_item']
+                commission_amount = commission_per_item * quantity_change
+    # --- END: MODIFIED COMMISSION LOGIC ---
+
+    if is_postgres:
         cursor.execute("""
             INSERT INTO wheel_movements (wheel_id, timestamp, type, quantity_change, remaining_quantity, notes, image_filename, user_id,
-                                         channel_id, online_platform_id, wholesale_customer_id, return_customer_type)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-        """, (wheel_id, timestamp, move_type, quantity_change, remaining_quantity, notes, image_filename, user_id,
-              channel_id, online_platform_id, wholesale_customer_id, return_customer_type))
+                                         channel_id, online_platform_id, wholesale_customer_id, return_customer_type,
+                                         commission_amount)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        """, (wheel_id, timestamp.isoformat(), move_type, quantity_change, remaining_quantity, notes, image_filename, user_id,
+              channel_id, online_platform_id, wholesale_customer_id, return_customer_type,
+              commission_amount))
     else:
         cursor.execute("""
             INSERT INTO wheel_movements (wheel_id, timestamp, type, quantity_change, remaining_quantity, notes, image_filename, user_id,
-                                         channel_id, online_platform_id, wholesale_customer_id, return_customer_type)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """, (wheel_id, timestamp, move_type, quantity_change, remaining_quantity, notes, image_filename, user_id,
-              channel_id, online_platform_id, wholesale_customer_id, return_customer_type))
+                                         channel_id, online_platform_id, wholesale_customer_id, return_customer_type,
+                                         commission_amount)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (wheel_id, timestamp.isoformat(), move_type, quantity_change, remaining_quantity, notes, image_filename, user_id,
+              channel_id, online_platform_id, wholesale_customer_id, return_customer_type,
+              commission_amount))
     conn.commit()
 
 def add_wheel_import(conn, brand, model, diameter, pcd, width, et, color, quantity, cost, cost_online, wholesale_price1, wholesale_price2, retail_price, image_url):
@@ -3902,4 +4035,201 @@ def get_tire_cost_history(conn, tire_id):
         history.append(history_item)
         
     return history
+
+def update_single_tire_cost(conn, tire_id, cost_type, new_cost, user_id):
+    """
+    อัปเดตราคาทุนเพียงคอลัมน์เดียวสำหรับยางที่ระบุ และบันทึกประวัติการเปลี่ยนแปลง
+    """
+    # ตรวจสอบว่า cost_type เป็นค่าที่อนุญาตอีกครั้งเพื่อความปลอดภัย
+    allowed_cost_types = ['cost_sc', 'cost_dunlop', 'cost_online']
+    if cost_type not in allowed_cost_types:
+        raise ValueError("ประเภทของราคาทุนไม่ถูกต้อง")
+
+    cursor = conn.cursor()
+    is_postgres = "psycopg2" in str(type(conn))
+    placeholder = "%s" if is_postgres else "?"
+
+    # 1. ดึงข้อมูลราคาทุนเดิม
+    # SQL Injection is prevented by the check above
+    query_old_cost = f"SELECT {cost_type} FROM tires WHERE id = {placeholder}"
+    cursor.execute(query_old_cost, (tire_id,))
+    tire_data = cursor.fetchone()
+
+    if not tire_data:
+        raise ValueError("ไม่พบยางที่ระบุ")
+
+    old_cost = tire_data[cost_type]
+
+    # 2. เปรียบเทียบและบันทึกประวัติ (เฉพาะเมื่อมีการเปลี่ยนแปลง)
+    # แปลง new_cost เป็น float ถ้าไม่ใช่ None เพื่อการเปรียบเทียบที่แม่นยำ
+    new_cost_float = float(new_cost) if new_cost is not None else None
+
+    if old_cost != new_cost_float:
+        # เราจะบันทึกเฉพาะ cost_sc ลงใน history ตามโครงสร้างปัจจุบัน
+        # หากต้องการบันทึก cost_type อื่นๆ ด้วย อาจต้องปรับแก้ตาราง tire_cost_history
+        if cost_type == 'cost_sc':
+            add_tire_cost_history(
+                conn=conn,
+                tire_id=tire_id,
+                old_cost=old_cost,
+                new_cost=new_cost_float,
+                user_id=user_id,
+                notes="แก้ไขทุนจากหน้า Index"
+            )
+
+        # 3. อัปเดตค่าใหม่ลงในตาราง tires
+        # SQL Injection is prevented by the check above
+        update_query = f"UPDATE tires SET {cost_type} = {placeholder} WHERE id = {placeholder}"
+        cursor.execute(update_query, (new_cost_float, tire_id))
   
+
+def get_commission_programs_for_date(conn, for_date):
+    """ดึงโปรแกรมคอมมิชชั่นที่ Active ทั้งหมดสำหรับวันที่ระบุ"""
+    date_str = for_date.strftime('%Y-%m-%d')
+    is_postgres = "psycopg2" in str(type(conn))
+    
+    # Logic: วันที่ที่ต้องการ ต้องอยู่ระหว่าง start_date และ end_date (หรือ end_date เป็น NULL)
+    query = f"""
+        SELECT cp.id, cp.item_type, cp.item_id, cp.commission_amount_per_item,
+               cp.start_date, cp.end_date,
+               CASE
+                   WHEN cp.item_type = 'tire' THEN t.brand || ' ' || t.model || ' ' || t.size
+                   WHEN cp.item_type = 'wheel' THEN w.brand || ' ' || w.model || ' ' || w.pcd
+                   WHEN cp.item_type = 'spare_part' THEN sp.name || ' (' || sp.part_number || ')'
+               END as item_description
+        FROM commission_programs cp
+        LEFT JOIN tires t ON cp.item_id = t.id AND cp.item_type = 'tire'
+        LEFT JOIN wheels w ON cp.item_id = w.id AND cp.item_type = 'wheel'
+        LEFT JOIN spare_parts sp ON cp.item_id = sp.id AND cp.item_type = 'spare_part'
+        WHERE cp.start_date <= ? AND (cp.end_date IS NULL OR cp.end_date >= ?)
+    """
+    if is_postgres:
+        query = query.replace("||", "||").replace('?', '%s')
+    
+    cursor = conn.cursor()
+    cursor.execute(query, (date_str, date_str))
+    return [dict(row) for row in cursor.fetchall()]
+
+def set_commission_program(conn, start_date, end_date, item_type, item_id, amount, user_id):
+    """ตั้งค่าโปรแกรมคอมมิชชั่นสำหรับสินค้าในช่วงเวลาที่กำหนด"""
+    start_date_str = start_date.strftime('%Y-%m-%d')
+    end_date_str = end_date.strftime('%Y-%m-%d') if end_date else None
+    now_iso = get_bkk_time().isoformat()
+    cursor = conn.cursor()
+    is_postgres = "psycopg2" in str(type(conn))
+
+    # Logic: เราจะลบโปรแกรมเก่าที่อาจจะทับซ้อนกันออกก่อน แล้วสร้างใหม่
+    # (นี่เป็นวิธีที่ง่ายที่สุดในการจัดการช่วงเวลาทับซ้อน)
+    delete_query = "DELETE FROM commission_programs WHERE item_type = ? AND item_id = ?"
+    if is_postgres:
+        delete_query = delete_query.replace('?', '%s')
+    cursor.execute(delete_query, (item_type, item_id))
+    
+    insert_query = """
+        INSERT INTO commission_programs (start_date, end_date, item_type, item_id, commission_amount_per_item, user_id, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+    """
+    if is_postgres:
+        insert_query = insert_query.replace('?', '%s')
+        
+    cursor.execute(insert_query, (start_date_str, end_date_str, item_type, item_id, amount, user_id, now_iso))
+    conn.commit()
+
+def delete_commission_program(conn, program_id):
+    """ลบโปรแกรมคอมมิชชั่น"""
+    cursor = conn.cursor()
+    query = "DELETE FROM commission_programs WHERE id = ?"
+    if "psycopg2" in str(type(conn)):
+        query = query.replace('?', '%s')
+    cursor.execute(query, (program_id,))
+    conn.commit()
+
+def calculate_and_log_commission_summary(conn, for_date):
+    """
+    คำนวณสรุปยอดขายและคอมมิชชั่นของสินค้าโปรแกรมในวันที่กำหนด และบันทึกลง commission_summary_log
+    """
+    date_str = for_date.strftime('%Y-%m-%d')
+    cursor = conn.cursor()
+    is_postgres = "psycopg2" in str(type(conn))
+    placeholder = "%s" if is_postgres else "?"
+    
+    # 1. ตรวจสอบว่าเคยสรุปของวันนี้ไปแล้วหรือยัง
+    cursor.execute(f"SELECT id FROM commission_summary_log WHERE summary_date = {placeholder}", (date_str,))
+    if cursor.fetchone():
+        raise ValueError("ได้ทำการสรุปยอดของวันนี้ไปแล้ว")
+
+    # 2. รวมข้อมูลยอดขายจาก movements ทั้ง 3 ตาราง เฉพาะรายการที่มีคอมมิชชั่น
+    query = f"""
+        SELECT 
+            m.item_type,
+            m.item_id,
+            m.item_description,
+            SUM(m.quantity_change) as total_units_sold,
+            SUM(m.commission_amount) as total_commission
+        FROM (
+            SELECT 'tire' as item_type, tm.tire_id as item_id, t.brand || ' ' || t.model || ' ' || t.size as item_description, tm.quantity_change, tm.commission_amount, tm.timestamp FROM tire_movements tm JOIN tires t ON tm.tire_id = t.id
+            UNION ALL
+            SELECT 'wheel' as item_type, wm.wheel_id as item_id, w.brand || ' ' || w.model || ' ' || w.pcd as item_description, wm.quantity_change, wm.commission_amount, wm.timestamp FROM wheel_movements wm JOIN wheels w ON wm.wheel_id = w.id
+            UNION ALL
+            SELECT 'spare_part' as item_type, spm.spare_part_id as item_id, sp.name || ' (' || sp.part_number || ')' as item_description, spm.quantity_change, spm.commission_amount, spm.timestamp FROM spare_part_movements spm JOIN spare_parts sp ON spm.spare_part_id = sp.id
+        ) m
+        WHERE {get_sql_date_format_for_query('m.timestamp')} = {placeholder} AND m.commission_amount > 0
+        GROUP BY m.item_type, m.item_id, m.item_description
+    """
+    if is_postgres:
+        query = query.replace("||", "||").replace('?', '%s') # SQLite and PG use || for concat
+    
+    cursor.execute(query, (date_str,))
+    summary_details = [dict(row) for row in cursor.fetchall()]
+
+    if not summary_details:
+        raise ValueError("ไม่พบรายการขายที่มีคอมมิชชั่นในวันนี้")
+
+    # 3. บันทึกผลลัพธ์ลงตาราง commission_summary_log
+    details_json = json.dumps(summary_details, ensure_ascii=False)
+    created_at = get_bkk_time().isoformat()
+
+    insert_query = f"INSERT INTO commission_summary_log (summary_date, details_json, created_at) VALUES ({placeholder}, {placeholder}, {placeholder})"
+    if is_postgres:
+        insert_query = insert_query.replace('?', '%s')
+        
+    cursor.execute(insert_query, (date_str, details_json, created_at))
+    conn.commit()
+    return len(summary_details)
+
+# ใน database.py
+
+def get_live_commission_summary(conn, for_date):
+    """
+    คำนวณสรุปยอดขายและคอมมิชชั่นของสินค้าโปรแกรมในวันที่กำหนดแบบสดๆ (สำหรับแสดงผลก่อนปิดยอด)
+    """
+    date_str = for_date.strftime('%Y-%m-%d')
+    cursor = conn.cursor()
+    is_postgres = "psycopg2" in str(type(conn))
+    placeholder = "%s" if is_postgres else "?"
+
+    # ใช้ Query เดียวกันกับฟังก์ชัน calculate_and_log... เพื่อความสอดคล้องกัน
+    query = f"""
+        SELECT 
+            m.item_type,
+            m.item_id,
+            m.item_description,
+            SUM(m.quantity_change) as total_units_sold,
+            SUM(m.commission_amount) as total_commission
+        FROM (
+            SELECT 'tire' as item_type, tm.tire_id as item_id, t.brand || ' ' || t.model || ' ' || t.size as item_description, tm.quantity_change, tm.commission_amount, tm.timestamp FROM tire_movements tm JOIN tires t ON tm.tire_id = t.id
+            UNION ALL
+            SELECT 'wheel' as item_type, wm.wheel_id as item_id, w.brand || ' ' || w.model || ' ' || w.pcd as item_description, wm.quantity_change, wm.commission_amount, wm.timestamp FROM wheel_movements wm JOIN wheels w ON wm.wheel_id = w.id
+            UNION ALL
+            SELECT 'spare_part' as item_type, spm.spare_part_id as item_id, sp.name || ' (' || sp.part_number || ')' as item_description, spm.quantity_change, spm.commission_amount, spm.timestamp FROM spare_part_movements spm JOIN spare_parts sp ON spm.spare_part_id = sp.id
+        ) m
+        WHERE {get_sql_date_format_for_query('m.timestamp')} = {placeholder} AND m.commission_amount > 0
+        GROUP BY m.item_type, m.item_id, m.item_description
+        ORDER BY total_commission DESC
+    """
+    if is_postgres:
+        query = query.replace("||", "||").replace('?', '%s')
+    
+    cursor.execute(query, (date_str,))
+    summary_details = [dict(row) for row in cursor.fetchall()]
+    return summary_details
