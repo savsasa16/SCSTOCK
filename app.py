@@ -6483,6 +6483,7 @@ def bulk_stock_movement():
 
         if spare_parts_were_moved: # NEW
             cache.delete_memoized(get_cached_spare_parts)
+            cache.delete_memoized(get_all_spare_parts_list_cached)
             print("--- CACHE CLEARED for Spare Parts ---")
 
         conn.commit()
