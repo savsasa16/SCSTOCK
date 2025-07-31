@@ -777,6 +777,8 @@ def delete_promotion(promo_id):
             database.delete_promotion(conn, promo_id)
             flash('ลบโปรโมชันสำเร็จ! สินค้าที่เคยใช้โปรโมชันนี้จะถูกตั้งค่าโปรโมชันเป็น "ไม่มี"', 'success')
             cache.delete_memoized(get_all_promotions_cached)
+            cache.delete_memoized(get_cached_tires)
+            cache.delete_memoized(get_all_tires_list_cached)
         except Exception as e:
             flash(f'เกิดข้อผิดพลาดในการลบโปรโมชัน: {e}', 'danger')
 
@@ -882,6 +884,7 @@ def add_item():
                     flash(f'เพิ่มยาง {brand.title()} รุ่น {model.title()} เบอร์ {size} จำนวน {quantity} เส้น สำเร็จ!', 'success')
                     cache.delete_memoized(get_cached_tires)
                     cache.delete_memoized(get_cached_tire_brands)
+                    cache.delete_memoized(get_all_tires_list_cached)
                 return redirect(url_for('add_item', tab='tire'))
 
             except ValueError:
@@ -981,6 +984,7 @@ def add_item():
                     flash(f'เพิ่มแม็ก {brand.title()} ลาย {model.title()} จำนวน {quantity} วง สำเร็จ!', 'success')
                     cache.delete_memoized(get_cached_wheels)
                     cache.delete_memoized(get_cached_wheel_brands)
+                    cache.delete_memoized(get_all_wheels_list_cached)
                 return redirect(url_for('index', tab='wheels'))
             except ValueError:
                 conn.rollback()
@@ -1087,6 +1091,7 @@ def add_item():
                     flash(f'เพิ่มอะไหล่ "{name}" จำนวน {quantity} ชิ้น สำเร็จ!', 'success')
                     cache.delete_memoized(get_cached_spare_parts)
                     cache.delete_memoized(get_cached_spare_part_brands)
+                    cache.delete_memoized(get_all_spare_parts_list_cached)
                 return redirect(url_for('add_item', tab='spare_part'))
 
             except ValueError as e:
@@ -1185,6 +1190,7 @@ def edit_tire(tire_id):
                 flash('แก้ไขข้อมูลยางสำเร็จ!', 'success')
                 cache.delete_memoized(get_cached_tires)
                 cache.delete_memoized(get_cached_tire_brands)
+                cache.delete_memoized(get_all_tires_list_cached)
                 return redirect(url_for('index', tab='tires'))
             except ValueError:
                 flash('ข้อมูลตัวเลขไม่ถูกต้อง กรุณาตรวจสอบ', 'danger')
@@ -1263,6 +1269,7 @@ def delete_tire(tire_id):
             flash('ลบยางสำเร็จ!', 'success')
             cache.delete_memoized(get_cached_tires)
             cache.delete_memoized(get_cached_tire_brands)
+            cache.delete_memoized(get_all_tires_list_cached)
         except Exception as e:
             flash(f'เกิดข้อผิดพลาดในการลบ: {e}', 'danger')
     
@@ -1644,6 +1651,7 @@ def delete_spare_part(spare_part_id):
             flash('ลบอะไหล่สำเร็จ!', 'success')
             cache.delete_memoized(get_cached_spare_parts)
             cache.delete_memoized(get_cached_spare_part_brands) # In case any brand summary is cached
+            cache.delete_memoized(get_all_spare_parts_list_cached)
         except Exception as e:
             flash(f'เกิดข้อผิดพลาดในการลบ: {e}', 'danger')
 
@@ -2026,6 +2034,7 @@ def stock_movement():
                     )
                 database.add_notification(conn, message, current_user.id)
                 conn.commit()
+                cache.delete_memoized(get_cached_unread_notification_count)
                 return redirect(url_for('stock_movement', tab='tire_movements'))
 
             # --- Process Wheel Movement ---
@@ -2064,7 +2073,7 @@ def stock_movement():
                     )
                 database.add_notification(conn, message, current_user.id)
                 conn.commit()
-
+                cache.delete_memoized(get_cached_unread_notification_count)
                 return redirect(url_for('stock_movement', tab='wheel_movements'))
 
             # NEW: Process Spare Part Movement
@@ -2102,7 +2111,7 @@ def stock_movement():
                 )
                 database.add_notification(conn, message, current_user.id)
                 conn.commit()
-
+                cache.delete_memoized(get_cached_unread_notification_count)
                 return redirect(url_for('stock_movement', tab='spare_part_movements'))
 
 
@@ -2286,7 +2295,7 @@ def edit_tire_movement(movement_id):
             )
             database.add_notification(conn, message, current_user.id)
             conn.commit()
-
+            cache.delete_memoized(get_cached_unread_notification_count)
             cache.delete_memoized(get_cached_tires)
             cache.delete_memoized(get_all_tires_list_cached)
             return redirect(url_for('daily_stock_report'))
@@ -2463,8 +2472,9 @@ def edit_wheel_movement(movement_id):
             )
             database.add_notification(conn, message, current_user.id)
             conn.commit()
-
+            
             flash('แก้ไขข้อมูลการเคลื่อนไหวสต็อกแม็กสำเร็จ!', 'success')
+            cache.delete_memoized(get_cached_unread_notification_count)
             cache.delete_memoized(get_cached_wheels)
             cache.delete_memoized(get_all_wheels_list_cached)
             return redirect(url_for('daily_stock_report'))
@@ -5622,6 +5632,7 @@ def import_spare_parts_action():
             cache.delete_memoized(get_cached_spare_part_brands)
             cache.delete_memoized(get_cached_spare_part_categories_hierarchical) # New categories might be referenced
             cache.delete_memoized(get_cached_unread_notification_count) # Notifications from movements
+            cache.delete_memoized(get_all_spare_parts_list_cached)
 
             message = f'นำเข้าข้อมูลอะไหล่สำเร็จ: เพิ่มใหม่ {imported_count} รายการ, อัปเดต {updated_count} รายการ.'
             if error_rows:
@@ -5839,6 +5850,7 @@ def restore_spare_part_action(spare_part_id):
         flash(f'กู้คืนอะไหล่ ID {spare_part_id} สำเร็จ!', 'success')
         cache.delete_memoized(get_cached_spare_parts)
         cache.delete_memoized(get_cached_spare_part_brands)
+        cache.delete_memoized(get_all_spare_parts_list_cached)
     except Exception as e:
         flash(f'เกิดข้อผิดพลาดในการกู้คืนอะไหล่: {e}', 'danger')
     return redirect(url_for('admin_deleted_items', tab='deleted_spare_parts'))
@@ -7566,6 +7578,7 @@ def api_update_item_from_modal():
             # เคลียร์ Cache ที่เกี่ยวข้อง
             cache.delete_memoized(get_cached_tires)
             cache.delete_memoized(get_cached_tire_brands)
+            cache.delete_memoized(get_all_tires_list_cached)
 
         # --- Logic for Wheel (สามารถเพิ่มได้ในอนาคต) ---
         elif item_type == 'wheel':
