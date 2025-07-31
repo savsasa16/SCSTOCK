@@ -1574,7 +1574,16 @@ def get_all_spare_parts(conn, query=None, brand_filter='all', category_filter='a
         search_term = f"%{query}%"
         like_op = "ILIKE" if is_postgres else "LIKE"
         placeholder = "%s" if is_postgres else "?"
-        conditions.append(f"(sp.name {like_op} {placeholder} OR sp.part_number {like_op} {placeholder} OR sp.brand {like_op} {placeholder} OR spc.name {like_op} {placeholder})")
+        
+        # --- START: นี่คือส่วนที่แก้ไข ---
+        # ใช้ COALESCE เพื่อจัดการกับ spc.name ที่อาจเป็น NULL (สำหรับสินค้าที่ไม่มีหมวดหมู่)
+        conditions.append(f"""
+            (sp.name {like_op} {placeholder} OR 
+             sp.part_number {like_op} {placeholder} OR 
+             sp.brand {like_op} {placeholder} OR 
+             COALESCE(spc.name, '') {like_op} {placeholder})
+        """)
+        # --- END: นี่คือส่วนที่แก้ไข ---
         params.extend([search_term, search_term, search_term, search_term])
 
     if brand_filter != 'all':
@@ -1582,20 +1591,15 @@ def get_all_spare_parts(conn, query=None, brand_filter='all', category_filter='a
         conditions.append(f"sp.brand = {placeholder}")
         params.append(brand_filter)
 
-    # --- START: MODIFIED SECTION ---
-    # Check if category_filter has a value and is not 'all', then convert to integer
     if category_filter and category_filter != 'all':
         try:
             category_id_int = int(category_filter)
             placeholder = "%s" if is_postgres else "?"
             conditions.append(f"sp.category_id = {placeholder}")
-            params.append(category_id_int) # Append the integer value
+            params.append(category_id_int)
         except (ValueError, TypeError):
-            # If the value is not a valid integer, ignore it to prevent errors
             print(f"Warning: Invalid category_filter value received: {category_filter}")
             pass
-    # --- END: MODIFIED SECTION ---
-
 
     if conditions:
         sql_query += " WHERE " + " AND ".join(conditions)
@@ -1603,14 +1607,9 @@ def get_all_spare_parts(conn, query=None, brand_filter='all', category_filter='a
     sql_query += " ORDER BY sp.brand, spc.name, sp.name"
 
     if is_postgres:
-        # For psycopg2, placeholders are already %s
         cursor.execute(sql_query, params)
     else:
-        # For SQLite, replace all placeholders with ?
-        sql_query_sqlite = sql_query
-        for i in range(len(params)):
-             sql_query_sqlite = sql_query_sqlite.replace('%s', '?', 1)
-        sql_query_sqlite = sql_query_sqlite.replace('ILIKE', 'LIKE')
+        sql_query_sqlite = sql_query.replace('%s', '?').replace('ILIKE', 'LIKE')
         cursor.execute(sql_query_sqlite, params)
 
     spare_parts = cursor.fetchall()

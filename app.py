@@ -7690,6 +7690,20 @@ def commission_summary_report():
                            selected_date_str=date_str,
                            current_user=current_user)
 
+@app.route('/api/get_spare_part_categories')
+@login_required
+def api_get_spare_part_categories():
+    """
+    API Endpoint to get the latest hierarchical list of spare part categories.
+    """
+    try:
+        # ใช้ฟังก์ชัน Cache เดิมเพื่อประสิทธิภาพ
+        all_categories_hierarchical = get_cached_spare_part_categories_hierarchical()
+        return jsonify({"success": True, "categories": all_categories_hierarchical})
+    except Exception as e:
+        current_app.logger.error(f"Error in api_get_spare_part_categories: {e}", exc_info=True)
+        return jsonify({"success": False, "message": "เกิดข้อผิดพลาดในการดึงข้อมูลหมวดหมู่"}), 500
+
 # --- Main entry point ---
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)

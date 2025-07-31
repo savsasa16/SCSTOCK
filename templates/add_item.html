@@ -219,15 +219,23 @@
                         </div>
                         <div class="col-md-6">
                             <label for="spare_part_category_id" class="form-label">หมวดหมู่*</label>
-                            <select class="form-select" id="spare_part_category_id" name="category_id" required>
-                                <option value="none">-- เลือกหมวดหมู่ --</option>
-                                {% for category in all_spare_part_categories %}
-                                    <option value="{{ category.id }}" {% if form_data.category_id and form_data.category_id == category.id|string %}selected{% endif %}>
-                                        {{ category.name_display }}
-                                    </option>
-                                {% endfor %}
-                            </select>
-                            <div class="form-text">หากไม่มีหมวดหมู่ที่ต้องการ <a href="{{ url_for('manage_spare_part_categories') }}" target="_blank">สร้างหมวดหมู่ใหม่ที่นี่</a></div>
+                            <div class="input-group">
+                                <select class="form-select" id="spare_part_category_id" name="category_id" required>
+                                    <option value="none">-- เลือกหมวดหมู่ --</option>
+                                    {% for category in all_spare_part_categories %}
+                                        <option value="{{ category.id }}" {% if form_data.category_id and form_data.category_id == category.id|string %}selected{% endif %}>
+                                            {{ category.name_display }}
+                                        </option>
+                                    {% endfor %}
+                                </select>
+                                <button class="btn btn-outline-secondary" type="button" id="refresh-categories-btn" title="รีเฟรชรายการหมวดหมู่">
+                                    <i class="fas fa-sync-alt"></i>
+                                </button>
+                            </div>
+                            <div class="form-text">
+                                หากไม่มีหมวดหมู่ที่ต้องการ <a href="{{ url_for('manage_spare_part_categories') }}" target="_blank">สร้างหมวดหมู่ใหม่ที่นี่</a> (แล้วกดปุ่มรีเฟรช <i class="fas fa-sync-alt"></i>)
+                                <span id="refresh-status" class="ms-2 text-success"></span>
+                            </div>
                         </div>
 
                         <div class="col-12">
@@ -317,5 +325,58 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 });
+
+const refreshBtn = document.getElementById('refresh-categories-btn');
+    const categorySelect = document.getElementById('spare_part_category_id');
+    const refreshStatus = document.getElementById('refresh-status');
+
+    if (refreshBtn) {
+        refreshBtn.addEventListener('click', function() {
+            // แสดงสถานะกำลังโหลด
+            refreshStatus.textContent = 'กำลังโหลด...';
+            refreshBtn.disabled = true;
+
+            fetch("{{ url_for('api_get_spare_part_categories') }}")
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        // เก็บค่าที่เลือกไว้ปัจจุบัน (ถ้ามี)
+                        const selectedValue = categorySelect.value;
+
+                        // ล้าง options เก่าทั้งหมด
+                        categorySelect.innerHTML = '<option value="none">-- เลือกหมวดหมู่ --</option>';
+
+                        // เพิ่ม options ใหม่จาก API
+                        data.categories.forEach(function(category) {
+                            const option = new Option(category.name_display, category.id);
+                            categorySelect.add(option);
+                        });
+
+                        // ตั้งค่ากลับไปที่ค่าที่เคยเลือกไว้
+                        categorySelect.value = selectedValue;
+
+                        // แสดงข้อความแจ้งเตือน
+                        refreshStatus.textContent = 'อัปเดตแล้ว!';
+                        setTimeout(() => {
+                            refreshStatus.textContent = '';
+                        }, 2000); // ข้อความจะหายไปใน 2 วินาที
+
+                    } else {
+                        refreshStatus.textContent = 'เกิดข้อผิดพลาด!';
+                        alert('ไม่สามารถรีเฟรชรายการหมวดหมู่ได้: ' + data.message);
+                    }
+                })
+                .catch(error => {
+                    console.error('Error fetching categories:', error);
+                    refreshStatus.textContent = 'เกิดข้อผิดพลาด!';
+                    alert('เกิดข้อผิดพลาดในการเชื่อมต่อเพื่อรีเฟรชรายการ');
+                })
+                .finally(() => {
+                    // เปิดใช้งานปุ่มอีกครั้ง
+                    refreshBtn.disabled = false;
+                });
+        });
+    }
+    // --- END: เพิ่มโค้ดส่วนนี้เข้าไป ---
 </script>
 {% endblock %}
