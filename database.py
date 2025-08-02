@@ -4317,7 +4317,7 @@ def get_tire_sales_history(conn, tire_id):
 def search_tires_by_keyword(conn, query):
     """
     Searches the tires table for items matching the query.
-    Returns a list of matching tires.
+    Returns a list of matching tires with their ID.
     """
     cursor = conn.cursor()
     is_postgres = "psycopg2" in str(type(conn))
@@ -4335,7 +4335,7 @@ def search_tires_by_keyword(conn, query):
             LOWER(size) {like_op} {placeholder}
         )
         ORDER BY brand, model, size
-        LIMIT 100
+        LIMIT 20
     """
     
     params = (search_term, search_term, search_term)
@@ -4348,14 +4348,10 @@ def search_tires_by_keyword(conn, query):
 
     return [dict(row) for row in cursor.fetchall()]
 
-# ในไฟล์ database.py
-
-import re
-
-def search_sales_history(conn, tire_keyword=None, customer_keyword=None, start_date=None, end_date=None):
+def search_sales_history(conn, tire_id=None, customer_keyword=None, start_date=None, end_date=None):
     """
     Searches the sales history (OUT movements) based on various criteria.
-    Returns a list of matching sales records.
+    Now uses tire_id for a direct, reliable search.
     """
     cursor = conn.cursor()
     is_postgres = "psycopg2" in str(type(conn))
@@ -4385,25 +4381,9 @@ def search_sales_history(conn, tire_keyword=None, customer_keyword=None, start_d
     
     params = []
     
-    if tire_keyword:
-        # --- START: โค้ดที่เพิ่มและแก้ไข ---
-        # ใช้ Regular Expression เพื่อแยก ยี่ห้อ, รุ่น, และขนาดออกจากกัน
-        # ตัวอย่าง: "Kinto P07 Th (195/60R16)" -> brand='Kinto', model='P07 Th', size='195/60R16'
-        match = re.search(r'^(.*?)\s+(.*?)\s+\((.*?)\)$', tire_keyword, re.IGNORECASE)
-
-        if match:
-            brand_part = match.group(1).strip()
-            model_part = match.group(2).strip()
-            size_part = match.group(3).strip()
-            
-            query += f" AND (t.brand {like_op} {placeholder} AND t.model {like_op} {placeholder} AND t.size {like_op} {placeholder})"
-            params.extend([f"%{brand_part}%", f"%{model_part}%", f"%{size_part}%"])
-        else:
-            # กรณีที่ไม่สามารถแยกส่วนได้ ให้ค้นหาแบบเดิม (อาจจะใช้กับคำค้นหาแบบสั้นๆ)
-            query += f" AND (t.brand {like_op} {placeholder} OR t.model {like_op} {placeholder} OR t.size {like_op} {placeholder})"
-            search_term = f"%{tire_keyword}%"
-            params.extend([search_term, search_term, search_term])
-        # --- END: โค้ดที่เพิ่มและแก้ไข ---
+    if tire_id:
+        query += f" AND t.id = {placeholder}"
+        params.append(tire_id)
         
     if customer_keyword:
         query += f"""

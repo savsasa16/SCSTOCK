@@ -12,7 +12,8 @@
     <form method="GET" action="{{ url_for('sales_history_search') }}" class="mb-4">
         <div class="form-row">
             <div class="col-md-4 mb-2">
-                <input type="text" name="tire_keyword" id="tire-search" class="form-control" placeholder="ยี่ห้อ/รุ่น/ขนาด" value="{{ tire_keyword or '' }}">
+                <input type="text" name="tire_keyword_display" id="tire-search" class="form-control" placeholder="ยี่ห้อ/รุ่น/ขนาด" value="{{ tire_keyword or '' }}">
+                <input type="hidden" name="tire_id" id="tire-id-hidden">
             </div>
             <div class="col-md-4 mb-2">
                 <input type="text" name="customer_keyword" id="customer-search" class="form-control" placeholder="ชื่อลูกค้า" value="{{ customer_keyword or '' }}">
@@ -81,9 +82,6 @@
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     <script src="https://code.jquery.com/ui/1.13.2/jquery-ui.min.js"></script>
     
-    <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
-    <script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/th.js"></script>
-    
     <script>
         $(function() {
             // ตั้งค่า Autocomplete สำหรับช่องค้นหายาง
@@ -93,7 +91,15 @@
                         term: request.term
                     }, response);
                 },
-                minLength: 2
+                minLength: 2,
+                // แก้ไขส่วนนี้: เมื่อผู้ใช้เลือกรายการจาก dropdown
+                select: function(event, ui) {
+                    // กำหนด ID ของยางลงใน Hidden Input Field
+                    $("#tire-id-hidden").val(ui.item.id);
+                    // แสดงชื่อยางที่ผู้ใช้เลือกในช่องกรอกข้อมูล
+                    $("#tire-search").val(ui.item.value);
+                    return false; // ป้องกันไม่ให้ Autocomplete ทำงานผิดปกติ
+                }
             });
 
             // ตั้งค่า Autocomplete สำหรับช่องค้นหาลูกค้า

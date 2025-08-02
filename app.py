@@ -7811,24 +7811,34 @@ def sales_history_search():
     
     conn = get_db()
     
-    # ดึงค่าจากพารามิเตอร์ URL (GET request)
-    tire_keyword = request.args.get('tire_keyword')
+    # แก้ไขส่วนนี้: รับ tire_id จาก Hidden Input แทน
+    tire_id = request.args.get('tire_id', type=int)
+
+    # รับค่าอื่นๆ เหมือนเดิม
     customer_keyword = request.args.get('customer_keyword')
     start_date = request.args.get('start_date')
     end_date = request.args.get('end_date')
 
+    # ส่ง tire_id เข้าไปในฟังก์ชันค้นหา
     sales_history = database.search_sales_history(
         conn, 
-        tire_keyword=tire_keyword, 
+        tire_id=tire_id,  # <-- ส่ง tire_id เข้าไป
         customer_keyword=customer_keyword, 
         start_date=start_date, 
-        end_date=end_date,
+        end_date=end_date
     )
+
+    # สำหรับแสดงผลในช่องกรอกข้อมูล เราต้องดึงชื่อยางกลับมาด้วย
+    tire_keyword_display = None
+    if tire_id:
+        tire_info = database.get_tire(conn, tire_id)
+        if tire_info:
+            tire_keyword_display = f"{tire_info['brand'].title()} {tire_info['model'].title()} ({tire_info['size']})"
     
     return render_template(
         'sales_history_search.html', 
         sales_history=sales_history,
-        tire_keyword=tire_keyword,
+        tire_keyword=tire_keyword_display, # <-- ใช้ตัวแปรนี้สำหรับแสดงผล
         customer_keyword=customer_keyword,
         start_date=start_date,
         end_date=end_date,
@@ -7864,14 +7874,15 @@ def api_search_tires_for_autocomplete():
         return jsonify([])
     
     conn = get_db()
-    
-    # ใช้ฟังก์ชัน search_tires_by_keyword ที่เราได้เพิ่มไว้ใน database.py
     tires = database.search_tires_by_keyword(conn, search_term)
 
-    # จัดรูปแบบผลลัพธ์ให้เป็น array ของ string
-    tire_names = [f"{t['brand'].title()} {t['model'].title()} ({t['size']})" for t in tires]
+    # แก้ไขส่วนนี้: ส่งค่าเป็น Dictionary ที่มีทั้ง id และ value สำหรับ Autocomplete
+    results = [
+        {"id": t['id'], "label": f"{t['brand'].title()} {t['model'].title()} ({t['size']})", "value": f"{t['brand'].title()} {t['model'].title()} ({t['size']})"}
+        for t in tires
+    ]
 
-    return jsonify(tire_names)
+    return jsonify(results)
 
 # --- Main entry point ---
 if __name__ == '__main__':
