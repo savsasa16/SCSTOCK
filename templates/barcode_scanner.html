@@ -2,6 +2,58 @@
 
 {% block page_title %}จัดการสต็อกด้วยบาร์โค้ด{% endblock %}
 
+{% block styles %}
+{{ super() }}
+<style>
+    #total-summary-box {
+        position: fixed;
+        bottom: 90px;
+        right: 20px;
+        background-color: #2c3e50;
+        color: white;
+        padding: 15px;
+        border-radius: 10px;
+        box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+        z-index: 1050;
+        min-width: 220px;
+        display: none;
+        transition: opacity 0.3s ease-in-out;
+    }
+    #total-summary-box h5 {
+        margin-top: 0;
+        border-bottom: 1px solid #46627f;
+        padding-bottom: 10px;
+        margin-bottom: 10px;
+        font-size: 1.1rem;
+    }
+    .total-line {
+        display: flex;
+        justify-content: space-between;
+        margin-bottom: 8px;
+        font-size: 1rem;
+    }
+    .total-line span {
+        opacity: 0.9;
+    }
+    /* Style for Modal Details */
+    .detail-label {
+        font-weight: bold;
+        color: #555;
+    }
+    .detail-value {
+        padding-left: 10px;
+    }
+</style>
+{% endblock %}
+
+{% block extra_fixed_elements %}
+<div id="total-summary-box">
+    <h5><i class="fas fa-calculator me-2"></i>ยอดรวมในรายการ</h5>
+    <div id="totals-content">
+        </div>
+</div>
+{% endblock %}
+
 {% block content %}
 <div class="card shadow-sm">
     <div class="card-header">
@@ -147,7 +199,6 @@
     </div>
 </div>
 
-<!-- Modal Placeholder -->
 <div class="modal fade" id="linkBarcodeModal" tabindex="-1" aria-labelledby="linkBarcodeModalLabel" aria-hidden="true">
 </div>
 
@@ -160,6 +211,49 @@
 <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
 <script>
     let scannedItems = {}; 
+
+    // --- START: เพิ่มฟังก์ชันคำนวณยอดรวม ---
+    function updateTotals() {
+        const totalBox = document.getElementById('total-summary-box');
+        const totalsContent = document.getElementById('totals-content');
+        totalsContent.innerHTML = ''; // ล้างค่าเก่าทิ้งก่อน
+
+        let totalTires = 0;
+        let totalWheels = 0;
+        let totalSpareParts = 0;
+
+        for (const key in scannedItems) {
+            const item = scannedItems[key].data;
+            const quantity = scannedItems[key].quantity_to_process;
+            if (item.type === 'tire') {
+                totalTires += quantity;
+            } else if (item.type === 'wheel') {
+                totalWheels += quantity;
+            } else if (item.type === 'spare_part') {
+                totalSpareParts += quantity;
+            }
+        }
+
+        let contentHtml = '';
+        if (totalTires > 0) {
+            contentHtml += `<div class="total-line"><span><i class="fas fa-tire fa-fw me-2"></i>ยาง:</span> <strong>${totalTires} เส้น</strong></div>`;
+        }
+        if (totalWheels > 0) {
+            contentHtml += `<div class="total-line"><span><i class="fas fa-compact-disc fa-fw me-2"></i>แม็ก:</span> <strong>${totalWheels} วง</strong></div>`;
+        }
+        if (totalSpareParts > 0) {
+            contentHtml += `<div class="total-line"><span><i class="fas fa-tools fa-fw me-2"></i>อะไหล่:</span> <strong>${totalSpareParts} ชิ้น</strong></div>`;
+        }
+
+        if (totalTires > 0 || totalWheels > 0 || totalSpareParts > 0) {
+            totalsContent.innerHTML = contentHtml;
+            totalBox.style.display = 'block'; // แสดงกล่องถ้ามีรายการ
+        } else {
+            totalBox.style.display = 'none'; // ซ่อนกล่องถ้าไม่มีรายการ
+        }
+    }
+    // --- END: เพิ่มฟังก์ชันคำนวณยอดรวม ---
+
 
     document.addEventListener('DOMContentLoaded', function() {
         const scanStatus = document.getElementById('scanStatus');
@@ -216,51 +310,52 @@
             scannedItemsTableBody.innerHTML = '';
             if (Object.keys(scannedItems).length === 0) {
                 scannedItemsTableBody.innerHTML = `<tr><td colspan="6" class="text-center text-muted">ยังไม่มีรายการที่สแกน</td></tr>`;
-                return;
-            }
-            for (const key in scannedItems) {
-                const item = scannedItems[key].data;
-                const quantityToProcess = scannedItems[key].quantity_to_process;
-                let display_type = '', main_info = '', spec_info = '';
-                if (item.type === 'tire') {
-                    display_type = 'ยาง';
-                    main_info = `<strong>${item.brand || ''}</strong> ${item.model || ''}`;
-                    spec_info = item.size;
-                } else if (item.type === 'wheel') {
-                    display_type = 'แม็ก';
-                    main_info = `<strong>${item.brand || ''}</strong> ${item.model || ''}`;
-                    spec_info = `${item.diameter || ''}x${item.width || ''} ${item.pcd || ''} ${item.et ? 'ET'+item.et : ''}`;
-                } else if (item.type === 'spare_part') {
-                    display_type = 'อะไหล่';
-                    const categoryDisplay = item.category_name ? `<strong class="text-primary">[${item.category_name}]</strong> ` : '';
-                    main_info = `${categoryDisplay}<strong>${item.name || ''}</strong> ${item.brand ? '(' + item.brand + ')' : ''}`;
-                    spec_info = item.part_number || '-';
+            } else {
+                for (const key in scannedItems) {
+                    const item = scannedItems[key].data;
+                    const quantityToProcess = scannedItems[key].quantity_to_process;
+                    let display_type = '', main_info = '', spec_info = '';
+                    if (item.type === 'tire') {
+                        display_type = 'ยาง';
+                        main_info = `<strong>${item.brand || ''}</strong> ${item.model || ''}`;
+                        spec_info = item.size;
+                    } else if (item.type === 'wheel') {
+                        display_type = 'แม็ก';
+                        main_info = `<strong>${item.brand || ''}</strong> ${item.model || ''}`;
+                        spec_info = `${item.diameter || ''}x${item.width || ''} ${item.pcd || ''} ${item.et ? 'ET'+item.et : ''}`;
+                    } else if (item.type === 'spare_part') {
+                        display_type = 'อะไหล่';
+                        const categoryDisplay = item.category_name ? `<strong class="text-primary">[${item.category_name}]</strong> ` : '';
+                        main_info = `${categoryDisplay}<strong>${item.name || ''}</strong> ${item.brand ? '(' + item.brand + ')' : ''}`;
+                        spec_info = item.part_number || '-';
+                    }
+                    const row = document.createElement('tr');
+                    row.dataset.itemKey = key;
+                    row.innerHTML = `
+                        <td>${display_type}</td>
+                        <td>${main_info}</td>
+                        <td>${spec_info}</td>
+                        <td class="text-center">${item.current_quantity}</td>
+                        <td><input type="number" value="${quantityToProcess}" min="1" class="form-control form-control-sm qty-input" data-item-key="${key}"></td>
+                        <td class="text-center"><button class="btn btn-outline-danger btn-sm remove-item-btn" data-item-key="${key}"><i class="fas fa-times"></i></button></td>
+                    `;
+                    scannedItemsTableBody.appendChild(row);
                 }
-                const row = document.createElement('tr');
-                row.dataset.itemKey = key;
-                row.innerHTML = `
-                    <td>${display_type}</td>
-                    <td>${main_info}</td>
-                    <td>${spec_info}</td>
-                    <td class="text-center">${item.current_quantity}</td>
-                    <td><input type="number" value="${quantityToProcess}" min="1" class="form-control form-control-sm qty-input" data-item-key="${key}"></td>
-                    <td class="text-center"><button class="btn btn-outline-danger btn-sm remove-item-btn" data-item-key="${key}"><i class="fas fa-times"></i></button></td>
-                `;
-                scannedItemsTableBody.appendChild(row);
             }
             document.querySelectorAll('.qty-input').forEach(input => {
                 input.onchange = function() {
                     let newQty = parseInt(this.value);
                     scannedItems[this.dataset.itemKey].quantity_to_process = (isNaN(newQty) || newQty < 1) ? 1 : newQty;
                     this.value = scannedItems[this.dataset.itemKey].quantity_to_process;
+                    updateTotals(); // <-- เรียกฟังก์ชันอัปเดตยอดรวมเมื่อเปลี่ยนจำนวน
                 };
             });
             document.querySelectorAll('.remove-item-btn').forEach(button => {
-                button.onclick = () => { delete scannedItems[button.dataset.itemKey]; renderScannedItems(); };
+                button.onclick = () => { delete scannedItems[button.dataset.itemKey]; renderScannedItems(); updateTotals(); }; // <-- เรียกฟังก์ชันอัปเดตยอดรวมเมื่อลบรายการ
             });
+            updateTotals(); // <-- เรียกฟังก์ชันอัปเดตยอดรวมเมื่อ Render เสร็จ
         }
         
-        // --- START: แก้ไขฟังก์ชัน Modal ให้กลับเป็นแบบง่าย ---
         function showLinkBarcodeModal(message, barcode) {
             linkBarcodeModalEl.innerHTML = `
                 <div class="modal-dialog modal-lg">
@@ -365,7 +460,6 @@
                 }
             });
         }
-        // --- END: แก้ไขฟังก์ชัน Modal ---
 
         function fetchAndProcess(barcode) {
             if (isProcessingScan) return;
@@ -522,13 +616,22 @@
         
         barcodeInput.addEventListener('keypress', e => { if (e.key === 'Enter') { e.preventDefault(); processScannedBarcode(barcodeInput.value.trim()); } });
         processTransactionBtn.addEventListener('click', processTransaction);
-        clearAllBtn.addEventListener('click', () => { if (confirm('ยืนยันการล้างรายการทั้งหมด?')) { scannedItems = {}; renderScannedItems(); transactionNotesInput.value = ''; billImageInput.value = ''; showStatus('ล้างรายการแล้ว', 'info'); } });
+        clearAllBtn.addEventListener('click', () => { 
+            if (confirm('ยืนยันการล้างรายการทั้งหมด?')) { 
+                scannedItems = {}; 
+                renderScannedItems(); 
+                transactionNotesInput.value = ''; 
+                billImageInput.value = ''; 
+                showStatus('ล้างรายการแล้ว', 'info'); 
+            } 
+        });
         transactionTypeSelect.addEventListener('change', updateChannelOptions);
         channelSelect.addEventListener('change', toggleChannelFields);
         returnCustomerTypeSelect.addEventListener('change', toggleReturnFields);
         
         renderScannedItems();
         updateChannelOptions();
+        updateTotals(); // <-- เรียกฟังก์ชันนี้เมื่อโหลดหน้าเสร็จสิ้น
     });
 </script>
 {% endblock %}
