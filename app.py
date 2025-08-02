@@ -7805,44 +7805,57 @@ THAI_MONTHS = ["ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.",
 @app.route('/sales_history_search', methods=['GET'])
 @login_required
 def sales_history_search():
-    if not current_user.can_view_cost(): 
+    if not current_user.can_view_cost():
         flash('คุณไม่มีสิทธิ์เข้าถึงหน้ารายงานการขาย', 'danger')
         return redirect(url_for('index'))
-    
-    conn = get_db()
-    
-    # แก้ไขส่วนนี้: รับ tire_id จาก Hidden Input แทน
-    tire_id = request.args.get('tire_id', type=int)
 
-    # รับค่าอื่นๆ เหมือนเดิม
+    conn = get_db()
+
+    tire_id = request.args.get('tire_id', type=int)
     customer_keyword = request.args.get('customer_keyword')
     start_date = request.args.get('start_date')
     end_date = request.args.get('end_date')
 
-    # ส่ง tire_id เข้าไปในฟังก์ชันค้นหา
-    sales_history = database.search_sales_history(
-        conn, 
-        tire_id=tire_id,  # <-- ส่ง tire_id เข้าไป
-        customer_keyword=customer_keyword, 
-        start_date=start_date, 
-        end_date=end_date
-    )
+    sales_history = []
+    # เพิ่มตัวแปร has_searched เพื่อเช็คว่ามีการค้นหาหรือไม่
+    has_searched = False
 
-    # สำหรับแสดงผลในช่องกรอกข้อมูล เราต้องดึงชื่อยางกลับมาด้วย
+    has_search_params = any([tire_id, customer_keyword, start_date, end_date])
+
+    if has_search_params:
+        has_searched = True
+        sales_history = database.search_sales_history(
+            conn,
+            tire_id=tire_id,
+            customer_keyword=customer_keyword,
+            start_date=start_date,
+            end_date=end_date
+        )
+
     tire_keyword_display = None
     if tire_id:
         tire_info = database.get_tire(conn, tire_id)
         if tire_info:
             tire_keyword_display = f"{tire_info['brand'].title()} {tire_info['model'].title()} ({tire_info['size']})"
-    
+
+    total_all_items = 0
+    total_by_brand = defaultdict(int)
+
+    for sale in sales_history:
+        total_all_items += sale['quantity_change']
+        total_by_brand[sale['tire_brand']] += sale['quantity_change']
+
     return render_template(
-        'sales_history_search.html', 
+        'sales_history_search.html',
         sales_history=sales_history,
-        tire_keyword=tire_keyword_display, # <-- ใช้ตัวแปรนี้สำหรับแสดงผล
+        tire_keyword=tire_keyword_display,
         customer_keyword=customer_keyword,
         start_date=start_date,
         end_date=end_date,
-        THAI_MONTHS=THAI_MONTHS
+        THAI_MONTHS=THAI_MONTHS,
+        total_all_items=total_all_items,
+        total_by_brand=dict(total_by_brand),
+        has_searched=has_searched # <-- ส่งตัวแปรใหม่
     )
 
 @app.route('/api/search_customers')

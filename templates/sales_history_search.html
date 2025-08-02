@@ -69,10 +69,47 @@
             </tbody>
         </table>
     </div>
-    {% else %}
-    <div class="alert alert-info">
-        ไม่พบประวัติการขายที่ตรงกับเงื่อนไขการค้นหา
+
+    <div class="row mt-4">
+        <div class="col-md-6">
+            <div class="card shadow-sm mb-3">
+                <div class="card-body">
+                    <h5 class="card-title">สรุปผลรวมทั้งหมด</h5>
+                    <p class="card-text fs-4 fw-bold text-success">{{ total_all_items }} เส้น</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="card shadow-sm mb-3">
+                <div class="card-body">
+                    <h5 class="card-title">แยกตามยี่ห้อ</h5>
+                    <ul class="list-group list-group-flush">
+                        {% for brand, total in total_by_brand.items()|sort %}
+                            <li class="list-group-item d-flex justify-content-between align-items-center">
+                                <strong>{{ brand.title() }}</strong>
+                                <span class="badge bg-primary rounded-pill">{{ total }} เส้น</span>
+                            </li>
+                        {% endfor %}
+                    </ul>
+                    {% if not total_by_brand %}
+                        <p class="text-muted text-center mt-3 mb-0">ไม่พบข้อมูลแยกตามยี่ห้อ</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
     </div>
+    {% else %}
+    {% if has_searched %}
+            <div class="alert alert-info">
+                ไม่พบประวัติการขายที่ตรงกับเงื่อนไขการค้นหา
+            </div>
+        {% else %}
+            <div class="alert alert-info">
+                <br><B>วิธีการค้นหา</B>
+                <br>ค้นหายางที่ต้องการดูประวัติแล้วเลือกจากช่องที่ขึ้นมาหากอยากดูว่ายางตัวนี้มีการขายไปที่ไหนบ้าง
+                <br><B>"หรือพิมพ์ชื่อลูกค้าที่ต้องการดูว่าซื้อสินค้าตัวไหนไปบ้าง หรือเลือกทั้งสองอย่างหากต้องการดูแบบเจาะจง"</B></Br>
+            </div>
+        {% endif %}
     {% endif %}
 </div>
 {% endblock %}
@@ -92,13 +129,10 @@
                     }, response);
                 },
                 minLength: 2,
-                // แก้ไขส่วนนี้: เมื่อผู้ใช้เลือกรายการจาก dropdown
                 select: function(event, ui) {
-                    // กำหนด ID ของยางลงใน Hidden Input Field
                     $("#tire-id-hidden").val(ui.item.id);
-                    // แสดงชื่อยางที่ผู้ใช้เลือกในช่องกรอกข้อมูล
                     $("#tire-search").val(ui.item.value);
-                    return false; // ป้องกันไม่ให้ Autocomplete ทำงานผิดปกติ
+                    return false;
                 }
             });
 
