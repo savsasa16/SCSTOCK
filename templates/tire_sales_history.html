@@ -1,0 +1,68 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="container mt-4">
+    <nav aria-label="breadcrumb">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="{{ url_for('index') }}">หน้าหลัก</a></li>
+            <li class="breadcrumb-item"><a href="{{ url_for('index', tab='tires') }}">สต็อกยาง</a></li>
+            <li class="breadcrumb-item active" aria-current="page">ประวัติการขายยาง</li>
+        </ol>
+    </nav>
+    <div class="card shadow-sm">
+        <div class="card-header bg-primary text-white">
+            <h4 class="mb-0">ประวัติการขายยาง: {{ tire.brand.title() }} {{ tire.model.title() }} ({{ tire.size }})</h4>
+        </div>
+        <div class="card-body">
+            {% if sales_history %}
+                <div class="table-responsive">
+                    <table class="table table-hover table-bordered table-sm">
+                        <thead class="thead-light">
+                            <tr>
+                                <th scope="col">วันที่/เวลา</th>
+                                <th scope="col">จำนวน (เส้น)</th>
+                                <th scope="col">ช่องทางขาย</th>
+                                <th scope="col">รายละเอียดลูกค้า</th>
+                                <th scope="col">ผู้บันทึก</th>
+                                <th scope="col">หมายเหตุ</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for sale in sales_history %}
+                            <tr>
+                                <td>{{ sale.timestamp.strftime('%d/%m/%Y %H:%M') }}</td>
+                                <td>{{ sale.quantity_change }}</td>
+                                <td>
+                                    {% if sale.channel_name == 'ออนไลน์' %}
+                                        ออนไลน์: {{ sale.online_platform_name }}
+                                    {% elif sale.channel_name == 'ค้าส่ง' %}
+                                        ค้าส่ง: {{ sale.wholesale_customer_name }}
+                                    {% else %}
+                                        {{ sale.channel_name }}
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if sale.online_platform_name %}
+                                        {{ sale.online_platform_name }}
+                                    {% elif sale.wholesale_customer_name %}
+                                        {{ sale.wholesale_customer_name }}
+                                    {% else %}
+                                        หน้าร้าน
+                                    {% endif %}
+                                </td>
+                                <td>{{ sale.user_username }}</td>
+                                <td>{{ sale.notes }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            {% else %}
+                <div class="alert alert-info" role="alert">
+                    ไม่พบประวัติการขายสำหรับยางรุ่นนี้
+                </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

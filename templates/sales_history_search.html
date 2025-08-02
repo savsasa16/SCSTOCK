@@ -1,0 +1,123 @@
+{% extends 'base.html' %}
+
+{% block head %}
+    {{ super() }}
+    <link rel="stylesheet" href="https://code.jquery.com/ui/1.13.2/themes/base/jquery-ui.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <h2>ค้นหาประวัติการขาย</h2>
+    <form method="GET" action="{{ url_for('sales_history_search') }}" class="mb-4">
+        <div class="form-row">
+            <div class="col-md-4 mb-2">
+                <input type="text" name="tire_keyword" id="tire-search" class="form-control" placeholder="ยี่ห้อ/รุ่น/ขนาด" value="{{ tire_keyword or '' }}">
+            </div>
+            <div class="col-md-4 mb-2">
+                <input type="text" name="customer_keyword" id="customer-search" class="form-control" placeholder="ชื่อลูกค้า" value="{{ customer_keyword or '' }}">
+            </div>
+            <div class="col-md-2 mb-2">
+                <input type="text" name="start_date" id="start-date-picker" class="form-control" placeholder="วันเริ่มต้น" value="{{ start_date or '' }}">
+            </div>
+            <div class="col-md-2 mb-2">
+                <input type="text" name="end_date" id="end-date-picker" class="form-control" placeholder="วันสิ้นสุด" value="{{ end_date or '' }}">
+            </div>
+            <div class="col-12 text-right">
+                <button type="submit" class="btn btn-primary">ค้นหา</button>
+                <a href="{{ url_for('sales_history_search') }}" class="btn btn-secondary">ล้าง</a>
+            </div>
+        </div>
+    </form>
+
+    {% if sales_history %}
+    <h4>ผลการค้นหา</h4>
+    <div class="table-responsive">
+        <table class="table table-hover table-bordered table-sm">
+            <thead class="thead-light">
+                <tr>
+                    <th scope="col">วันที่/เวลา</th>
+                    <th scope="col">จำนวน (เส้น)</th>
+                    <th scope="col">รายการยาง</th>
+                    <th scope="col">ช่องทางขาย</th>
+                    <th scope="col">รายละเอียดลูกค้า</th>
+                    <th scope="col">ผู้บันทึก</th>
+                    <th scope="col">หมายเหตุ</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for sale in sales_history %}
+                <tr>
+                    <td>{{ sale.timestamp.day }} {{ THAI_MONTHS[sale.timestamp.month - 1] }} {{ sale.timestamp.year + 543 }} {{ sale.timestamp.strftime('%H:%M') }}</td>
+                    <td>{{ sale.quantity_change }}</td>
+                    <td>{{ sale.tire_brand }} {{ sale.tire_model }} ({{ sale.tire_size }})</td>
+                    <td>{{ sale.channel_name }}</td>
+                    <td>
+                        {% if sale.online_platform_name %}
+                            {{ sale.online_platform_name }}
+                        {% elif sale.wholesale_customer_name %}
+                            {{ sale.wholesale_customer_name }}
+                        {% else %}
+                            หน้าร้าน
+                        {% endif %}
+                    </td>
+                    <td>{{ sale.user_username }}</td>
+                    <td>{{ sale.notes }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="alert alert-info">
+        ไม่พบประวัติการขายที่ตรงกับเงื่อนไขการค้นหา
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+    {{ super() }}
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://code.jquery.com/ui/1.13.2/jquery-ui.min.js"></script>
+    
+    <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+    <script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/th.js"></script>
+    
+    <script>
+        $(function() {
+            // ตั้งค่า Autocomplete สำหรับช่องค้นหายาง
+            $("#tire-search").autocomplete({
+                source: function(request, response) {
+                    $.getJSON("{{ url_for('api_search_tires_for_autocomplete') }}", {
+                        term: request.term
+                    }, response);
+                },
+                minLength: 2
+            });
+
+            // ตั้งค่า Autocomplete สำหรับช่องค้นหาลูกค้า
+            $("#customer-search").autocomplete({
+                source: function(request, response) {
+                    $.getJSON("{{ url_for('api_search_customers') }}", {
+                        term: request.term
+                    }, response);
+                },
+                minLength: 2
+            });
+        });
+        
+        // ตั้งค่า Flatpickr
+        const flatpickrConfig = {
+            locale: "th",
+            dateFormat: "Y-m-d",
+            altInput: true,
+            altFormat: "d F Y",
+            disableMobile: true,
+            thai_buddhist: true
+        };
+
+        flatpickr("#start-date-picker", flatpickrConfig);
+        flatpickr("#end-date-picker", flatpickrConfig);
+    </script>
+{% endblock %}

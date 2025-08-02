@@ -1,0 +1,31 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="container mt-4">
+    <h2>ดูประวัติการขายของยาง</h2>
+    <form method="POST">
+        <div class="input-group mb-3">
+            <input type="text" class="form-control" name="search_query" placeholder="ป้อนยี่ห้อ, รุ่น, หรือขนาด" value="{{ search_query or '' }}">
+            <div class="input-group-append">
+                <button class="btn btn-primary" type="submit">ค้นหา</button>
+            </div>
+        </div>
+    </form>
+
+    {% if search_query and search_results %}
+        <h4 class="mt-4">ผลการค้นหาสำหรับ "{{ search_query }}"</h4>
+        <ul class="list-group">
+        {% for tire in search_results %}
+            <li class="list-group-item d-flex justify-content-between align-items-center">
+                {{ tire.brand }} {{ tire.model }} ({{ tire.size }})
+                <a href="{{ url_for('tire_sales_history', tire_id=tire.id) }}" class="btn btn-sm btn-info">ดูประวัติการขาย</a>
+            </li>
+        {% endfor %}
+        </ul>
+    {% elif search_query and not search_results %}
+        <div class="alert alert-warning mt-4">
+            ไม่พบยางที่ตรงกับคำค้นหา "{{ search_query }}"
+        </div>
+    {% endif %}
+</div>
+{% endblock %}

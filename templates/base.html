@@ -17,6 +17,8 @@
     <link rel="shortcut icon" href="https://res.cloudinary.com/doi8m4e1o/image/upload/v1749883714/favicon_spqmcc.ico" />
     <link rel="apple-touch-icon" sizes="180x180" href="https://res.cloudinary.com/doi8m4e1o/image/upload/v1749883714/apple-touch-icon_c2me0k.png" />
     <meta name="apple-mobile-web-app-title" content="SCSTOCK" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+    <link rel="stylesheet" href="https://code.jquery.com/ui/1.13.2/themes/base/jquery-ui.css">
 
     <style>
         .notification-bell {
@@ -104,14 +106,22 @@
             <li><a href="{{ url_for('barcode_scanner_page') }}" class="nav-link text-white {% if request.endpoint == 'barcode_scanner_page' %}active{% endif %}"><i class="fas fa-barcode me-2"></i><span class="sidebar-text">ตัดสต๊อกด้วยบาร์โค้ด</span></a></li>
             {% endif %}
             <li>
-                <a href="#reports-submenu" data-bs-toggle="collapse" class="nav-link text-white d-flex justify-content-between align-items-center {% if 'report' in request.endpoint or request.endpoint == 'reconciliation' %}active{% endif %}">
+                <a href="#reports-submenu" data-bs-toggle="collapse" class="nav-link text-white d-flex justify-content-between align-items-center {% if 'report' in request.endpoint or request.endpoint == 'reconciliation' or request.endpoint == 'sales_history_search' %}active{% endif %}">
                     <div><i class="fas fa-chart-line me-2"></i><span class="sidebar-text">รายงาน</span></div>
                     <i class="fas fa-chevron-down ms-auto sidebar-text"></i>
                 </a>
-                <ul class="collapse list-unstyled ps-3 {% if 'report' in request.endpoint or request.endpoint == 'reconciliation' %}show{% endif %}" id="reports-submenu">
+                <ul class="collapse list-unstyled ps-3 {% if 'report' in request.endpoint or request.endpoint == 'reconciliation' or request.endpoint == 'sales_history_search' %}show{% endif %}" id="reports-submenu">
                     <li><a href="{{ url_for('daily_stock_report') }}" class="nav-link text-white {% if request.endpoint == 'daily_stock_report' %}active{% endif %}"><i class="fas fa-calendar-day me-2"></i><span class="sidebar-text">รายงานสต็อกประจำวัน</span></a></li>
                     <li><a href="{{ url_for('summary_stock_report') }}" class="nav-link text-white {% if request.endpoint == 'summary_stock_report' %}active{% endif %}"><i class="fas fa-chart-pie me-2"></i><span class="sidebar-text">สรุปยอดแบบละเอียด</span></a></li>
                     <li><a href="{{ url_for('reconciliation') }}" class="nav-link text-white {% if request.endpoint == 'reconciliation' %}active{% endif %}"><i class="fas fa-file-invoice me-2"></i><span class="sidebar-text">ปิดยอดสต๊อกประจำวัน</span></a></li>
+                    
+                    {# --- START: เพิ่มเมนูค้นหาประวัติการขาย (Desktop) --- #}
+                    <li>
+                        <a href="{{ url_for('sales_history_search') }}" class="nav-link text-white {% if request.endpoint == 'sales_history_search' %}active{% endif %}">
+                            <i class="fas fa-search me-2"></i><span class="sidebar-text">ค้นหาประวัติการขาย</span>
+                        </a>
+                    </li>
+                    {# --- END: เพิ่มเมนูค้นหาประวัติการขาย (Desktop) --- #}
                     
                     {# --- START: เพิ่มเมนูรายงานคอมมิชชั่น (Desktop) --- #}
                     <li>
@@ -136,13 +146,11 @@
             {% endif %}
             {% if current_user.is_authenticated and current_user.is_admin() %}
             <li>
-                {# --- START: แก้ไขเงื่อนไข IF --- #}
                 <a href="#admin-submenu" data-bs-toggle="collapse" class="nav-link text-white d-flex justify-content-between align-items-center {% if 'admin' in request.endpoint or 'manage_users' in request.endpoint or 'wholesale_customers' in request.endpoint or 'view_feedback' in request.endpoint or 'manage_announcements' in request.endpoint or 'manage_daily_commission' in request.endpoint %}active{% endif %}">
                     <div><i class="fas fa-tools me-2"></i><span class="sidebar-text">Admin Dashboard</span></div>
                     <i class="fas fa-chevron-down ms-auto sidebar-text"></i>
                 </a>
                 <ul class="collapse list-unstyled ps-3 {% if 'admin' in request.endpoint or 'manage_users' in request.endpoint or 'wholesale_customers' in request.endpoint or 'view_feedback' in request.endpoint or 'manage_announcements' in request.endpoint or 'manage_daily_commission' in request.endpoint %}show{% endif %}" id="admin-submenu">
-                {# --- END: แก้ไขเงื่อนไข IF --- #}
                     <li><a href="{{ url_for('admin_dashboard') }}" class="nav-link text-white {% if request.endpoint == 'admin_dashboard' %}active{% endif %}"><i class="fas fa-tachometer-alt me-2"></i><span class="sidebar-text">แดชบอร์ด</span></a></li>
                     <li><a href="{{ url_for('manage_users') }}" class="nav-link text-white {% if request.endpoint == 'manage_users' %}active{% endif %}"><i class="fas fa-users me-2"></i><span class="sidebar-text">จัดการผู้ใช้</span></a></li>
                     <li><a href="{{ url_for('manage_wholesale_customers') }}" class="nav-link text-white {% if request.endpoint == 'manage_wholesale_customers' %}active{% endif %}"><i class="fas fa-handshake me-2"></i><span class="sidebar-text">จัดการลูกค้าค้าส่ง</span></a></li>
@@ -248,14 +256,22 @@
                     {% endif %}
                     
                     <li>
-                        <a href="#reports-submenu-mobile" data-bs-toggle="collapse" class="nav-link text-white d-flex justify-content-between align-items-center {% if 'report' in request.endpoint or request.endpoint == 'reconciliation' %}active{% endif %}">
+                        <a href="#reports-submenu-mobile" data-bs-toggle="collapse" class="nav-link text-white d-flex justify-content-between align-items-center {% if 'report' in request.endpoint or request.endpoint == 'reconciliation' or request.endpoint == 'sales_history_search' %}active{% endif %}">
                             <div><i class="fas fa-chart-line me-2"></i> รายงาน</div>
                             <i class="fas fa-chevron-down ms-auto"></i>
                         </a>
-                        <ul class="collapse list-unstyled ps-3 {% if 'report' in request.endpoint or request.endpoint == 'reconciliation' %}show{% endif %}" id="reports-submenu-mobile">
+                        <ul class="collapse list-unstyled ps-3 {% if 'report' in request.endpoint or request.endpoint == 'reconciliation' or request.endpoint == 'sales_history_search' %}show{% endif %}" id="reports-submenu-mobile">
                             <li><a href="{{ url_for('daily_stock_report') }}" class="nav-link text-white {% if request.endpoint == 'daily_stock_report' %}active{% endif %}"><i class="fas fa-calendar-day me-2"></i> รายงานสต็อกประจำวัน</a></li>
                             <li><a href="{{ url_for('summary_stock_report') }}" class="nav-link text-white {% if request.endpoint == 'summary_stock_report' %}active{% endif %}"><i class="fas fa-chart-pie me-2"></i> สรุปยอดแบบละเอียด</a></li>
                             <li><a href="{{ url_for('reconciliation') }}" class="nav-link text-white {% if request.endpoint == 'reconciliation' %}active{% endif %}"><i class="fas fa-file-invoice me-2"></i> ปิดยอดสต๊อกประจำวัน</a></li>
+                            
+                            {# --- START: เพิ่มเมนูค้นหาประวัติการขาย (Mobile) --- #}
+                            <li>
+                                <a href="{{ url_for('sales_history_search') }}" class="nav-link text-white {% if request.endpoint == 'sales_history_search' %}active{% endif %}">
+                                    <i class="fas fa-search me-2"></i> ค้นหาประวัติการขาย
+                                </a>
+                            </li>
+                            {# --- END: เพิ่มเมนูค้นหาประวัติการขาย (Mobile) --- #}
                             
                             {# --- START: เพิ่มเมนูรายงานคอมมิชชั่น (Mobile) --- #}
                             <li>
@@ -283,13 +299,11 @@
                     {% endif %}
                     {% if current_user.is_authenticated and current_user.is_admin() %}
                     <li>
-                        {# --- START: แก้ไขเงื่อนไข IF --- #}
                         <a href="#admin-submenu-mobile" data-bs-toggle="collapse" class="nav-link text-white d-flex justify-content-between align-items-center {% if 'admin' in request.endpoint or 'manage_users' in request.endpoint or 'wholesale_customers' in request.endpoint or 'view_feedback' in request.endpoint or 'manage_announcements' in request.endpoint or 'manage_daily_commission' in request.endpoint %}active{% endif %}">
                             <div><i class="fas fa-tools me-2"></i> Admin</div>
                             <i class="fas fa-chevron-down ms-auto"></i>
                         </a>
                         <ul class="collapse list-unstyled ps-3 {% if 'admin' in request.endpoint or 'manage_users' in request.endpoint or 'wholesale_customers' in request.endpoint or 'view_feedback' in request.endpoint or 'manage_announcements' in request.endpoint or 'manage_daily_commission' in request.endpoint %}show{% endif %}" id="admin-submenu-mobile">
-                        {# --- END: แก้ไขเงื่อนไข IF --- #}
                             <li><a href="{{ url_for('admin_dashboard') }}" class="nav-link text-white {% if request.endpoint == 'admin_dashboard' %}active{% endif %}"><i class="fas fa-tachometer-alt me-2"></i> แดชบอร์ด</a></li>
                             <li><a href="{{ url_for('manage_users') }}" class="nav-link text-white {% if request.endpoint == 'manage_users' %}active{% endif %}"><i class="fas fa-users me-2"></i> จัดการผู้ใช้</a></li>
                             <li><a href="{{ url_for('manage_wholesale_customers') }}" class="nav-link text-white {% if request.endpoint == 'manage_wholesale_customers' %}active{% endif %}"><i class="fas fa-handshake me-2"></i> จัดการลูกค้าค้าส่ง</a></li>
@@ -382,7 +396,6 @@
                             <select class="form-select" id="feedback_type" name="feedback_type" required>
                                 <option value="Suggestion">เสนอไอเดีย / ฟีเจอร์ใหม่</option>
                                 <option value="Bug">แจ้งปัญหา / บั๊ก</option>
-                                <option value="Other">อื่นๆ</option>
                             </select>
                         </div>
                         <div class="mb-3">

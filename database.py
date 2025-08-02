@@ -4271,3 +4271,184 @@ def get_live_commission_summary(conn, for_date):
     cursor.execute(query, (date_str,))
     summary_details = [dict(row) for row in cursor.fetchall()]
     return summary_details
+
+def get_tire_sales_history(conn, tire_id):
+    """
+    Retrieves the sales history (OUT movements) for a specific tire,
+    including customer details.
+    """
+    cursor = conn.cursor()
+    is_postgres = "psycopg2" in str(type(conn))
+    placeholder = "%s" if is_postgres else "?"
+
+    query = f"""
+        SELECT 
+            tm.timestamp, 
+            tm.quantity_change,
+            tm.notes,
+            tm.image_filename,
+            tm.channel_id,
+            tm.online_platform_id,
+            tm.wholesale_customer_id,
+            u.username AS user_username,
+            sc.name AS channel_name,
+            op.name AS online_platform_name,
+            wc.name AS wholesale_customer_name
+        FROM tire_movements tm
+        LEFT JOIN users u ON tm.user_id = u.id
+        LEFT JOIN sales_channels sc ON tm.channel_id = sc.id
+        LEFT JOIN online_platforms op ON tm.online_platform_id = op.id
+        LEFT JOIN wholesale_customers wc ON tm.wholesale_customer_id = wc.id
+        WHERE tm.tire_id = {placeholder} AND tm.type = 'OUT'
+        ORDER BY tm.timestamp DESC;
+    """
+
+    cursor.execute(query, (tire_id,))
+
+    history = []
+    for row in cursor.fetchall():
+        row_dict = dict(row)
+        # Convert timestamp to BKK time for display
+        row_dict['timestamp'] = convert_to_bkk_time(row_dict['timestamp'])
+        history.append(row_dict)
+
+    return history
+
+def search_tires_by_keyword(conn, query):
+    """
+    Searches the tires table for items matching the query.
+    Returns a list of matching tires.
+    """
+    cursor = conn.cursor()
+    is_postgres = "psycopg2" in str(type(conn))
+    placeholder = "%s" if is_postgres else "?"
+    like_op = "ILIKE" if is_postgres else "LIKE"
+    
+    search_term = f"%{query}%"
+
+    sql_query = f"""
+        SELECT id, brand, model, size
+        FROM tires
+        WHERE is_deleted = FALSE AND (
+            LOWER(brand) {like_op} {placeholder} OR
+            LOWER(model) {like_op} {placeholder} OR
+            LOWER(size) {like_op} {placeholder}
+        )
+        ORDER BY brand, model, size
+        LIMIT 100
+    """
+    
+    params = (search_term, search_term, search_term)
+
+    if is_postgres:
+        cursor.execute(sql_query, params)
+    else:
+        sql_query_sqlite = sql_query.replace('FALSE', '0').replace('%s', '?').replace('ILIKE', 'LIKE')
+        cursor.execute(sql_query_sqlite, params)
+
+    return [dict(row) for row in cursor.fetchall()]
+
+def search_sales_history(conn, tire_keyword=None, customer_keyword=None, start_date=None, end_date=None):
+    """
+    Searches the sales history (OUT movements) based on various criteria.
+    Returns a list of matching sales records.
+    """
+    cursor = conn.cursor()
+    is_postgres = "psycopg2" in str(type(conn))
+    placeholder = "%s" if is_postgres else "?"
+    like_op = "ILIKE" if is_postgres else "LIKE"
+    
+    query = """
+        SELECT
+            tm.timestamp,
+            tm.quantity_change,
+            tm.notes,
+            u.username AS user_username,
+            t.brand AS tire_brand,
+            t.model AS tire_model,
+            t.size AS tire_size,
+            sc.name AS channel_name,
+            op.name AS online_platform_name,
+            wc.name AS wholesale_customer_name
+        FROM tire_movements tm
+        JOIN tires t ON tm.tire_id = t.id
+        LEFT JOIN users u ON tm.user_id = u.id
+        LEFT JOIN sales_channels sc ON tm.channel_id = sc.id
+        LEFT JOIN online_platforms op ON tm.online_platform_id = op.id
+        LEFT JOIN wholesale_customers wc ON tm.wholesale_customer_id = wc.id
+        WHERE tm.type = 'OUT'
+    """
+    
+    params = []
+    
+    if tire_keyword:
+        query += f"""
+            AND (t.brand {like_op} {placeholder} OR t.model {like_op} {placeholder} OR t.size {like_op} {placeholder})
+        """
+        search_term = f"%{tire_keyword}%"
+        params.extend([search_term, search_term, search_term])
+        
+    if customer_keyword:
+        query += f"""
+            AND (op.name {like_op} {placeholder} OR wc.name {like_op} {placeholder} OR sc.name {like_op} {placeholder})
+        """
+        search_term = f"%{customer_keyword}%"
+        params.extend([search_term, search_term, search_term])
+        
+    if start_date:
+        query += f" AND tm.timestamp >= {placeholder}"
+        params.append(start_date)
+        
+    if end_date:
+        query += f" AND tm.timestamp <= {placeholder}"
+        params.append(end_date)
+        
+    query += " ORDER BY tm.timestamp DESC;"
+
+    cursor.execute(query.replace('?', placeholder), tuple(params))
+    
+    history = []
+    for row in cursor.fetchall():
+        row_dict = dict(row)
+        row_dict['timestamp'] = convert_to_bkk_time(row_dict['timestamp'])
+        history.append(row_dict)
+        
+    return history
+
+def search_customers_by_keyword(conn, keyword, limit=10):
+    """
+    Searches for customers across wholesale_customers and online_platforms tables.
+    Returns a list of dictionaries with customer names.
+    """
+    cursor = conn.cursor()
+    is_postgres = "psycopg2" in str(type(conn))
+    placeholder = "%s" if is_postgres else "?"
+    like_op = "ILIKE" if is_postgres else "LIKE"
+
+    # Search in wholesale_customers table
+    query_wholesale = f"""
+        SELECT name FROM wholesale_customers
+        WHERE name {like_op} {placeholder}
+        ORDER BY name
+        LIMIT {limit}
+    """
+    cursor.execute(query_wholesale, (f"%{keyword}%",))
+    wholesale_results = cursor.fetchall()
+    
+    # Search in online_platforms table
+    query_online = f"""
+        SELECT name FROM online_platforms
+        WHERE name {like_op} {placeholder}
+        ORDER BY name
+        LIMIT {limit}
+    """
+    cursor.execute(query_online, (f"%{keyword}%",))
+    online_results = cursor.fetchall()
+
+    # Combine results and remove duplicates
+    all_results = list(set([row['name'] for row in wholesale_results] + [row['name'] for row in online_results]))
+    
+    # Sort and format for consistency
+    all_results.sort()
+    
+    return [{'name': name} for name in all_results]

@@ -1,17 +1,17 @@
 {% extends 'base.html' %}
 
-{% block title %}จัดการโปรแกรมคอมมิชชั่น{% endblock %}
+{% block title %}จัดการค่าคอมมิชชั่น{% endblock %}
 
 
 
 {% block content %}<div class="container mt-4">
 
-<h1 class="mb-4">จัดการโปรแกรมคอมมิชชั่น</h1>
+<h1 class="mb-4">จัดการค่าคอมมิชชั่น</h1>
 
 
 <div class="card mb-4">
 
-<div class="card-header">เพิ่ม/แก้ไข โปรแกรมคอมมิชชั่น</div>
+<div class="card-header">เพิ่ม/แก้ไข ค่าคอมมิชชั่น</div>
 
 <div class="card-body">
 
@@ -59,7 +59,7 @@
 
 <div class="col-md-2">
 
-<label for="commission_amount" class="form-label">คอมมิชชั่น (บาท)</label>
+<label for="commission_amount" class="form-label">คอมมิชชั่น (บาท)/ชิ้น</label>
 
 <input type="number" step="0.01" min="0" class="form-control" id="commission_amount" name="commission_amount" required>
 
@@ -71,7 +71,7 @@
 
 <div class="col-12 text-end">
 
-<button type="submit" class="btn btn-primary">บันทึกโปรแกรม</button>
+<button type="submit" class="btn btn-primary">บันทึกค่าคอม</button>
 
 </div>
 
@@ -83,7 +83,7 @@
 
 <div class="card-footer text-muted small">
 
-หมายเหตุ: การบันทึกโปรแกรมสำหรับสินค้าที่มีอยู่แล้ว จะเป็นการเขียนทับโปรแกรมเก่าของสินค้านั้นทั้งหมด
+หมายเหตุ: การบันทึกค่าคอมมิชชันสำหรับสินค้าที่มีอยู่แล้ว จะเป็นการเขียนทับค่าคอมมิชชันเก่าของสินค้านั้นทั้งหมด
 
 </div>
 
@@ -93,7 +93,7 @@
 
 <div class="card">
 
-<div class="card-header">รายการโปรแกรมคอมมิชชั่นที่ใช้งานในวันนี้ ({{ today_str }})</div>
+<div class="card-header">รายการค่าคอมมิชชั่นที่ใช้งานในวันนี้ ({{ today_str }})</div>
 
 <div class="card-body">
 
@@ -105,7 +105,7 @@
 
 <th>สินค้า</th>
 
-<th>ช่วงเวลาโปรแกรม</th>
+<th>ช่วงเวลา</th>
 
 <th class="text-end">ค่าคอมมิชชั่น (บาท/หน่วย)</th>
 
@@ -145,7 +145,7 @@
 
 {% else %}
 
-<tr><td colspan="4" class="text-center text-muted">ยังไม่มีโปรแกรมคอมมิชชั่นสำหรับวันนี้</td></tr>
+<tr><td colspan="4" class="text-center text-muted">ยังไม่มีค่าคอมมิชชั่นสำหรับวันนี้</td></tr>
 
 {% endfor %}
 

@@ -7759,6 +7759,120 @@ def api_get_spare_part_categories():
         current_app.logger.error(f"Error in api_get_spare_part_categories: {e}", exc_info=True)
         return jsonify({"success": False, "message": "เกิดข้อผิดพลาดในการดึงข้อมูลหมวดหมู่"}), 500
 
+@app.route('/tire_sales_history/<int:tire_id>')
+@login_required
+def tire_sales_history(tire_id):
+    # Check permissions: You can choose who can view this data. 
+    # For a sales history, `can_view_cost` might be a good fit, or simply `is_authenticated`.
+    if not current_user.can_view_cost(): 
+        flash('คุณไม่มีสิทธิ์เข้าถึงหน้ารายงานการขาย', 'danger')
+        return redirect(url_for('index'))
+    
+    conn = get_db()
+    
+    # First, get the basic tire details to display on the page
+    tire_info = database.get_tire(conn, tire_id)
+    if not tire_info:
+        flash('ไม่พบยางที่ระบุ', 'danger')
+        return redirect(url_for('index', tab='tires'))
+
+    # Then, get the sales history for this tire using the new function
+    sales_history = database.get_tire_sales_history(conn, tire_id)
+
+    return render_template('tire_sales_history.html', 
+                           tire=tire_info, 
+                           sales_history=sales_history, 
+                           current_user=current_user)
+
+@app.route('/search_tires', methods=['GET', 'POST'])
+@login_required
+def search_tires():
+    search_results = []
+    search_query = None
+    if request.method == 'POST':
+        search_query = request.form.get('search_query')
+        if search_query:
+            conn = get_db()
+            # The search_tires_by_keyword function you created in database.py
+            search_results = database.search_tires_by_keyword(conn, search_query)
+            # REMOVE THIS LINE: conn.close()
+            # The teardown_appcontext will handle closing the connection at the end of the request.
+
+    return render_template('search_tires.html', search_results=search_results, search_query=search_query)
+
+THAI_MONTHS = ["ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."]    
+
+@app.route('/sales_history_search', methods=['GET'])
+@login_required
+def sales_history_search():
+    if not current_user.can_view_cost(): 
+        flash('คุณไม่มีสิทธิ์เข้าถึงหน้ารายงานการขาย', 'danger')
+        return redirect(url_for('index'))
+    
+    conn = get_db()
+    
+    # ดึงค่าจากพารามิเตอร์ URL (GET request)
+    tire_keyword = request.args.get('tire_keyword')
+    customer_keyword = request.args.get('customer_keyword')
+    start_date = request.args.get('start_date')
+    end_date = request.args.get('end_date')
+
+    sales_history = database.search_sales_history(
+        conn, 
+        tire_keyword=tire_keyword, 
+        customer_keyword=customer_keyword, 
+        start_date=start_date, 
+        end_date=end_date,
+    )
+    
+    return render_template(
+        'sales_history_search.html', 
+        sales_history=sales_history,
+        tire_keyword=tire_keyword,
+        customer_keyword=customer_keyword,
+        start_date=start_date,
+        end_date=end_date,
+        THAI_MONTHS=THAI_MONTHS
+    )
+
+@app.route('/api/search_customers')
+@login_required
+def api_search_customers():
+    # ตรวจสอบสิทธิ์การเข้าถึง หากไม่ต้องการให้ทุกคนเห็นรายชื่อลูกค้า
+    # if not current_user.can_view_cost():
+    #     return jsonify([])
+
+    search_term = request.args.get('term', '').strip()
+    if not search_term:
+        return jsonify([])
+    
+    conn = get_db()
+    
+    # ใช้ฟังก์ชันใหม่ใน database.py เพื่อค้นหาลูกค้า
+    customers = database.search_customers_by_keyword(conn, search_term)
+
+    # จัดรูปแบบผลลัพธ์ให้เป็น array ของ string ตามที่ jQuery UI ต้องการ
+    customer_names = [customer['name'] for customer in customers]
+
+    return jsonify(customer_names)
+
+@app.route('/api/search_tires_for_autocomplete')
+@login_required
+def api_search_tires_for_autocomplete():
+    search_term = request.args.get('term', '').strip()
+    if not search_term:
+        return jsonify([])
+    
+    conn = get_db()
+    
+    # ใช้ฟังก์ชัน search_tires_by_keyword ที่เราได้เพิ่มไว้ใน database.py
+    tires = database.search_tires_by_keyword(conn, search_term)
+
+    # จัดรูปแบบผลลัพธ์ให้เป็น array ของ string
+    tire_names = [f"{t['brand'].title()} {t['model'].title()} ({t['size']})" for t in tires]
+
+    return jsonify(tire_names)
+
 # --- Main entry point ---
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)
