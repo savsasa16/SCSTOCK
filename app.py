@@ -7341,7 +7341,7 @@ def delete_spare_part_category(category_id):
 
     return redirect(url_for('manage_spare_part_categories'))
 
-@app.route('/print_barcodes/<item_type>/<int:item_id>')
+@app.route('/print_barcodes/<item_type>/<int:item_id>', methods=['GET', 'POST'])
 @login_required
 def print_barcodes(item_type, item_id):
     if not current_user.can_edit():
@@ -7349,70 +7349,94 @@ def print_barcodes(item_type, item_id):
         return redirect(request.referrer or url_for('index'))
 
     conn = get_db()
-    barcodes_data = []
-    item_info = {} # Change to dict to hold more data
+    item_info = {}
+    barcode_strings_all = [] # เก็บรายการบาร์โค้ดทั้งหมด
 
     try:
         item = None
-        barcode_strings = []
-
         if item_type == 'tire':
             item = database.get_tire(conn, item_id)
             if not item: raise ValueError("ไม่พบยางที่ระบุ")
-            barcode_strings = [bc['barcode_string'] for bc in database.get_barcodes_for_tire(conn, item_id)]
+            barcode_strings_all = [bc['barcode_string'] for bc in database.get_barcodes_for_tire(conn, item_id)]
             item_info = {
                 'name': f"{item['brand'].title()} {item['model'].title()} {item['size']}",
-                'price': item.get('price_per_item')
+                'price': item.get('price_per_item'),
+                'type': item_type,
+                'id': item_id
             }
         elif item_type == 'wheel':
             item = database.get_wheel(conn, item_id)
             if not item: raise ValueError("ไม่พบแม็กที่ระบุ")
-            barcode_strings = [bc['barcode_string'] for bc in database.get_barcodes_for_wheel(conn, item_id)]
+            barcode_strings_all = [bc['barcode_string'] for bc in database.get_barcodes_for_wheel(conn, item_id)]
             item_info = {
                 'name': f"{item['brand'].title()} {item['model'].title()} {item['pcd']}",
-                'price': item.get('retail_price')
+                'price': item.get('retail_price'),
+                'type': item_type,
+                'id': item_id
             }
         elif item_type == 'spare_part':
             item = database.get_spare_part(conn, item_id)
             if not item: raise ValueError("ไม่พบอะไหล่ที่ระบุ")
-            barcode_strings = [bc['barcode_string'] for bc in database.get_barcodes_for_spare_part(conn, item_id)]
+            barcode_strings_all = [bc['barcode_string'] for bc in database.get_barcodes_for_spare_part(conn, item_id)]
             item_info = {
                 'name': f"{item['name']} ({item.get('part_number', '')})",
-                'price': item.get('retail_price')
+                'price': item.get('retail_price'),
+                'type': item_type,
+                'id': item_id
             }
         else:
             raise ValueError("ประเภทสินค้าไม่ถูกต้อง")
 
-        if not barcode_strings:
+        if not barcode_strings_all:
             flash('สินค้านี้ยังไม่มีรหัสบาร์โค้ดให้พิมพ์', 'warning')
             return redirect(request.referrer or url_for('index'))
 
-        writer_options = {'module_height': 10.0, 'font_size': 10, 'text_distance': 3.0, 'quiet_zone': 2.0}
-        
-        for bc_string in barcode_strings:
-            code128 = barcode.get('code128', bc_string, writer=SVGWriter())
-            svg_buffer_barcode = BytesIO()
-            code128.write(svg_buffer_barcode, options=writer_options)
-            svg_string_barcode = svg_buffer_barcode.getvalue().decode('utf-8')
+        if request.method == 'POST':
+            selected_barcodes = request.form.getlist('selected_barcodes')
+            if not selected_barcodes:
+                flash('กรุณาเลือกบาร์โค้ดที่ต้องการพิมพ์อย่างน้อยหนึ่งรหัส', 'danger')
+                # กรณี error ใน POST, ส่งทั้ง barcodes_all และ barcodes_data ที่ว่างเปล่าไป
+                return render_template('print_barcodes.html', 
+                                       barcodes_all=barcode_strings_all, 
+                                       barcodes=[], 
+                                       item_info=item_info, 
+                                       is_printing=False)
 
-            qr_img = qrcode.make(bc_string, image_factory=qrcode.image.svg.SvgPathImage, box_size=20)
-            svg_buffer_qr = BytesIO()
-            qr_img.save(svg_buffer_qr)
-            svg_string_qrcode = svg_buffer_qr.getvalue().decode('utf-8')
+            barcodes_data = [] # สร้างรายการสำหรับ SVG
+            writer_options = {'module_height': 10.0, 'font_size': 10, 'text_distance': 3.0, 'quiet_zone': 2.0}
+            for bc_string in selected_barcodes:
+                code128 = barcode.get('code128', bc_string, writer=SVGWriter())
+                svg_buffer_barcode = BytesIO()
+                code128.write(svg_buffer_barcode, options=writer_options)
+                svg_string_barcode = svg_buffer_barcode.getvalue().decode('utf-8')
 
-            barcodes_data.append({
-                'svg_barcode': svg_string_barcode, 
-                'svg_qrcode': svg_string_qrcode, 
-                'text': bc_string
-            })
+                qr_img = qrcode.make(bc_string, image_factory=qrcode.image.svg.SvgPathImage, box_size=20)
+                svg_buffer_qr = BytesIO()
+                qr_img.save(svg_buffer_qr)
+                svg_string_qrcode = svg_buffer_qr.getvalue().decode('utf-8')
+
+                barcodes_data.append({
+                    'svg_barcode': svg_string_barcode, 
+                    'svg_qrcode': svg_string_qrcode, 
+                    'text': bc_string
+                })
+
+            return render_template('print_barcodes.html',
+                                   barcodes_all=barcode_strings_all, # ส่งรายการทั้งหมดไปเผื่อด้วย
+                                   barcodes=barcodes_data, # ส่งรายการ SVG ที่สร้างแล้ว
+                                   item_info=item_info,
+                                   is_printing=True)
 
     except ValueError as e:
         flash(str(e), 'danger')
         return redirect(request.referrer or url_for('index'))
 
+    # สำหรับ GET request (แสดงหน้าเลือก)
     return render_template('print_barcodes.html',
-                           barcodes=barcodes_data,
-                           item_info=item_info)
+                           barcodes_all=barcode_strings_all, # ส่งรายการบาร์โค้ดทั้งหมดไป
+                           barcodes=[], # ส่งรายการ SVG ที่ว่างเปล่าไป
+                           item_info=item_info,
+                           is_printing=False)
 
 def add_tire_cost_history(conn, tire_id, old_cost, new_cost, user_id, notes=""):
     """บันทึกการเปลี่ยนแปลงราคาทุนของยาง"""
